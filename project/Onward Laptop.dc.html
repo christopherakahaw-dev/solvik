@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/colors.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/typography.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/radius.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/motion.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/base.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/styles.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.js"></script>
+<script src="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--sand-300);font-family:var(--font-core);-webkit-font-smoothing:antialiased}
+/* Desktop reading distance: one step up the Solvik scale */
+:root{--size-display:46px;--size-title:36px;--size-heading:28px;--size-subheading:22px;--size-body:20px;--size-body-sm:18px;--size-caption:17px;--size-micro:14px}
+a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}
+*{box-sizing:border-box}
+::-webkit-scrollbar{width:9px}::-webkit-scrollbar-thumb{background:var(--sand-400);border-radius:5px}::-webkit-scrollbar-track{background:transparent}
+@keyframes sv-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style></helmet>
+
+<div style="position:relative;height:100dvh;overflow:hidden;background:var(--sand-300)">
+
+  <div style="position:absolute;z-index:700;left:14px;top:14px;width:98px;display:flex;flex-direction:column;align-items:center;gap:18px;padding:18px 0;background:var(--surface-card);border-radius:var(--radius-sheet,32px);box-shadow:var(--shadow-card)">
+    <div style="font:var(--weight-heavy) 24px/1 var(--font-display);letter-spacing:-.035em;color:var(--text-accent)">S</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <sc-for list="{{ rail }}" as="r" hint-placeholder-count="4">
+        <button onClick="{{ r.go }}" title="{{ r.title }}" aria-current="{{ r.current }}" style="{{ r.style }}">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ r.icon }}" size="{{ 25 }}" stroke-width="{{ 2 }}" hint-size="25px,25px"></x-import>
+          <span style="{{ r.labelStyle }}">{{ r.label }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="width:40px;height:40px;border-radius:50%;background:var(--accent-soft);color:var(--text-accent);font:var(--weight-bold) 13px/40px var(--font-body);text-align:center">WJ</div>
+  </div>
+
+  <sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ true }}">
+  <div style="position:absolute;z-index:690;left:126px;top:14px;bottom:14px;width:508px;max-width:calc(100% - 140px);display:flex;flex-direction:column;gap:14px">
+
+    <div style="flex:none;background:var(--surface-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="flex:1;min-width:0">
+          <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong);white-space:nowrap">Plan a trip</div>
+          <div style="font:var(--type-caption);color:var(--text-muted);font-variant-numeric:tabular-nums;margin-top:4px;white-space:nowrap">{{ nowLabel }}</div>
+        </div>
+        <div style="flex:none"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="panel-left-close" label="Hide the trip panel" tone="plain" size="md" on-click="{{ hidePanel }}" hint-size="44px,44px"></x-import></div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SearchField" value="{{ from }}" placeholder="Starting point" icon="circle-dot" on-change="{{ setFrom }}" hint-size="100%,52px"></x-import>
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SearchField" value="{{ to }}" placeholder="Where to" icon="map-pin" on-change="{{ setTo }}" hint-size="100%,52px"></x-import>
+        </div>
+        <div style="flex:none">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="arrow-up-down" label="Swap start and destination" tone="soft" size="md" on-click="{{ swap }}" hint-size="44px,44px"></x-import>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <sc-for list="{{ whenOpts }}" as="w" hint-placeholder-count="2">
+          <button onClick="{{ w.pick }}" style="{{ w.style }}">{{ w.label }}</button>
+        </sc-for>
+        <div style="margin-left:auto;font:var(--type-caption);color:var(--text-muted);font-variant-numeric:tabular-nums">{{ whenNote }}</div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface-card);border-radius:var(--radius-card);box-shadow:var(--shadow-card);overflow:hidden">
+      <div style="flex:none;padding:18px 20px 14px;border-bottom:1px solid var(--border-card)">
+        <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">{{ routesLabel }}</x-import>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:12px">
+          <sc-for list="{{ modeOpts }}" as="o" hint-placeholder-count="3">
+            <button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ routes }}" as="r" hint-placeholder-count="3">
+          <div onClick="{{ r.pick }}" onMouseEnter="{{ r.hover }}" onMouseLeave="{{ r.unhover }}" style="{{ r.style }}">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <span style="font:var(--weight-heavy) 40px/1 var(--font-numeric);letter-spacing:-.022em;font-variant-numeric:tabular-nums;color:var(--text-strong)">{{ r.mins }}</span>
+              <span style="font:var(--type-body);color:var(--text-muted)">min</span>
+              <span style="font:var(--type-caption);color:var(--text-muted);font-variant-numeric:tabular-nums;margin-left:4px;white-space:nowrap">arrive {{ r.eta }}</span>
+              <span style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="{{ r.tagTone }}" hint-size="auto,24px">{{ r.tag }}</x-import></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:12px">
+              <sc-for list="{{ r.legs }}" as="l" hint-placeholder-count="3">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Badge" tone="{{ l.tone }}" hint-size="auto,30px">{{ l.label }}</x-import>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.CrowdingMeter" levels="{{ r.levels }}" show-label="{{ false }}" hint-size="auto,18px"></x-import>
+              <span style="font:var(--weight-bold) 18px/1 var(--font-body);color:var(--text-body);white-space:nowrap">{{ r.crowd }}</span>
+            </div>
+            <div style="font:var(--type-caption);color:var(--text-muted);margin-top:10px;text-wrap:pretty">{{ r.note }}</div>
+            <sc-if value="{{ r.selected }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:0;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-card)">
+                <sc-for list="{{ r.steps }}" as="s" hint-placeholder-count="4">
+                  <div style="display:flex;gap:12px;align-items:flex-start;padding:7px 0">
+                    <span style="flex:none;width:60px;font:var(--weight-bold) 17px/1.5 var(--font-numeric);font-variant-numeric:tabular-nums;color:var(--text-strong)">{{ s.at }}</span>
+                    <span style="flex:none;width:8px;height:8px;border-radius:50%;background:{{ s.dot }};margin-top:5px"></span>
+                    <span style="flex:1;min-width:0">
+                      <span style="display:block;font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ s.title }}</span>
+                      <span style="display:block;font:var(--type-caption);color:var(--text-muted);margin-top:3px;text-wrap:pretty">{{ s.detail }}</span>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+        <div style="font:var(--type-caption);color:var(--text-muted);padding:4px 6px 0;text-wrap:pretty">Times from LTA DataMall. Crowding is the last reported load per leg.</div>
+
+        <div style="margin-top:10px;padding-top:18px;border-top:1px solid var(--border-card)">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Watched commutes</x-import>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+            <sc-for list="{{ watchedList }}" as="w" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;padding:16px;border-radius:var(--radius-card);background:var(--surface-sunken);border:1px solid var(--border-card)">
+                <button onClick="{{ w.load }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:0;cursor:pointer">
+                  <span style="display:block;font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ w.name }}</span>
+                  <span style="display:block;font:var(--type-caption);color:var(--text-muted);margin-top:4px;text-wrap:pretty">{{ w.detail }}</span>
+                </button>
+                <button onClick="{{ w.toggle }}" title="{{ w.title }}" style="{{ w.bellStyle }}">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="bell" size="{{ 18 }}" hint-size="18px,18px"></x-import>
+                </button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:none;padding:16px 20px;border-top:1px solid var(--border-card);display:flex;flex-direction:column;gap:9px">
+        <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="lg" full-width="{{ true }}" icon-right="smartphone" on-click="{{ send }}" hint-size="100%,56px">Send to phone</x-import>
+        <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" full-width="{{ true }}" icon-left="bell" on-click="{{ watch }}" hint-size="100%,44px">{{ watchLabel }}</x-import>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <div style="position:absolute;inset:0;overflow:hidden;background:var(--map-land)">
+    <div style="position:absolute;inset:0">
+      <x-import component="OneMapCanvas" from="./onemap-canvas.jsx" center="{{ mapCenter }}" zoom="{{ 12 }}" route="{{ routeCoords }}" marker="{{ originCoord }}" dest="{{ destCoord }}" zones="{{ zones }}" on-zone-click="{{ pickZone }}" height="100%" zoom-top="50%" zoom-inset="{{ 18 }}" hint-size="100%,100%"></x-import>
+    </div>
+
+    <div style="position:absolute;top:18px;left:{{ overlayLeft }};right:18px;display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;pointer-events:none;z-index:600">
+      <div style="pointer-events:auto;position:relative;flex:0 1 380px;min-width:260px;z-index:680">
+        <div style="display:flex;align-items:center;gap:10px;height:56px;padding:0 8px 0 18px;background:var(--surface-card);border-radius:{{ searchRadius }};box-shadow:var(--shadow-nav)">
+          <span style="flex:none;color:var(--text-muted);display:flex"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="search" size="{{ 20 }}" hint-size="20px,20px"></x-import></span>
+          <input value="{{ query }}" onChange="{{ setQuery }}" onFocus="{{ focusSearch }}" onKeyDown="{{ searchKey }}" placeholder="Search stations and places" aria-label="Search for a location" style="flex:1;min-width:0;height:100%;border:none;outline:none;background:none;font:var(--type-body);color:var(--text-strong)">
+          <sc-if value="{{ hasQuery }}" hint-placeholder-val="{{ false }}">
+            <span style="flex:none"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="x" label="Clear search" tone="plain" size="sm" on-click="{{ clearQuery }}" hint-size="40px,40px"></x-import></span>
+          </sc-if>
+        </div>
+        <sc-if value="{{ searchOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:62px;left:0;right:0;max-height:330px;overflow-y:auto;background:var(--surface-card);border-radius:var(--radius-card);box-shadow:var(--shadow-sheet,var(--shadow-nav));padding:8px;z-index:690">
+            <sc-for list="{{ results }}" as="p" hint-placeholder-count="4">
+              <button onClick="{{ p.pick }}" style="{{ p.style }}">
+                <span style="flex:none;width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--text-accent);display:flex;align-items:center;justify-content:center">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ p.icon }}" size="{{ 18 }}" hint-size="18px,18px"></x-import>
+                </span>
+                <span style="flex:1;min-width:0;text-align:left">
+                  <span style="display:block;font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ p.name }}</span>
+                  <span style="display:block;font:var(--type-caption);color:var(--text-muted);margin-top:3px;text-wrap:pretty">{{ p.sub }}</span>
+                </span>
+              </button>
+            </sc-for>
+            <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:18px;font:var(--type-body);color:var(--text-muted);text-wrap:pretty">No match for “{{ query }}”. Try a station or town name.</div>
+            </sc-if>
+          </div>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ panelHidden }}" hint-placeholder-val="{{ false }}">
+        
+      </sc-if>
+      <div style="pointer-events:auto;flex:0 1 auto;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:14px;background:var(--surface-card);border-radius:var(--radius-lg,20px);box-shadow:var(--shadow-nav);padding:10px 18px 10px 12px">
+        <button onClick="{{ toggleCrowd }}" style="{{ crowdBtnStyle }}">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="layers" size="{{ 17 }}" hint-size="17px,17px"></x-import>
+          {{ crowdBtnLabel }}
+        </button>
+        <sc-if value="{{ crowdOn }}" hint-placeholder-val="{{ true }}">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.CrowdingLegend" hint-size="auto,20px"></x-import>
+        </sc-if>
+      </div>
+
+      <div style="pointer-events:auto;margin-left:auto;flex:1 1 260px;min-width:0;max-width:340px;background:var(--surface-card);border-radius:var(--radius-lg,20px);box-shadow:var(--shadow-nav);padding:14px 16px;display:flex;gap:11px;align-items:flex-start">
+        <span style="flex:none;width:26px;height:26px;border-radius:50%;background:var(--rust-100);color:var(--status-fault);display:flex;align-items:center;justify-content:center">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="triangle-alert" size="{{ 15 }}" hint-size="15px,15px"></x-import>
+        </span>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">Signal fault · North South Line</span>
+          <span style="display:block;font:var(--type-caption);color:var(--text-muted);margin-top:4px;text-wrap:pretty">Bus bridging between Ang Mo Kio and Newton since 07:04.</span>
+        </span>
+      </div>
+    </div>
+
+    <sc-if value="{{ zoneOpen }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;left:{{ overlayLeft }};bottom:18px;width:396px;max-width:calc(100% - 700px);background:var(--surface-card);border-radius:var(--radius-card);box-shadow:var(--shadow-sheet,var(--shadow-nav));padding:20px;z-index:600;animation:sv-rise 420ms cubic-bezier(.16,1,.3,1) both">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="flex:1;min-width:0">
+            <div style="font:var(--type-title);letter-spacing:var(--tracking-heading);color:var(--text-strong);text-wrap:pretty">{{ zoneName }}</div>
+            <div style="font:var(--type-caption);color:var(--text-muted);margin-top:5px;text-wrap:pretty">{{ zoneDetail }}</div>
+          </div>
+          <div style="flex:none">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="x" label="Close area detail" tone="plain" size="sm" on-click="{{ clearZone }}" hint-size="34px,34px"></x-import>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <div style="font:var(--weight-heavy) 34px/1 var(--font-display);letter-spacing:-.022em;color:{{ zoneColor }}">{{ zoneWord }}</div>
+          <div style="font:var(--type-caption);color:var(--text-muted);margin-top:6px;text-wrap:pretty">Now · {{ zoneTrend }}</div>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:7px;height:74px;margin-top:16px">
+          <sc-for list="{{ zoneHours }}" as="h" hint-placeholder-count="6">
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:7px">
+              <div style="{{ h.bar }}"></div>
+              <div style="{{ h.labelStyle }}">{{ h.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" full-width="{{ true }}" icon-left="route" on-click="{{ avoidZone }}" hint-size="100%,44px">Route around this area</x-import>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ overlayOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;top:88px;left:{{ overlayLeft }};width:462px;max-width:calc(100% - 700px);max-height:calc(100% - 112px);display:flex;flex-direction:column;background:var(--surface-card);border-radius:var(--radius-sheet,32px);box-shadow:var(--shadow-sheet,0 18px 48px rgba(32,30,29,.22));z-index:660;overflow:hidden;animation:sv-rise 420ms cubic-bezier(.16,1,.3,1) both">
+
+        <div style="flex:none;display:flex;align-items:flex-start;gap:12px;padding:22px 22px 18px;border-bottom:1px solid var(--border-card)">
+          <div style="flex:1;min-width:0">
+            <div style="font:var(--type-title);letter-spacing:var(--tracking-title);color:var(--text-strong);text-wrap:pretty">{{ overlayTitle }}</div>
+            <div style="font:var(--type-caption);color:var(--text-muted);margin-top:5px;text-wrap:pretty">{{ overlaySub }}</div>
+          </div>
+          <div style="flex:none"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="x" label="Close panel" tone="plain" size="md" on-click="{{ closeOverlay }}" hint-size="44px,44px"></x-import></div>
+        </div>
+
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:20px 22px 22px">
+
+          <sc-if value="{{ isReportOv }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <sc-if value="{{ reportPicking }}" hint-placeholder-val="{{ true }}">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <sc-for list="{{ faults }}" as="f" hint-placeholder-count="6">
+                    <button onClick="{{ f.pick }}" style="display:flex;flex-direction:column;gap:11px;align-items:flex-start;text-align:left;padding:18px;border-radius:var(--radius-card);background:var(--surface-sunken);border:1px solid var(--border-card);cursor:pointer">
+                      <span style="width:42px;height:42px;border-radius:50%;background:{{ f.tint }};color:{{ f.color }};display:flex;align-items:center;justify-content:center">
+                        <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ f.icon }}" size="{{ 21 }}" hint-size="21px,21px"></x-import>
+                      </span>
+                      <span style="font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ f.label }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ reportFilling }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:16px">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="soft" hint-size="auto,30px">{{ reportLabel }}</x-import>
+                    <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" icon-left="arrow-left" on-click="{{ reportBack }}" hint-size="auto,34px">Change</x-import></div>
+                  </div>
+                  <div>
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">{{ reportQuestion }}</x-import>
+                    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:12px">
+                      <sc-for list="{{ reportOpts }}" as="o" hint-placeholder-count="3">
+                        <button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div>
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Photo · required</x-import>
+                    <button onClick="{{ togglePhoto }}" style="{{ photoStyle }}">
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ photoIcon }}" size="{{ 24 }}" hint-size="24px,24px"></x-import>
+                      <span style="font:var(--type-body-strong)">{{ photoLabel }}</span>
+                      <span style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">{{ photoNote }}</span>
+                    </button>
+                  </div>
+                  <div style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">Reports go to the operator and to riders within 400 m. Your name is not attached.</div>
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="lg" full-width="{{ true }}" disabled="{{ reportBlocked }}" on-click="{{ submitReport }}" hint-size="100%,56px">{{ reportCta }}</x-import>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isPointsOv }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="padding:20px;border-radius:var(--radius-card);background:var(--accent-soft);border:1px solid var(--border-accent)">
+                <div style="display:flex;align-items:baseline;gap:10px">
+                  <span style="font:var(--weight-heavy) 46px/1 var(--font-numeric);letter-spacing:-.022em;font-variant-numeric:tabular-nums;color:var(--text-strong)">{{ points }}</span>
+                  <span style="font:var(--type-body);color:var(--text-body)">points</span>
+                  <span style="margin-left:auto;font:var(--type-caption);color:var(--text-accent);white-space:nowrap">+{{ pointsWeek }} this week</span>
+                </div>
+                <div style="height:12px;border-radius:8px;background:var(--surface-card);margin-top:18px;overflow:hidden">
+                  <div style="height:100%;width:{{ tierPct }};background:var(--accent);border-radius:8px;transition:width .34s var(--ease-standard)"></div>
+                </div>
+                <div style="font:var(--type-caption);color:var(--text-muted);margin-top:10px;text-wrap:pretty">{{ tierNote }}</div>
+                <div style="margin-top:16px"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" full-width="{{ true }}" disabled="{{ tierLocked }}" on-click="{{ redeem }}" hint-size="100%,44px">{{ redeemLabel }}</x-import></div>
+              </div>
+
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">How you earned them</x-import>
+              <div style="display:flex;flex-direction:column">
+                <sc-for list="{{ earns }}" as="e" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:14px;padding:15px 0;border-top:1px solid var(--border-card)">
+                    <span style="flex:1;min-width:0">
+                      <span style="display:block;font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ e.what }}</span>
+                      <span style="display:block;font:var(--type-caption);color:var(--text-muted);margin-top:4px">{{ e.when }}</span>
+                    </span>
+                    <span style="flex:none;font:var(--weight-heavy) 20px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:var(--text-accent)">+{{ e.pts }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:50%;bottom:22px;transform:translateX(-50%);background:var(--surface-dark);color:var(--text-on-dark);padding:13px 20px;border-radius:var(--radius-pill,999px);font:var(--type-body-strong);box-shadow:var(--shadow-nav);z-index:700;animation:sv-rise 220ms cubic-bezier(.2,.7,.3,1) both;white-space:nowrap">{{ toast }}</div>
+    </sc-if>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+const NSL = [[1.4294,103.8350],[1.3865,103.8455],[1.3699,103.8495],[1.3509,103.8485],[1.3329,103.8471],[1.3204,103.8438],[1.3122,103.8383],[1.3040,103.8318],[1.2962,103.8382],[1.2931,103.8520],[1.2839,103.8515]];
+const BUS = [[1.4294,103.8350],[1.4180,103.8320],[1.3980,103.8290],[1.3760,103.8300],[1.3560,103.8380],[1.3350,103.8460],[1.3160,103.8520],[1.2990,103.8560],[1.2860,103.8530],[1.2839,103.8515]];
+const MIX = [[1.4294,103.8350],[1.4370,103.8480],[1.4258,103.8650],[1.3950,103.8730],[1.3600,103.8480],[1.3390,103.8390],[1.3190,103.8340],[1.3010,103.8390],[1.2900,103.8480],[1.2839,103.8515]];
+
+const OPTS = [
+  { id: 'nsl', mins: 44, eta: '08:05', coords: NSL, levels: ['busy','busy','moderate'], crowd: 'Busy at Bishan',
+    legs: [{label:'Walk 4',tone:'neutral'},{label:'NSL',tone:'accent'},{label:'Walk 3',tone:'neutral'}],
+    note: 'Straight down the red line. The fault adds about 12 min of risk between Ang Mo Kio and Newton.',
+    steps: [
+      { at: '07:26', title: 'Walk to Yishun (NS13)', detail: '4 min · step-free entrance B', dot: 'var(--sand-500)' },
+      { at: '07:32', title: 'North South Line towards Marina South Pier', detail: '14 stops · reduced speed from Ang Mo Kio', dot: 'var(--accent)' },
+      { at: '08:02', title: 'Raffles Place (NS26)', detail: 'Exit F towards Chulia Street', dot: 'var(--accent)' },
+      { at: '08:05', title: 'Arrive at Raffles Place', detail: '3 min walk', dot: 'var(--sand-500)' }
+    ] },
+  { id: 'bus', mins: 58, eta: '08:19', coords: BUS, levels: ['moderate','light','light'], crowd: 'Seat likely',
+    legs: [{label:'Bus 969',tone:'soft'},{label:'Walk 6',tone:'neutral'}],
+    note: 'Avoids the faulted stretch entirely. Boards at Yishun Interchange, so a seat is likely the whole way.',
+    steps: [
+      { at: '07:24', title: 'Walk to Yishun Interchange', detail: '5 min · berth B4', dot: 'var(--sand-500)' },
+      { at: '07:31', title: 'Bus 969 towards Marina Centre', detail: '31 stops · 41 min · 6 of 8 seats free at boarding', dot: 'var(--accent)' },
+      { at: '08:13', title: 'Alight at Suntec City', detail: 'Bras Basah Road', dot: 'var(--accent)' },
+      { at: '08:19', title: 'Arrive at Raffles Place', detail: '6 min walk along Collyer Quay', dot: 'var(--sand-500)' }
+    ] },
+  { id: 'mix', mins: 49, eta: '08:10', coords: MIX, levels: ['light','light','moderate'], crowd: 'Light on TEL',
+    legs: [{label:'Bus 171',tone:'soft'},{label:'TEL',tone:'accent'},{label:'Walk 3',tone:'neutral'}],
+    note: 'One change at Woodlands. Lift access at every point, no stairs and no gap step.',
+    steps: [
+      { at: '07:25', title: 'Walk to Yishun Ave 2', detail: '3 min · kerb ramp at the shelter', dot: 'var(--sand-500)' },
+      { at: '07:29', title: 'Bus 171 to Woodlands Interchange', detail: '9 stops · wheelchair ramp bus', dot: 'var(--accent)' },
+      { at: '07:47', title: 'Thomson-East Coast Line southbound', detail: '11 stops · lift at both ends', dot: 'var(--accent)' },
+      { at: '08:10', title: 'Arrive at Raffles Place', detail: 'Via Shenton Way link, fully sheltered', dot: 'var(--sand-500)' }
+    ] }
+];
+
+const MODES = {
+  fastest: { label: 'Fastest', order: ['nsl','mix','bus'], tags: { nsl: 'Fastest', mix: 'Steady', bus: 'Slowest' } },
+  comfort: { label: 'Comfort', order: ['bus','mix','nsl'], tags: { bus: 'Most seats', mix: 'Quiet', nsl: 'Crowded' } },
+  stepfree: { label: 'Step-free', order: ['mix','bus','nsl'], tags: { mix: 'Step-free', bus: 'Ramp bus', nsl: 'Lift out at Newton' } }
+};
+
+const AREAS = [
+  { id: 'city', name: 'City Hall / Raffles Place', ll: [1.2930,103.8520], radius: 1500, base: 1, detail: 'NSL and EWL interchange · platform queueing at the northbound end' },
+  { id: 'bishan', name: 'Bishan', ll: [1.3509,103.8485], radius: 1250, base: .95, detail: 'Signal fault · bus bridging in place towards Newton' },
+  { id: 'novena', name: 'Novena', ll: [1.3204,103.8438], radius: 950, base: .62, detail: 'Hospital cluster · steady flow through the morning' },
+  { id: 'woodlands', name: 'Woodlands', ll: [1.4370,103.7865], radius: 1400, base: .55, detail: 'Causeway arrivals feeding TEL southbound' },
+  { id: 'jurong', name: 'Jurong East', ll: [1.3330,103.7420], radius: 1300, base: .48, detail: 'Westbound transfers · moderate through 09:00' },
+  { id: 'changi', name: 'Changi', ll: [1.3563,103.9865], radius: 1600, base: .28, detail: 'Airport line running light' }
+];
+
+const HOURS = [
+  { label: '07', peak: .92 }, { label: '08', peak: 1 }, { label: '09', peak: .74 },
+  { label: '12', peak: .46 }, { label: '17', peak: .88 }, { label: '19', peak: .58 }
+];
+
+const WATCHED = [
+  { id: 'am', name: 'Home → Work', detail: 'Yishun → Raffles Place · Mon to Fri, leave 07:42', from: 'Yishun', to: 'Raffles Place', leave: '07:42', inMins: 21, crowd: 'Busy at Bishan', levels: ['busy','busy','moderate'] },
+  { id: 'pm', name: 'Work → Home', detail: 'Raffles Place → Yishun · Mon to Fri, leave 18:20', from: 'Raffles Place', to: 'Yishun', leave: '18:20', inMins: 659, crowd: 'Busy at City Hall', levels: ['busy','moderate','moderate'] },
+  { id: 'gym', name: 'Work → Pool', detail: 'Raffles Place → Toa Payoh · Tue and Thu, leave 19:10', from: 'Raffles Place', to: 'Toa Payoh', leave: '19:10', inMins: 709, crowd: 'Light', levels: ['light','light','light'] }
+];
+
+const FAULTS = [
+  { id: 'crowd', label: 'Crowded platform', icon: 'users', tint: 'var(--amber-100)', color: 'var(--rust-700)', q: 'How far does the queue reach?', opts: ['Onto the concourse', 'Past the gates', 'Out of the station'], pts: 10 },
+  { id: 'break', label: 'Train or bus fault', icon: 'triangle-alert', tint: 'var(--rust-100)', color: 'var(--status-fault)', q: 'What is happening?', opts: ['Stopped', 'Doors stuck', 'Held at platform'], pts: 15 },
+  { id: 'lift', label: 'Lift out of service', icon: 'accessibility', tint: 'var(--accent-soft)', color: 'var(--text-accent)', q: 'Which exit?', opts: ['Exit A', 'Exit B', 'Platform to concourse'], pts: 15 },
+  { id: 'dirty', label: 'Dirty or damaged', icon: 'trash-2', tint: 'var(--sand-200)', color: 'var(--text-body)', q: 'Where exactly?', opts: ['Platform', 'Carriage', 'Shelter'], pts: 8 },
+  { id: 'safety', label: 'Safety concern', icon: 'shield-alert', tint: 'var(--rust-100)', color: 'var(--status-fault)', q: 'Does this need staff now?', opts: ['Yes, urgent', 'Soon', 'For the record'], pts: 12 },
+  { id: 'info', label: 'Wrong information', icon: 'info', tint: 'var(--sand-200)', color: 'var(--text-body)', q: 'What is wrong?', opts: ['Arrival board', 'Signage', 'App data'], pts: 8 }
+];
+
+const PLACES = [
+  { name: 'Yishun', sub: 'NS13 · North South Line', ll: [1.4294,103.8350], icon: 'train-front' },
+  { name: 'Raffles Place', sub: 'NS26 / EW14 · interchange', ll: [1.2839,103.8515], icon: 'train-front' },
+  { name: 'Bishan', sub: 'NS17 / CC15 · signal fault now', ll: [1.3509,103.8485], icon: 'triangle-alert' },
+  { name: 'Newton', sub: 'NS21 / DT11 · interchange', ll: [1.3129,103.8383], icon: 'train-front' },
+  { name: 'Ang Mo Kio', sub: 'NS16 · North South Line', ll: [1.3699,103.8495], icon: 'train-front' },
+  { name: 'Woodlands', sub: 'NS9 / TE2 · interchange', ll: [1.4370,103.7865], icon: 'train-front' },
+  { name: 'Jurong East', sub: 'NS1 / EW24 · interchange', ll: [1.3330,103.7420], icon: 'train-front' },
+  { name: 'Toa Payoh', sub: 'NS19 · North South Line', ll: [1.3324,103.8471], icon: 'train-front' },
+  { name: 'Novena', sub: 'NS20 · hospital cluster', ll: [1.3204,103.8438], icon: 'train-front' },
+  { name: 'Orchard', sub: 'NS22 / TE14 · interchange', ll: [1.3040,103.8318], icon: 'train-front' },
+  { name: 'City Hall', sub: 'NS25 / EW13 · interchange', ll: [1.2930,103.8520], icon: 'train-front' },
+  { name: 'Changi Airport', sub: 'CG2 · East West Line', ll: [1.3563,103.9865], icon: 'plane' },
+  { name: 'Punggol', sub: 'NE17 · interchange', ll: [1.4052,103.9024], icon: 'train-front' },
+  { name: 'Tampines', sub: 'EW2 / DT32 · interchange', ll: [1.3536,103.9450], icon: 'train-front' },
+  { name: 'National University Hospital', sub: 'Kent Ridge · bus 95', ll: [1.2938,103.7830], icon: 'building-2' },
+  { name: 'Singapore General Hospital', sub: 'Outram Park · bus 61', ll: [1.2795,103.8350], icon: 'building-2' }
+];
+
+const HERE = { name: 'Current location', ll: [1.4294, 103.8350], near: 'Yishun (NS13)' };
+
+const addMins = (hhmm, add) => {
+  const p = hhmm.split(':');
+  const t = (+p[0] * 60 + +p[1] + Math.round(add)) % 1440;
+  return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+};
+
+const legPath = (a, b, bend) => {
+  const out = [];
+  for (let i = 0; i <= 6; i++) {
+    const t = i / 6;
+    const k = Math.sin(t * Math.PI) * bend;
+    out.push([a[0] + (b[0] - a[0]) * t + k, a[1] + (b[1] - a[1]) * t - k * .7]);
+  }
+  return out;
+};
+
+/* Builds a plausible three-option trip from HERE to a searched place. */
+const makeTrip = (place, startAt) => {
+  const km = Math.round(Math.sqrt(Math.pow((place.ll[0] - HERE.ll[0]) * 111, 2) + Math.pow((place.ll[1] - HERE.ll[1]) * 111 * .9996, 2)) * 10) / 10;
+  const rail = Math.max(9, Math.round(km * 2.1 + 11));
+  const bus = Math.max(14, Math.round(km * 3.1 + 9));
+  const mix = Math.max(11, Math.round(km * 2.4 + 13));
+  const near = (place.sub || '').split('·')[0].trim() || place.name;
+  return [
+    { id: 'nsl', mins: rail, eta: addMins(startAt, rail), coords: legPath(HERE.ll, place.ll, .004), levels: ['busy','moderate','moderate'], crowd: 'Busy at boarding',
+      legs: [{label:'Walk 4',tone:'neutral'},{label:'Rail',tone:'accent'},{label:'Walk 3',tone:'neutral'}],
+      note: 'Rail the whole way, ' + km + ' km. Fewest changes of the three.',
+      steps: [
+        { at: addMins(startAt, 5), title: 'Walk to ' + HERE.near, detail: '4 min · step-free entrance B', dot: 'var(--sand-500)' },
+        { at: addMins(startAt, 11), title: 'Rail towards ' + place.name, detail: near + ' · ' + Math.max(2, Math.round(km / 1.6)) + ' stops', dot: 'var(--accent)' },
+        { at: addMins(startAt, rail - 3), title: 'Alight at ' + place.name, detail: place.sub, dot: 'var(--accent)' },
+        { at: addMins(startAt, rail), title: 'Arrive at ' + place.name, detail: '3 min walk', dot: 'var(--sand-500)' }
+      ] },
+    { id: 'bus', mins: bus, eta: addMins(startAt, bus), coords: legPath(HERE.ll, place.ll, -.006), levels: ['moderate','light','light'], crowd: 'Seat likely',
+      legs: [{label:'Bus',tone:'soft'},{label:'Walk 6',tone:'neutral'}],
+      note: 'One bus, no changes. Slower but you board at the interchange, so a seat is likely.',
+      steps: [
+        { at: addMins(startAt, 5), title: 'Walk to Yishun Interchange', detail: '5 min · berth B4', dot: 'var(--sand-500)' },
+        { at: addMins(startAt, 10), title: 'Bus towards ' + place.name, detail: Math.round(km * 2.2) + ' stops · ' + (bus - 16) + ' min on board', dot: 'var(--accent)' },
+        { at: addMins(startAt, bus - 6), title: 'Alight near ' + place.name, detail: near, dot: 'var(--accent)' },
+        { at: addMins(startAt, bus), title: 'Arrive at ' + place.name, detail: '6 min walk', dot: 'var(--sand-500)' }
+      ] },
+    { id: 'mix', mins: mix, eta: addMins(startAt, mix), coords: legPath(HERE.ll, place.ll, .009), levels: ['light','light','moderate'], crowd: 'Light on rail',
+      legs: [{label:'Bus',tone:'soft'},{label:'Rail',tone:'accent'},{label:'Walk 3',tone:'neutral'}],
+      note: 'Bus to the line, then rail. Lift access at every point, no stairs and no gap step.',
+      steps: [
+        { at: addMins(startAt, 4), title: 'Walk to Yishun Ave 2', detail: '3 min · kerb ramp at the shelter', dot: 'var(--sand-500)' },
+        { at: addMins(startAt, 8), title: 'Bus to the nearest line', detail: 'Wheelchair ramp bus', dot: 'var(--accent)' },
+        { at: addMins(startAt, 18), title: 'Rail towards ' + place.name, detail: 'Lift at both ends', dot: 'var(--accent)' },
+        { at: addMins(startAt, mix), title: 'Arrive at ' + place.name, detail: 'Sheltered the whole way', dot: 'var(--sand-500)' }
+      ] }
+  ];
+};
+
+const lvl = (v) => (v >= .72 ? 'busy' : v >= .45 ? 'moderate' : 'light');
+const WORD = { busy: 'Busy', moderate: 'Filling', light: 'Light' };
+
+class Component extends DCLogic {
+  state = { mode: 'fastest', sel: 'nsl', hov: null, crowd: true, zone: 'bishan', when: 'now', from: 'Yishun', to: 'Raffles Place', watched: false, panel: true, toast: null,
+    ov: null, bells: { am: true, pm: true, gym: false }, fault: null, answer: null, photo: false, points: 340, sent: [],
+    q: '', searching: false, center: null, pin: null, found: null };
+
+  flash(t) {
+    clearTimeout(this._t);
+    this.setState({ toast: t });
+    this._t = setTimeout(() => this.setState({ toast: null }), 2600);
+  }
+
+  componentWillUnmount() { clearTimeout(this._t); }
+
+  renderVals() {
+    const s = this.state;
+    const m = MODES[s.mode] || MODES.fastest;
+    const sel = s.sel;
+    const found = s.found ? PLACES.find((p) => p.name === s.found) : null;
+    const opts = found ? makeTrip(found, '07:21') : OPTS;
+    const byId = (id) => opts.find((o) => o.id === id);
+    const active = byId(sel) || opts[0];
+
+    const railItems = [
+      { id: 'map', icon: 'map', label: 'Map', title: 'Map and route planning' },
+      { id: 'plan', icon: 'calendar', label: 'Plan', title: 'Your commutes' },
+      { id: 'report', icon: 'triangle-alert', label: 'Report', title: 'Report a fault' },
+      { id: 'points', icon: 'award', label: 'Points', title: 'Points and rewards' }
+    ];
+    const fault = FAULTS.find((f) => f.id === s.fault);
+    const ql = (s.q || '').trim().toLowerCase();
+    const matches = ql ? PLACES.filter((p) => (p.name + ' ' + p.sub).toLowerCase().indexOf(ql) > -1).slice(0, 6) : [];
+
+    const zone = AREAS.find((a) => a.id === s.zone);
+    const zv = zone ? Math.max(.12, Math.min(.99, zone.base)) : 0;
+    const zl = zone ? lvl(zv) : 'light';
+
+    const pill = (on) => 'flex:none;padding:11px 17px;border-radius:999px;cursor:pointer;white-space:nowrap;'
+      + 'font:var(--weight-bold) 15px/1 var(--font-body);transition:background .15s,color .15s;'
+      + (on ? 'background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);'
+            : 'background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);');
+
+    return {
+      nowLabel: 'Fri 12 Sep · 07:21',
+      overlayLeft: s.panel !== false ? '648px' : '126px',
+      panelOpen: s.panel !== false,
+      panelHidden: s.panel === false,
+      hidePanel: () => this.setState({ panel: false }),
+      showPanel: () => this.setState({ panel: true }),
+      from: s.from, to: s.to,
+      setFrom: (v) => this.setState({ from: v }),
+      setTo: (v) => this.setState({ to: v }),
+      swap: () => { this.setState({ from: s.to, to: s.from }); this.flash('Direction reversed'); },
+
+      rail: railItems.map((r) => {
+        const on = r.id === 'map' ? (!s.ov && s.panel === false)
+          : r.id === 'plan' ? (!s.ov && s.panel !== false)
+          : s.ov === r.id;
+        return {
+          icon: r.icon, label: r.label, title: r.title, current: on ? 'page' : undefined,
+          style: 'display:flex;flex-direction:column;align-items:center;gap:6px;width:74px;padding:13px 0 11px;border:none;border-radius:var(--radius-lg,20px);cursor:pointer;'
+            + 'transition:background .22s var(--ease-standard),color .15s;'
+            + (on ? 'background:var(--accent-soft);color:var(--text-accent);' : 'background:transparent;color:var(--text-muted);'),
+          labelStyle: 'font:var(--weight-bold) 14px/1 var(--font-body);letter-spacing:.01em',
+          go: () => this.setState(
+            r.id === 'map' ? { ov: null, panel: false }
+            : r.id === 'plan' ? { ov: null, panel: true }
+            : { ov: r.id }
+          )
+        };
+      }),
+
+      whenOpts: [
+        { id: 'now', label: 'Leave now' },
+        { id: 'arrive', label: 'Arrive by 08:45' }
+      ].map((w) => ({
+        label: w.label, style: pill(s.when === w.id),
+        pick: () => this.setState({ when: w.id })
+      })),
+      whenNote: s.when === 'now' ? 'Live arrivals' : 'Leave by 07:42',
+
+      modeOpts: Object.keys(MODES).map((k) => ({
+        label: MODES[k].label, style: pill(s.mode === k),
+        pick: () => this.setState({ mode: k, sel: MODES[k].order[0] })
+      })),
+      mode: s.mode,
+      routesLabel: (found ? '3 ways to ' + found.name : '3 ways to get there') + ' · ' + m.label.toLowerCase() + ' first',
+
+      routes: m.order.map((id) => {
+        const o = byId(id);
+        const on = id === sel;
+        return {
+          mins: o.mins, eta: o.eta, legs: o.legs, levels: o.levels, crowd: o.crowd, note: o.note,
+          steps: o.steps, selected: on,
+          tag: m.tags[id], tagTone: on ? 'soft' : 'outline',
+          style: 'cursor:pointer;padding:17px;border-radius:var(--radius-card);transition:border-color .15s,box-shadow .15s,background .15s;'
+            + (on ? 'background:var(--surface-card);border:1px solid var(--border-accent);box-shadow:var(--shadow-card);'
+                  : s.hov === id ? 'background:var(--surface-card);border:1px solid var(--border-hairline);box-shadow:var(--shadow-card);'
+                  : 'background:var(--surface-sunken);border:1px solid var(--border-card);'),
+          pick: () => this.setState({ sel: id }),
+          hover: () => this.setState({ hov: id }),
+          unhover: () => this.setState({ hov: null })
+        };
+      }),
+
+      send: () => this.flash('Sent to Wei Jie’s phone'),
+      watch: () => { this.setState({ watched: !s.watched }); this.flash(s.watched ? 'Alerts off for this trip' : 'Watching this trip for faults'); },
+      watchLabel: s.watched ? 'Watching' : 'Watch trip',
+
+      query: s.q,
+      hasQuery: !!s.q,
+      searchRadius: s.searching && s.q ? 'var(--radius-card) var(--radius-card) 0 0' : 'var(--radius-pill,999px)',
+      setQuery: (e) => this.setState({ q: e.target.value, searching: true }),
+      focusSearch: () => this.setState({ searching: true }),
+      clearQuery: () => this.setState({ q: '', searching: false, pin: null, found: null, from: 'Yishun', to: 'Raffles Place' }),
+      searchKey: (e) => {
+        if (e.key === 'Escape') this.setState({ searching: false });
+        if (e.key === 'Enter') {
+          const hit = matches[0];
+          if (hit) {
+            this.setState({ q: hit.name, searching: false, center: null, pin: null, found: hit.name, from: HERE.name, to: hit.name, panel: true, ov: null, sel: MODES[s.mode].order[0] });
+            this.flash('Routes from your location to ' + hit.name);
+          }
+        }
+      },
+      searchOpen: s.searching && !!s.q,
+      noResults: s.searching && !!s.q && matches.length === 0,
+      results: matches.map((p) => ({
+        name: p.name, sub: p.sub, icon: p.icon,
+        style: 'width:100%;display:flex;align-items:center;gap:13px;padding:12px 13px;border:none;border-radius:var(--radius-md,14px);'
+          + 'background:none;cursor:pointer;text-align:left',
+        pick: () => {
+          this.setState({ q: p.name, searching: false, center: null, pin: null, found: p.name, from: HERE.name, to: p.name, panel: true, ov: null, sel: MODES[s.mode].order[0] });
+          this.flash('Routes from your location to ' + p.name);
+        }
+      })),
+
+      mapCenter: s.center || [1.3450, 103.8400],
+      searchPin: s.pin,
+      routeCoords: active.coords,
+      originCoord: active.coords[0],
+      destCoord: active.coords[active.coords.length - 1],
+      zones: s.crowd ? AREAS.map((a) => {
+        const v = Math.max(.12, Math.min(.99, a.base));
+        return { id: a.id, ll: a.ll, radius: a.radius, level: lvl(v), selected: a.id === s.zone, label: a.name };
+      }) : [],
+      pickZone: (z) => this.setState({ zone: (z && z.id) || null }),
+
+      crowdOn: s.crowd,
+      crowdBtnLabel: s.crowd ? 'Crowding now' : 'Crowding off',
+      crowdBtnStyle: 'display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;cursor:pointer;border:none;'
+        + 'font:var(--weight-bold) 15px/1 var(--font-body);transition:background .15s,color .15s;'
+        + (s.crowd ? 'background:var(--accent);color:var(--text-on-accent);' : 'background:var(--accent-soft);color:var(--text-body);'),
+      toggleCrowd: () => this.setState({ crowd: !s.crowd }),
+
+      zoneOpen: !!zone && s.crowd && !s.ov,
+      zoneName: zone ? zone.name : '',
+      zoneDetail: zone ? zone.detail : '',
+      zoneWord: WORD[zl],
+      zoneColor: 'var(--crowd-' + zl + ')',
+      zoneTrend: zv >= .9 ? 'rising into the peak' : zv >= .6 ? 'holding steady' : 'easing off',
+      zoneHours: HOURS.map((h) => {
+        const v = Math.max(.1, Math.min(1, (zone ? zone.base : .5) * h.peak));
+        const on = h.label === '07';
+        return {
+          label: h.label,
+          bar: 'width:100%;height:' + Math.round(14 + v * 46) + 'px;border-radius:8px;background:var(--crowd-' + lvl(v) + ');'
+            + 'transition:height .34s var(--ease-standard),background-color .34s var(--ease-standard);'
+            + (on ? 'outline:2px solid var(--text-strong);outline-offset:2px;' : ''),
+          labelStyle: 'font:var(--weight-bold) 13px/1 var(--font-numeric);font-variant-numeric:tabular-nums;'
+            + (on ? 'color:var(--text-strong)' : 'color:var(--text-muted)')
+        };
+      }),
+      clearZone: () => this.setState({ zone: null }),
+      avoidZone: () => { this.setState({ mode: 'comfort', sel: 'bus' }); this.flash('Showing routes clear of ' + (zone ? zone.name : 'the area')); },
+
+      overlayOpen: !!s.ov,
+      closeOverlay: () => this.setState({ ov: null }),
+      overlayTitle: s.ov === 'report' ? 'Report a fault' : s.ov === 'points' ? 'Points' : '',
+      overlaySub: s.ov === 'report' ? (fault ? 'Two questions and a photo' : 'What did you run into?')
+        : s.ov === 'points' ? 'Earned by reporting what you see' : '',
+      isReportOv: s.ov === 'report',
+      isPointsOv: s.ov === 'points',
+
+      watchedList: WATCHED.map((w) => {
+        const on = !!s.bells[w.id];
+        return {
+          name: w.name, detail: w.detail, title: on ? 'Alerts on' : 'Alerts off',
+          bellStyle: 'flex:none;width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;'
+            + 'transition:background .15s,color .15s;'
+            + (on ? 'background:var(--accent);color:var(--text-on-accent);' : 'background:var(--sand-200);color:var(--text-muted);'),
+          load: () => { this.setState({ from: w.from, to: w.to, ov: null }); this.flash('Showing ' + w.name); },
+          toggle: () => {
+            const b = Object.assign({}, s.bells); b[w.id] = !on;
+            this.setState({ bells: b });
+            this.flash(on ? 'Alerts off for ' + w.name : 'Watching ' + w.name);
+          }
+        };
+      }),
+      reportPicking: !s.fault,
+      reportFilling: !!s.fault,
+      faults: FAULTS.map((f) => ({
+        label: f.label, icon: f.icon, tint: f.tint, color: f.color,
+        pick: () => this.setState({ fault: f.id, answer: null, photo: false })
+      })),
+      reportLabel: fault ? fault.label : '',
+      reportQuestion: fault ? fault.q : '',
+      reportOpts: (fault ? fault.opts : []).map((o) => ({
+        label: o, style: pill(s.answer === o), pick: () => this.setState({ answer: o })
+      })),
+      reportBack: () => this.setState({ fault: null, answer: null, photo: false }),
+      photoIcon: s.photo ? 'check' : 'camera',
+      photoLabel: s.photo ? 'Photo attached' : 'Add a photo',
+      photoNote: s.photo ? 'IMG_4821.jpg · tap to remove' : 'A photo is what makes a report actionable',
+      photoStyle: 'width:100%;display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:12px;padding:24px;cursor:pointer;'
+        + 'border-radius:var(--radius-card);text-align:center;transition:background .15s,border-color .15s;'
+        + (s.photo ? 'background:var(--accent-soft);border:1px solid var(--border-accent);color:var(--text-accent);'
+                   : 'background:var(--surface-sunken);border:1px dashed var(--sand-500);color:var(--text-body);'),
+      togglePhoto: () => this.setState({ photo: !s.photo }),
+      reportBlocked: !s.photo || !s.answer,
+      reportCta: !s.answer ? 'Answer the question above' : !s.photo ? 'Add a photo to send' : 'Send report · +' + (fault ? fault.pts : 0) + ' points',
+      submitReport: () => {
+        const pts = fault ? fault.pts : 0;
+        const label = fault ? fault.label : 'Report';
+        this.setState({ points: s.points + pts, sent: [{ what: label + ' · reported', when: 'Just now', pts: pts }].concat(s.sent), fault: null, answer: null, photo: false, ov: null });
+        this.flash('Report sent · +' + pts + ' points');
+      },
+
+      points: s.points,
+      pointsWeek: 45 + s.sent.reduce((a, e) => a + e.pts, 0),
+      tierPct: Math.min(100, Math.round((s.points / 500) * 100)) + '%',
+      tierNote: s.points >= 500 ? 'Free single-trip fare unlocked.' : (500 - s.points) + ' points to a free single-trip fare.',
+      tierLocked: s.points < 500,
+      redeemLabel: s.points >= 500 ? 'Redeem free fare' : 'Reward at 500 points',
+      redeem: () => { this.setState({ points: s.points - 500 }); this.flash('Fare credited to your card'); },
+      earns: s.sent.concat([
+        { what: 'Crowded platform · Bishan', when: 'Yesterday, 08:12', pts: 10 },
+        { what: 'Lift out of service · Newton', when: 'Wed, 18:40', pts: 15 },
+        { what: 'Confirmed another rider’s report', when: 'Tue, 07:55', pts: 5 },
+        { what: 'Train fault · Ang Mo Kio', when: 'Mon, 08:02', pts: 15 }
+      ]),
+
+      toast: s.toast
+    };
+  }
+}
+
+</script>
+</body>
+</html>

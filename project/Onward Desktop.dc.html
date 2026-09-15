@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/colors.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/typography.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/radius.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/motion.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/base.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/styles.css">
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.js"></script>
+<script src="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--sand-200);font-family:var(--font-core);-webkit-font-smoothing:antialiased}
+a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}
+*{box-sizing:border-box}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--sand-400);border-radius:5px}::-webkit-scrollbar-track{background:transparent}
+@keyframes sv-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style></helmet>
+<div style="min-height:100vh;display:flex;justify-content:center;padding:24px 18px 48px">
+<div style="width:100%;max-width:1440px;display:flex;flex-direction:column;gap:14px">
+
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:0 4px">
+    <div style="font:var(--weight-heavy) 20px/1 var(--font-display);letter-spacing:-.035em;color:var(--text-strong)">Onward for web</div>
+    <div style="flex-basis:100%;font:var(--type-caption);color:var(--text-muted)">Desktop surface · extends Solvik beyond the phone canvas · <a href="Onward.dc.html">mobile prototype</a></div>
+  </div>
+
+  <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+
+    <div style="flex:none;width:244px;min-width:0;position:sticky;top:24px">
+      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" padding="tight" hint-size="100%,520px">
+        <div style="padding:6px 6px 14px;font:var(--weight-heavy) 20px/1 var(--font-display);letter-spacing:-.035em;color:var(--text-strong)">Onward</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
+            <button onClick="{{ n.go }}" style="{{ n.style }}">{{ n.label }}<span style="{{ n.dot }}"></span></button>
+          </sc-for>
+        </div>
+        <div style="height:18px"></div>
+        <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Watched commutes</x-import>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px;padding:0 6px">
+          <sc-for list="{{ watched }}" as="w" hint-placeholder-count="2">
+            <div>
+              <div style="font:var(--type-body-strong);color:var(--text-strong)">{{ w.name }}</div>
+              <div style="font:var(--type-caption);color:var(--text-muted);margin-top:4px">{{ w.detail }}</div>
+              <div style="margin-top:7px"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="{{ w.tone }}" hint-size="auto,24px">{{ w.status }}</x-import></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="height:18px"></div>
+        <div style="border-top:1px solid var(--border-card);padding-top:14px;display:flex;align-items:center;gap:10px">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--accent-soft);color:var(--text-accent);font:var(--weight-bold) 13px/34px var(--font-body);text-align:center;flex:none">WJ</div>
+          <div style="min-width:0">
+            <div style="font:var(--type-body-strong);color:var(--text-strong)">Wei Jie</div>
+            <div style="font:var(--type-caption);color:var(--text-accent);font-variant-numeric:tabular-nums;margin-top:3px">{{ points }} points</div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div style="flex:1;min-width:320px;display:flex;flex-direction:column;gap:14px">
+
+      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.AppHeader" title="{{ viewTitle }}" subtitle="{{ viewSub }}" action="{{ headerAction }}" hint-size="100%,96px"></x-import>
+
+      <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+        <div style="background:var(--accent);color:var(--text-on-accent);border-radius:var(--radius-lg);padding:13px 18px;font:var(--type-body-strong);animation:sv-rise 220ms cubic-bezier(.2,.7,.3,1) both">{{ toast }}</div>
+      </sc-if>
+
+      <sc-if value="{{ isLive }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+          <div style="flex:2;min-width:340px;display:flex;flex-direction:column;gap:14px">
+
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="outlined" hint-size="100%,330px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.ServiceStatus" station="Bishan (NS17) · North South Line" message="Signal fault. Bus bridging between Ang Mo Kio and Newton." tone="fault" hint-size="100%,54px"></x-import>
+              <div style="height:16px"></div>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <div>
+                  <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong)">Yishun → Raffles Place</div>
+                  <div style="font:var(--type-body);color:var(--text-muted);margin-top:4px">Leave 07:42 · arrive by 08:45</div>
+                </div>
+                <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.SegmentedTabs" items="{{ modeItems }}" value="{{ mode }}" on-change="{{ setMode }}" hint-size="240px,46px"></x-import></div>
+              </div>
+              <div style="font:var(--type-body);color:var(--text-muted);margin-top:12px;max-width:680px;text-wrap:pretty">{{ modeBlurb }}</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:16px">
+                <sc-for list="{{ routes }}" as="r" hint-placeholder-count="3">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="{{ r.tone }}" padding="tight" interactive="{{ true }}" on-click="{{ r.pick }}" hint-size="100%,190px">
+                    <div style="display:flex;align-items:baseline;gap:7px">
+                      <div style="font:var(--weight-heavy) 32px/1 var(--font-numeric);letter-spacing:-.022em;font-variant-numeric:tabular-nums;color:var(--text-strong)">{{ r.mins }}</div>
+                      <div style="font:var(--type-caption);color:var(--text-muted)">min</div>
+                      <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="{{ r.tagTone }}" hint-size="auto,24px">{{ r.tag }}</x-import></div>
+                    </div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);margin-top:4px;font-variant-numeric:tabular-nums">arrives {{ r.eta }}</div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">
+                      <sc-for list="{{ r.legs }}" as="l" hint-placeholder-count="3"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Badge" tone="{{ l.tone }}" size="sm" hint-size="auto,20px">{{ l.label }}</x-import></sc-for>
+                    </div>
+                    <div style="margin-top:10px"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.CrowdingMeter" levels="{{ r.levels }}" summary="{{ r.crowd }}" size="sm" hint-size="100%,18px"></x-import></div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);margin-top:9px;text-wrap:pretty">{{ r.note }}</div>
+                  </x-import>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" icon-right="arrow-right" on-click="{{ send }}" hint-size="auto,44px">Send to phone</x-import>
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" icon-left="calendar" on-click="{{ addCal }}" hint-size="auto,44px">Add leave time</x-import>
+                <div style="font:var(--type-caption);color:var(--text-muted);flex:1;min-width:200px;text-wrap:pretty">Taking an alternative keeps one rider off the Bishan platform at its worst minute.</div>
+              </div>
+            </x-import>
+
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,520px">
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="auto,16px">Live arrivals · Yishun (NS13)</x-import>
+                <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.SegmentedTabs" items="{{ filterItems }}" value="{{ filter }}" on-change="{{ setFilter }}" hint-size="220px,46px"></x-import></div>
+              </div>
+              <div style="height:12px"></div>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.CrowdingLegend" hint-size="100%,20px"></x-import>
+              <sc-for list="{{ arrivals }}" as="a" hint-placeholder-count="6">
+                <div>
+                  <div style="display:flex;align-items:center;gap:9px;margin-top:16px">
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Badge" tone="{{ a.tone }}" hint-size="auto,22px">{{ a.badge }}</x-import>
+                    <div style="font:var(--type-caption);color:var(--text-muted)">{{ a.sub }}</div>
+                  </div>
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.ArrivalRow" destination="{{ a.name }}" levels="{{ a.levels }}" crowd-summary="{{ a.crowd }}" minutes="{{ a.t1 }}" following="{{ a.t2 }}" divider="{{ false }}" hint-size="100%,62px"></x-import>
+                </div>
+              </sc-for>
+            </x-import>
+          </div>
+
+          <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="accent" hint-size="100%,190px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Forecast · not yet happening</x-import>
+              <div style="font:var(--type-body-strong);color:var(--text-strong);margin-top:10px;text-wrap:pretty">Rain at 17:40 in the CBD. Crowding at Raffles Place rises sharply within 20 minutes of onset.</div>
+              <div style="font:var(--type-body);color:var(--text-muted);margin-top:6px;text-wrap:pretty">A nudge goes out at 17:15 with the Telok Ayer alternative.</div>
+              <div style="margin-top:14px"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="sm" on-click="{{ goForecast }}" hint-size="auto,34px">Open forecast</x-import></div>
+            </x-import>
+
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,400px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">From commuters · last 30 min</x-import>
+              <div style="display:flex;flex-direction:column;margin-top:8px">
+                <sc-for list="{{ feed }}" as="r" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:flex-start;gap:11px;padding:13px 0;border-top:1px solid var(--border-card)">
+                    <div style="width:9px;height:9px;border-radius:50%;background:{{ r.c }};margin-top:6px;flex:none"></div>
+                    <div style="flex:1;min-width:0">
+                      <div style="font:var(--type-body);color:var(--text-body);text-wrap:pretty">{{ r.text }}</div>
+                      <div style="font:var(--type-caption);color:var(--text-muted);margin-top:4px">{{ r.who }} · {{ r.ago }}</div>
+                    </div>
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="{{ r.variant }}" size="sm" disabled="{{ r.done }}" on-click="{{ r.confirm }}" hint-size="auto,34px">{{ r.btn }}</x-import>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="height:14px"></div>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" full-width="{{ true }}" on-click="{{ goCommunity }}" hint-size="100%,44px">Open community board</x-import>
+            </x-import>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isForecast }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+          <div style="flex:2;min-width:340px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,560px">
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="auto,16px">Central cluster · predicted load</x-import>
+                <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.CrowdingLegend" hint-size="auto,20px"></x-import></div>
+              </div>
+              <div style="display:flex;gap:7px;margin-top:14px">
+                <sc-for list="{{ fcHours }}" as="h" hint-placeholder-count="6"><button onClick="{{ h.pick }}" style="{{ h.style }}">{{ h.label }}</button></sc-for>
+              </div>
+              <svg viewBox="0 0 300 290" style="width:100%;max-width:560px;display:block;margin:12px auto 0">
+                <path d="M62 26 L104 100 L152 178 L170 262" stroke="var(--sand-400)" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M18 196 L152 178 L272 166" stroke="var(--sand-400)" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M236 44 Q288 150 246 252" stroke="var(--sand-300)" stroke-width="5" fill="none" stroke-linecap="round"></path>
+                <path d="M40 258 L104 100 L206 112 L272 166" stroke="var(--sand-300)" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+                <sc-for list="{{ fcStations }}" as="s" hint-placeholder-count="7">
+                  <circle cx="{{ s.x }}" cy="{{ s.y }}" r="{{ s.r }}" fill="{{ s.fill }}" opacity=".26"></circle>
+                  <circle cx="{{ s.x }}" cy="{{ s.y }}" r="7" fill="#ffffff" stroke="{{ s.fill }}" stroke-width="3.5"></circle>
+                  <text x="{{ s.lx }}" y="{{ s.ly }}" fill="#4a4845" font-family="Archivo,sans-serif" font-size="11.5" font-weight="600" text-anchor="{{ s.anchor }}">{{ s.name }}</text>
+                </sc-for>
+              </svg>
+            </x-import>
+          </div>
+          <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,330px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Station outlook · {{ fcLabel }}</x-import>
+              <div style="display:flex;flex-direction:column;gap:13px;margin-top:14px">
+                <sc-for list="{{ fcStations }}" as="s" hint-placeholder-count="7">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div style="font:var(--type-body-strong);color:var(--text-strong);width:112px;flex:none">{{ s.name }}</div>
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.CrowdingMeter" levels="{{ s.levels }}" summary="{{ s.word }}" size="sm" hint-size="auto,18px"></x-import>
+                  </div>
+                </sc-for>
+              </div>
+            </x-import>
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="accent" hint-size="100%,240px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">What drives this</x-import>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:12px">
+                <sc-for list="{{ drivers }}" as="d" hint-placeholder-count="4">
+                  <div style="font:var(--type-body);color:var(--text-body);text-wrap:pretty">{{ d }}</div>
+                </sc-for>
+              </div>
+            </x-import>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+          <div style="flex:2;min-width:340px;display:flex;flex-direction:column;gap:14px">
+            <sc-if value="{{ calOff }}" hint-placeholder-val="{{ true }}">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.PromptCard" icon="calendar" title="Connect Google Calendar" description="Pull meetings in, get leave-by nudges" action-label="{{ calCta }}" on-action="{{ connectCal }}" hint-size="100%,130px"></x-import>
+            </sc-if>
+            <sc-if value="{{ calOn }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" padding="tight" hint-size="100%,70px">
+                  <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+                    <div style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></div>
+                    <div style="font:var(--type-body-strong);color:var(--text-strong)">Google Calendar connected · 3 trips today</div>
+                    <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ disconnectCal }}" hint-size="auto,34px">Disconnect</x-import></div>
+                  </div>
+                </x-import>
+                <sc-for list="{{ calTrips }}" as="c" hint-placeholder-count="3">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.TripCard" time="{{ c.time }}" leave-at="{{ c.leave }}" title="{{ c.title }}" route="{{ c.route }}" tags="{{ c.tags }}" highlighted="{{ c.urgent }}" on-click="{{ c.plan }}" hint-size="100%,140px"></x-import>
+                </sc-for>
+                <div style="font:var(--type-caption);color:var(--text-muted);padding:0 6px">Event titles stay on the device. Only the start time and place are used.</div>
+              </div>
+            </sc-if>
+
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,280px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Saved commutes</x-import>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:14px">
+                <sc-for list="{{ saved }}" as="s" hint-placeholder-count="3">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="hairline" padding="tight" hint-size="100%,130px">
+                    <div style="font:var(--type-body-strong);color:var(--text-strong)">{{ s.name }}</div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);margin-top:5px;text-wrap:pretty">{{ s.detail }}</div>
+                    <div style="display:flex;gap:6px;margin-top:11px">
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="soft" hint-size="auto,24px">{{ s.mode }}</x-import>
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="outline" hint-size="auto,24px">Watched</x-import>
+                    </div>
+                  </x-import>
+                </sc-for>
+              </div>
+              <div style="height:14px"></div>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" icon-left="plus" on-click="{{ addCommute }}" hint-size="auto,44px">Add a commute</x-import>
+            </x-import>
+          </div>
+
+          <div style="flex:1;min-width:300px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,360px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Week ahead</x-import>
+              <div style="font:var(--type-caption);color:var(--text-muted);margin-top:6px">Predicted crowding across watched trips</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                <sc-for list="{{ week }}" as="d" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:center;gap:11px">
+                    <div style="font:var(--type-body-strong);color:var(--text-strong);width:38px;flex:none">{{ d.day }}</div>
+                    <div style="display:flex;gap:3px;flex:1">
+                      <sc-for list="{{ d.cells }}" as="c" hint-placeholder-count="8"><div style="{{ c.style }}"></div></sc-for>
+                    </div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);width:62px;text-align:right">{{ d.note }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font:var(--type-caption);color:var(--text-muted);margin-top:16px;text-wrap:pretty">Thursday evening looks worst. A stadium event releases onto the Circle Line at 22:00.</div>
+            </x-import>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isCommunity }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+          <div style="flex:2;min-width:340px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,430px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Report · Bishan (NS17)</x-import>
+              <div style="font:var(--type-body);color:var(--text-muted);margin-top:6px">Reports stay live 30 min and are shared anonymously with commuters and LTA.</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:11px;margin-top:14px">
+                <sc-for list="{{ reportTypes }}" as="t" hint-placeholder-count="6">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="{{ t.tone }}" padding="tight" interactive="{{ true }}" on-click="{{ t.pick }}" hint-size="100%,110px">
+                    <div style="font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ t.label }}</div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);margin-top:5px;text-wrap:pretty">{{ t.sub }}</div>
+                    <div style="font:var(--type-caption);color:var(--text-accent);margin-top:8px">{{ t.pts }} points</div>
+                  </x-import>
+                </sc-for>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;border-top:1px solid var(--border-card);padding-top:16px">
+                <div style="font:var(--type-body-strong);color:var(--text-strong)">How bad is it</div>
+                <div style="flex:1;min-width:260px"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.SegmentedTabs" items="{{ sevItems }}" value="{{ sev }}" on-change="{{ setSev }}" hint-size="100%,46px"></x-import></div>
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" on-click="{{ submitReport }}" hint-size="auto,44px">Post · {{ chosenPts }} points</x-import>
+              </div>
+            </x-import>
+          </div>
+          <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="accent" hint-size="100%,150px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Points balance</x-import>
+              <div style="font:var(--weight-heavy) var(--size-count)/1 var(--font-numeric);font-variant-numeric:tabular-nums;letter-spacing:-.022em;color:var(--text-strong);margin-top:10px">{{ points }}</div>
+              <div style="font:var(--type-body);color:var(--text-muted);margin-top:8px">620 points to Gold</div>
+            </x-import>
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,340px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Redeem</x-import>
+              <sc-for list="{{ vouchers }}" as="v" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border-card)">
+                  <div style="flex:1;min-width:0">
+                    <div style="font:var(--type-body-strong);color:var(--text-strong)">{{ v.title }}</div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);margin-top:4px">{{ v.sub }}</div>
+                  </div>
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="{{ v.variant }}" size="sm" disabled="{{ v.disabled }}" on-click="{{ v.redeem }}" hint-size="auto,34px">{{ v.cta }}</x-import>
+                </div>
+              </sc-for>
+            </x-import>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1010}}">
+const CROWD = { light: 'var(--crowd-light)', moderate: 'var(--crowd-moderate)', busy: 'var(--crowd-busy)' };
+const WORD = { light: 'Light', moderate: 'Moderate', busy: 'Busy' };
+
+class Component extends DCLogic {
+  state = { view: 'live', mode: 'comfort', route: 0, fc: 2, filter: 'all', repType: 'crowd', sev: 'mid', cal: 'off', points: 2480, toast: null, tick: 0, confirmed: {} };
+
+  componentDidMount() { this.t0 = Date.now(); this.iv = setInterval(() => this.setState({ tick: Date.now() }), 1000); }
+  componentWillUnmount() { clearInterval(this.iv); if (this.tt) clearTimeout(this.tt); }
+
+  flash = (toast) => { this.setState({ toast }); if (this.tt) clearTimeout(this.tt); this.tt = setTimeout(() => this.setState({ toast: null }), 2800); };
+  level(v) { return v < .45 ? 'light' : (v < .75 ? 'moderate' : 'busy'); }
+  levels(v) { const l = this.level(v); return l === 'light' ? ['light', 'light', 'moderate'] : (l === 'moderate' ? ['moderate', 'moderate', 'light'] : ['busy', 'busy', 'moderate']); }
+  mins(base) { const el = (this.state.tick && this.t0) ? (this.state.tick - this.t0) / 60000 : 0; let t = base - el; while (t <= 0) t += 14; return t < 1 ? 1 : Math.round(t); }
+
+  renderVals() {
+    const s = this.state, v = s.view;
+
+    const navDefs = [['live', 'Live', true], ['forecast', 'Forecast', false], ['plan', 'Plan', false], ['community', 'Community', true]];
+    const nav = navDefs.map(([id, label, dot]) => {
+      const on = v === id;
+      return {
+        label, go: () => this.setState({ view: id }),
+        style: { display: 'flex', alignItems: 'center', width: '100%', textAlign: 'left', cursor: 'pointer', borderRadius: '999px', padding: '12px 16px', font: 'var(--weight-semibold) 15px/1 var(--font-body)', border: 'none', background: on ? 'var(--accent-soft)' : 'transparent', color: on ? 'var(--text-accent)' : 'var(--text-muted)', transition: 'background 220ms cubic-bezier(.2,.7,.3,1)' },
+        dot: dot ? { marginLeft: 'auto', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' } : { display: 'none' }
+      };
+    });
+
+    const routeSets = {
+      rush: [
+        { mins: 41, eta: '08:22', tag: 'Fastest', tagTone: 'soft', legs: [['NSL', 'accent'], ['BUS 969', 'dark'], ['NEL', 'soft']], v: .88, note: 'Uses the affected stretch with bus bridging. Quickest, but standing.' },
+        { mins: 46, eta: '08:27', tag: 'Backup', tagTone: 'outline', legs: [['NSL', 'accent'], ['DTL', 'soft'], ['EWL', 'soft']], v: .74, note: 'One extra transfer. Skips the bridging queue at Ang Mo Kio.' },
+        { mins: 52, eta: '08:33', tag: 'Surface', tagTone: 'neutral', legs: [['BUS 855', 'dark'], ['NEL', 'soft']], v: .52, note: 'Road congestion on the CTE is moderate and clearing.' }
+      ],
+      comfort: [
+        { mins: 48, eta: '08:29', tag: 'Best seat odds', tagTone: 'soft', legs: [['NSL', 'accent'], ['DTL', 'soft'], ['EWL', 'soft']], v: .41, note: 'Boards the DTL two stops before the crowd builds.' },
+        { mins: 44, eta: '08:25', tag: 'Balanced', tagTone: 'outline', legs: [['NSL', 'accent'], ['BUS 969', 'dark']], v: .69, note: 'Quicker, but the bridging bus is standing-room from Bishan.' },
+        { mins: 55, eta: '08:36', tag: 'Quietest', tagTone: 'soft', legs: [['BUS 856', 'dark'], ['TEL', 'soft']], v: .28, note: 'The TEL is running light. Longest ride, emptiest carriage.' }
+      ],
+      silver: [
+        { mins: 51, eta: '08:32', tag: 'Step-free', tagTone: 'soft', legs: [['NSL direct', 'accent']], v: .44, note: 'No transfers. Lift at both ends, 9 min platform buffer.' },
+        { mins: 58, eta: '08:39', tag: 'Seated', tagTone: 'soft', legs: [['BUS 856', 'dark'], ['NSL', 'accent']], v: .3, note: 'Bus first, boarding at the terminus. A seat is near certain.' },
+        { mins: 47, eta: '08:28', tag: 'One transfer', tagTone: 'outline', legs: [['NSL', 'accent'], ['DTL', 'soft']], v: .58, note: 'Shorter, but Newton has 42 steps when the lift is busy.' }
+      ]
+    };
+    const routes = routeSets[s.mode].map((r, i) => ({
+      ...r, pick: () => this.setState({ route: i }), tone: s.route === i ? 'outlined' : 'hairline',
+      legs: r.legs.map(([label, tone]) => ({ label, tone })), levels: this.levels(r.v), crowd: WORD[this.level(r.v)]
+    }));
+
+    const allArr = [
+      { badge: 'NSL', tone: 'accent', kind: 'train', name: 'Marina South Pier', sub: 'Platform B · southbound', base: [2, 6], v: .86 },
+      { badge: 'TEL', tone: 'soft', kind: 'train', name: 'Woodlands North', sub: 'Platform A · northbound', base: [4, 9], v: .38 },
+      { badge: '969', tone: 'dark', kind: 'bus', name: 'Woodlands Interchange', sub: 'Stop 59009 · double deck', base: [3, 12], v: .62 },
+      { badge: '167', tone: 'dark', kind: 'bus', name: 'Bedok Interchange', sub: 'Stop 59009 · wheelchair accessible', base: [7, 16], v: .31 },
+      { badge: 'NSL', tone: 'accent', kind: 'train', name: 'Jurong East', sub: 'Platform A · northbound', base: [5, 10], v: .22 },
+      { badge: '811', tone: 'dark', kind: 'bus', name: 'Yishun loop', sub: 'Stop 59241 · single deck', base: [9, 19], v: .44 }
+    ];
+    const arrivals = allArr.filter(a => s.filter === 'all' || a.kind === s.filter)
+      .map(a => ({ ...a, t1: this.mins(a.base[0]), t2: this.mins(a.base[1]), levels: this.levels(a.v), crowd: WORD[this.level(a.v)] }));
+
+    const hourLabels = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+    const fcStations = [
+      { name: 'Yishun', x: 62, y: 26, lx: 76, ly: 22, anchor: 'start', v: [.3, .4, .5, .45, .35, .3] },
+      { name: 'Bishan', x: 104, y: 100, lx: 118, ly: 96, anchor: 'start', v: [.55, .72, .9, .84, .6, .4] },
+      { name: 'City Hall', x: 152, y: 178, lx: 140, ly: 200, anchor: 'end', v: [.6, .8, .94, .88, .7, .5] },
+      { name: 'Raffles Place', x: 170, y: 262, lx: 184, ly: 266, anchor: 'start', v: [.5, .78, .96, .9, .66, .44] },
+      { name: 'Jurong East', x: 18, y: 196, lx: 26, ly: 216, anchor: 'start', v: [.4, .52, .68, .74, .6, .42] },
+      { name: 'Paya Lebar', x: 272, y: 166, lx: 264, ly: 188, anchor: 'end', v: [.45, .6, .76, .7, .52, .38] },
+      { name: 'Bugis', x: 206, y: 112, lx: 216, ly: 106, anchor: 'start', v: [.42, .56, .7, .8, .74, .56] }
+    ].map(st => { const val = st.v[s.fc], lv = this.level(val); return { ...st, fill: CROWD[lv], word: WORD[lv], levels: this.levels(val), r: 11 + val * 16 }; });
+    const fcHours = hourLabels.map((label, i) => ({
+      label, pick: () => this.setState({ fc: i }),
+      style: { flex: 1, cursor: 'pointer', borderRadius: '999px', padding: '10px 0', font: 'var(--weight-bold) 14px/1 var(--font-numeric)', fontVariantNumeric: 'tabular-nums', border: '1px solid ' + (s.fc === i ? 'var(--accent)' : 'var(--border-hairline)'), background: s.fc === i ? 'var(--accent)' : 'var(--surface-card)', color: s.fc === i ? 'var(--text-on-accent)' : 'var(--text-muted)', transition: 'background 150ms cubic-bezier(.2,.7,.3,1)' }
+    }));
+
+    const rTypes = [
+      { id: 'crowd', label: 'Packed platform', sub: 'Two trains to board', pts: 30 },
+      { id: 'esc', label: 'Escalator or lift down', sub: 'Out of service', pts: 25 },
+      { id: 'delay', label: 'Train held', sub: 'Waiting at the platform', pts: 30 },
+      { id: 'gantry', label: 'Gantry queue', sub: 'Backed up to the street', pts: 20 },
+      { id: 'bus', label: 'Bus full', sub: 'Drove past the stop', pts: 20 },
+      { id: 'aircon', label: 'Comfort issue', sub: 'Carriage too warm', pts: 15 }
+    ].map(t => ({ ...t, pick: () => this.setState({ repType: t.id }), tone: s.repType === t.id ? 'outlined' : 'hairline' }));
+    const chosen = rTypes.find(t => t.id === s.repType) || rTypes[0];
+
+    const vouchers = [
+      { title: '$1 off at Kopitiam', sub: '400 points · 6 outlets nearby', cost: 400 },
+      { title: '$5 EZ-Link top-up', sub: '1,800 points · instant', cost: 1800 },
+      { title: '$3 FairPrice voucher', sub: '1,200 points', cost: 1200 },
+      { title: 'Off-peak fare rebate', sub: '3,000 points · LTA pilot', cost: 3000 }
+    ].map(x => {
+      const can = s.points >= x.cost;
+      return { ...x, cta: can ? 'Redeem' : 'Locked', variant: can ? 'primary' : 'secondary', disabled: !can, redeem: () => { if (can) { this.setState({ points: s.points - x.cost }); this.flash('Redeemed · ' + x.title); } } };
+    });
+
+    const feed = [
+      { id: 'f1', lv: 'busy', text: 'Platform B packed, two trains passed', who: 'Bishan', ago: '2 min' },
+      { id: 'f2', lv: 'moderate', text: 'Escalator down at Exit C', who: 'Bishan', ago: '11 min' },
+      { id: 'f3', lv: 'light', text: 'Bus 969 arriving mostly empty', who: 'Yishun Interchange', ago: '14 min' },
+      { id: 'f4', lv: 'moderate', text: 'Queue at the gantry, tap-in slow', who: 'Newton', ago: '18 min' },
+      { id: 'f5', lv: 'busy', text: 'Bridging bus queue past the taxi stand', who: 'Ang Mo Kio', ago: '21 min' }
+    ].map(r => {
+      const done = !!s.confirmed[r.id];
+      return { ...r, c: CROWD[r.lv], done, btn: done ? 'Confirmed' : 'Still true', variant: done ? 'secondary' : 'soft', confirm: () => { if (!done) { this.setState({ confirmed: { ...s.confirmed, [r.id]: true }, points: s.points + 5 }); this.flash('Confirmed · 5 points'); } } };
+    });
+
+    const calTrips = [
+      { time: '09:30', title: 'Design review', route: 'Yishun → Raffles Place · NSL', leave: '08:41', urgent: true, tags: [{ label: 'Calendar', tone: 'outline' }, { label: 'Disruption', tone: 'warn', icon: 'triangle-alert' }] },
+      { time: '13:00', title: 'Lunch with Priya', route: 'Raffles Place → Telok Ayer · DTL', leave: '12:38', urgent: false, tags: [{ label: 'Calendar', tone: 'outline' }] },
+      { time: '19:15', title: 'Badminton', route: 'Raffles Place → Toa Payoh · NSL', leave: '18:26', urgent: true, tags: [{ label: 'Calendar', tone: 'outline' }, { label: 'Rain forecast', tone: 'warn', icon: 'cloud-rain' }] }
+    ].map(c => ({ ...c, plan: () => { this.setState({ view: 'live' }); this.flash('Planning ' + c.title + ' · leave ' + c.leave); } }));
+
+    const week = [
+      { day: 'Mon', vals: [.3, .5, .7, .4, .3, .6, .8, .5], note: 'clear' },
+      { day: 'Tue', vals: [.4, .7, .9, .5, .4, .7, .85, .6], note: 'today' },
+      { day: 'Wed', vals: [.3, .5, .6, .4, .3, .6, .7, .5], note: 'clear' },
+      { day: 'Thu', vals: [.4, .6, .8, .5, .4, .8, .95, .9], note: 'event' },
+      { day: 'Fri', vals: [.5, .7, .85, .6, .5, .8, .9, .7], note: 'rain' }
+    ].map(d => ({ ...d, cells: d.vals.map(x => ({ style: { flex: 1, height: '20px', borderRadius: 'var(--radius-xs)', background: CROWD[this.level(x)], transition: 'background 340ms cubic-bezier(.2,.7,.3,1)' } })) }));
+
+    return {
+      nav, points: s.points.toLocaleString(),
+      viewTitle: { live: 'Live arrivals', forecast: 'Crowd forecast', plan: 'Today', community: 'Community board' }[v],
+      viewSub: {
+        live: 'Tue 8 Sep · Near Yishun (NS13) · LTA DataMall',
+        forecast: 'Predicted from tap-ins, weather and events',
+        plan: 'Tue 8 Sep · 3 trips',
+        community: '1,284 reports in the last hour'
+      }[v],
+      headerAction: null,
+      isLive: v === 'live', isForecast: v === 'forecast', isPlan: v === 'plan', isCommunity: v === 'community',
+      goForecast: () => this.setState({ view: 'forecast' }), goCommunity: () => this.setState({ view: 'community' }),
+      toast: s.toast,
+      watched: [
+        { name: 'Home → Work', detail: 'Yishun → Raffles Place · 07:42', status: 'Disruption', tone: 'warn' },
+        { name: 'Work → Home', detail: 'Raffles Place → Yishun · 18:20', status: 'Rain forecast', tone: 'warn' }
+      ],
+      modeItems: [{ id: 'rush', label: 'Rush' }, { id: 'comfort', label: 'Comfort' }, { id: 'silver', label: 'Silver' }],
+      mode: s.mode, setMode: (id) => this.setState({ mode: id, route: 0 }),
+      modeBlurb: {
+        rush: 'Fastest arrival. Crowding is ignored — expect to stand from Bishan.',
+        comfort: 'Routes around the two busiest platforms. About 6 min slower, far better odds of a seat, and it spreads load across the network.',
+        silver: 'Fewest transfers, step-free throughout, longer walking buffers.'
+      }[s.mode],
+      routes,
+      send: () => this.flash('Route sent to the phone · leave 07:42'),
+      addCal: () => this.flash('Leave time 07:42 added to Google Calendar'),
+      filterItems: [{ id: 'all', label: 'All' }, { id: 'train', label: 'Train' }, { id: 'bus', label: 'Bus' }],
+      filter: s.filter, setFilter: (id) => this.setState({ filter: id }), arrivals,
+      fcStations, fcHours, fcLabel: hourLabels[s.fc],
+      drivers: [
+        'Rain expected 17:40 in the CBD — riders switch from surface to rail.',
+        'Two office towers at Raffles Place release at 18:00 on Tuesdays.',
+        'NSL headway is wider after this morning\u2019s fault recovery.',
+        'School holidays lighten the 16:00 band across the north.'
+      ],
+      calOff: s.cal !== 'on', calOn: s.cal === 'on', calCta: s.cal === 'linking' ? 'Connecting' : 'Connect',
+      connectCal: () => { this.setState({ cal: 'linking' }); setTimeout(() => { this.setState({ cal: 'on' }); this.flash('3 trips synced from the calendar'); }, 900); },
+      disconnectCal: () => this.setState({ cal: 'off' }), calTrips,
+      saved: [
+        { name: 'Home → Work', detail: 'Yishun → Raffles Place · Mon to Fri', mode: 'Comfort' },
+        { name: 'Work → Home', detail: 'Raffles Place → Yishun · Mon to Fri', mode: 'Comfort' },
+        { name: 'Ma\u2019s place', detail: 'Yishun → Ang Mo Kio · Sundays', mode: 'Silver' }
+      ],
+      addCommute: () => this.flash('New commute · pick start, end and arrival time'),
+      week, feed, vouchers, reportTypes: rTypes, chosenPts: chosen.pts,
+      sevItems: [{ id: 'low', label: 'Manageable' }, { id: 'mid', label: 'Getting busy' }, { id: 'high', label: 'Crush' }],
+      sev: s.sev, setSev: (id) => this.setState({ sev: id }),
+      submitReport: () => { this.setState({ points: s.points + chosen.pts }); this.flash(chosen.label + ' posted · ' + chosen.pts + ' points · 247 commuters notified'); }
+    };
+  }
+}
+</script>
+</body>
+</html>

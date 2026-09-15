@@ -1,0 +1,2175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/colors.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/typography.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/radius.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/motion.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/tokens/base.css">
+<link rel="stylesheet" href="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/styles.css">
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="_ds/solvik-design-system-b39a9730-c59a-4a28-9ab1-7108660acd0c/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--sand-200);font-family:var(--font-core);-webkit-font-smoothing:antialiased}
+a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}
+*{box-sizing:border-box}
+:root{--crowd-light:oklch(.60 .14 148);--crowd-moderate:oklch(.72 .16 72);--crowd-busy:oklch(.53 .20 27);--status-ok:oklch(.60 .14 148);--status-warn:oklch(.62 .16 72);--status-alert:oklch(.53 .20 27);--status-fault:oklch(.53 .20 27)}
+::-webkit-scrollbar{width:0;height:0}
+@keyframes sv-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes sv-ping{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.45);opacity:.55}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style></helmet>
+<div style="min-height:100vh;padding:26px 18px 56px;display:flex;flex-direction:column;align-items:center;gap:20px">
+
+  <div style="width:100%;max-width:900px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <div style="font:var(--weight-heavy) 21px/1 var(--font-display);letter-spacing:-.035em;color:var(--text-strong)">Onward</div>
+      <div style="font:var(--type-caption);color:var(--text-muted)">Mobile prototype · Solvik design system · <a href="Onward Desktop.dc.html">desktop surface</a></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px">
+      <sc-for list="{{ chips }}" as="c" hint-placeholder-count="9"><button onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</button></sc-for>
+    </div>
+  </div>
+
+  <div style="position:relative;width:430px;max-width:100%;height:880px;border-radius:40px;overflow:hidden;background:var(--surface-page);box-shadow:var(--shadow-sheet,0 24px 60px rgba(32,30,29,.18));display:flex;flex-direction:column">
+
+    <sc-if value="{{ isIntro }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;background:var(--sand-50);display:flex;flex-direction:column;padding:54px 20px 22px">
+        <div style="flex:none;display:flex;align-items:center;gap:9px">
+          <span style="width:24px;height:24px;border-radius:var(--radius-xs);background:var(--accent);color:var(--text-on-accent);font:var(--weight-heavy) 13px/24px var(--font-display);text-align:center">S</span>
+          <span style="font:var(--weight-heavy) 20px/1 var(--font-display);letter-spacing:-.035em;color:var(--text-strong)">Solvik</span>
+          <div style="margin-left:auto;display:flex;gap:5px">
+            <sc-for list="{{ introDots }}" as="d" hint-placeholder-count="4"><span style="{{ d.style }}"></span></sc-for>
+          </div>
+        </div>
+
+        <div style="flex:1;min-height:0;overflow-y:auto;padding-top:26px">
+          <sc-if value="{{ introS0 }}" hint-placeholder-val="{{ true }}">
+            <div style="animation:sv-rise 420ms cubic-bezier(.16,1,.3,1) both">
+              <div style="font:var(--weight-heavy) 38px/1.1 var(--font-display);letter-spacing:-.03em;color:var(--text-strong);text-wrap:pretty">Your commute, minus the guesswork</div>
+              <div style="font:var(--type-body);color:var(--text-muted);margin-top:14px;text-wrap:pretty">Tell Solvik who you are and where you go. It then watches your lines, warns you before you leave, and routes around the crush.</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:28px">
+                <sc-for list="{{ introPromises }}" as="p" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:12px;padding:14px 15px;border-radius:var(--radius-card);background:var(--surface-card);border:1px solid var(--border-card)">
+                    <span style="flex:none;width:34px;height:34px;border-radius:999px;background:var(--accent-soft);color:var(--text-accent);display:flex;align-items:center;justify-content:center">
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ p.icon }}" size="{{ 17 }}" hint-size="17px,17px"></x-import>
+                    </span>
+                    <span style="flex:1;min-width:0">
+                      <span style="display:block;font:var(--type-body-strong);color:var(--text-strong)">{{ p.title }}</span>
+                      <span style="display:block;font:var(--type-caption);color:var(--text-muted);margin-top:3px;text-wrap:pretty">{{ p.detail }}</span>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ introS1 }}" hint-placeholder-val="{{ false }}">
+            <div style="animation:sv-rise 320ms cubic-bezier(.16,1,.3,1) both">
+              <div style="font:var(--weight-heavy) 30px/1.15 var(--font-display);letter-spacing:-.028em;color:var(--text-strong);text-wrap:pretty">How do you travel?</div>
+              <div style="font:var(--type-body);color:var(--text-muted);margin-top:10px;text-wrap:pretty">Pick everything that applies. This decides which routes Solvik offers first.</div>
+              <div style="display:flex;flex-direction:column;gap:9px;margin-top:22px">
+                <sc-for list="{{ introRoles }}" as="r" hint-placeholder-count="5">
+                  <button onClick="{{ r.toggle }}" style="{{ r.style }}">
+                    <span style="{{ r.iconStyle }}"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ r.icon }}" size="{{ 17 }}" hint-size="17px,17px"></x-import></span>
+                    <span style="flex:1;min-width:0;text-align:left">
+                      <span style="display:block;font:var(--type-body-strong)">{{ r.label }}</span>
+                      <span style="{{ r.subStyle }}">{{ r.sub }}</span>
+                    </span>
+                    <span style="{{ r.checkStyle }}"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="check" size="{{ 14 }}" hint-size="14px,14px"></x-import></span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ introS2 }}" hint-placeholder-val="{{ false }}">
+            <div style="animation:sv-rise 320ms cubic-bezier(.16,1,.3,1) both">
+              <div style="font:var(--weight-heavy) 30px/1.15 var(--font-display);letter-spacing:-.028em;color:var(--text-strong);text-wrap:pretty">Where do you go most?</div>
+              <div style="font:var(--type-body);color:var(--text-muted);margin-top:10px;text-wrap:pretty">Two or three places is enough. Solvik watches the lines between them.</div>
+              <div style="display:flex;flex-direction:column;gap:16px;margin-top:22px">
+                <sc-for list="{{ introPlaces }}" as="f" hint-placeholder-count="3">
+                  <div>
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">{{ f.label }}</x-import>
+                    <div style="margin-top:8px">
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SearchField" value="{{ f.value }}" placeholder="{{ f.placeholder }}" icon="{{ f.icon }}" on-change="{{ f.set }}" hint-size="100%,48px"></x-import>
+                    </div>
+                    <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">
+                      <sc-for list="{{ f.suggestions }}" as="g" hint-placeholder-count="3">
+                        <button onClick="{{ g.pick }}" style="{{ g.style }}">{{ g.label }}</button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ introS3 }}" hint-placeholder-val="{{ false }}">
+            <div style="animation:sv-rise 320ms cubic-bezier(.16,1,.3,1) both">
+              <div style="font:var(--weight-heavy) 30px/1.15 var(--font-display);letter-spacing:-.028em;color:var(--text-strong);text-wrap:pretty">{{ introSummaryTitle }}</div>
+              <div style="font:var(--type-body);color:var(--text-muted);margin-top:10px;text-wrap:pretty">You can change any of this later in Setup.</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px">
+                <sc-for list="{{ introSummary }}" as="l" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:flex-start;gap:11px;padding:14px 15px;border-radius:var(--radius-card);background:var(--surface-card);border:1px solid var(--border-card)">
+                    <span style="flex:none;width:26px;height:26px;border-radius:999px;background:var(--accent);color:var(--text-on-accent);display:flex;align-items:center;justify-content:center">
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="check" size="{{ 14 }}" hint-size="14px,14px"></x-import>
+                    </span>
+                    <span style="flex:1;min-width:0;font:var(--type-body);color:var(--text-body);text-wrap:pretty">{{ l.text }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="flex:none;display:flex;flex-direction:column;gap:9px;padding-top:14px">
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="lg" full-width="{{ true }}" on-click="{{ introNext }}" hint-size="100%,56px">{{ introCta }}</x-import>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <sc-if value="{{ introCanBack }}" hint-placeholder-val="{{ false }}">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" icon-left="arrow-left" on-click="{{ introBack }}" hint-size="auto,34px">Back</x-import>
+            </sc-if>
+            <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ introSkip }}" hint-size="auto,34px">Skip for now</x-import></div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isMap }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;inset:0">
+        <x-import component="OneMapCanvas" from="./onemap-canvas.jsx" center="{{ mapCenter }}" zoom="{{ 12 }}" route="{{ routeCoords }}" marker="{{ originCoord }}" dest="{{ destCoord }}" pin="{{ pinCoord }}" zones="{{ mapZones }}" on-zone-click="{{ fcPickZone }}" on-map-click="{{ dropPin }}" zoom-controls="{{ false }}" height="100%" hint-size="100%,100%"></x-import>
+
+        <div style="position:absolute;top:0;left:0;right:0;padding:16px 14px 0;display:flex;flex-direction:column;gap:10px;max-height:100%;pointer-events:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px 8px;pointer-events:auto">
+            <div style="font:var(--weight-bold) 13px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:var(--text-strong)">07:21</div>
+            <div style="display:flex;gap:5px">
+              <div style="width:16px;height:9px;border:1.5px solid var(--sand-700);border-radius:2px"></div>
+              <div style="width:16px;height:9px;border:1.5px solid var(--sand-700);border-radius:2px;background:linear-gradient(90deg,var(--sand-700) 62%,transparent 62%)"></div>
+            </div>
+          </div>
+          <sc-if value="{{ mapRoute }}" hint-placeholder-val="{{ false }}">
+            <div style="pointer-events:auto;display:flex;box-shadow:var(--shadow-nav,0 10px 30px rgba(32,30,29,.16));border-radius:var(--radius-pill,999px);width:44px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="arrow-left" label="Back to search" tone="plain" size="md" on-click="{{ backToSearch }}" hint-size="44px,44px"></x-import>
+            </div>
+          </sc-if>
+          <sc-if value="{{ mapSearch }}" hint-placeholder-val="{{ true }}">
+            <div style="pointer-events:auto;display:flex;align-items:flex-start;gap:10px">
+              <div onFocusCapture="{{ openSearch }}" onBlurCapture="{{ closeSearch }}" style="flex:1;min-width:0;border-radius:var(--radius-pill,999px);box-shadow:var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SearchField" value="{{ query }}" placeholder="Search address, stop or area" icon="search" on-change="{{ setQuery }}" on-clear="{{ clearQuery }}" hint-size="100%,52px"></x-import>
+              </div>
+              <div style="flex:none;display:flex;flex-direction:column;gap:8px;align-items:center">
+                <button onClick="{{ fcToggleAlerts }}" style="{{ fcBellStyle }}">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="bell" size="{{ 20 }}" stroke-width="{{ 2.1 }}" hint-size="20px,20px"></x-import>
+                  <sc-if value="{{ fcHasFaults }}" hint-placeholder-val="{{ true }}">
+                    <span style="{{ fcBellDotStyle }}">{{ fcFaultN }}</span>
+                  </sc-if>
+                </button>
+                <button onClick="{{ toggleCrowd }}" title="{{ crowdToggleLabel }}" style="{{ crowdToggleStyle }}">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="layers" size="{{ 19 }}" stroke-width="{{ 2.1 }}" hint-size="19px,19px"></x-import>
+                </button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ showResults }}" hint-placeholder-val="{{ false }}">
+            <div style="pointer-events:auto;overflow-y:auto;max-height:560px;margin-top:-5px;border-radius:var(--radius-card);box-shadow:var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,360px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">{{ resultsLabel }}</x-import>
+                <sc-for list="{{ results }}" as="p" hint-placeholder-count="5">
+                  <button onClick="{{ p.pick }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border-card);padding:14px 0;cursor:pointer">
+                    <div style="flex:1;min-width:0">
+                      <div style="font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ p.name }}</div>
+                      <div style="font:var(--type-caption);color:var(--text-muted);margin-top:4px;text-wrap:pretty">{{ p.detail }}</div>
+                    </div>
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="neutral" hint-size="auto,24px">{{ p.kind }}</x-import>
+                  </button>
+                </sc-for>
+                <div style="font:var(--type-caption);color:var(--text-muted);margin-top:14px">Results from OneMap · Singapore Land Authority</div>
+              </x-import>
+            </div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ mapRoute }}" hint-placeholder-val="{{ false }}">
+          <div ref="{{ setSheetRef }}" style="{{ sheetWrapStyle }}">
+            <section style="{{ sheetStyle }}">
+              <div onPointerDown="{{ sheetDragStart }}" style="{{ sheetGrabStyle }}"><div style="width:42px;height:4px;border-radius:999px;background:var(--border-strong);margin:0 auto"></div></div>
+              <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:12px;padding-bottom:10px">
+                <div style="display:flex;align-items:flex-start;gap:10px">
+                  <div style="min-width:0">
+                    <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong);text-wrap:pretty">{{ destName }}</div>
+                    <div style="display:flex;align-items:center;gap:6px;margin-top:5px;font:var(--type-caption);color:var(--text-muted);text-wrap:pretty"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="map-pin" size="{{ 14 }}" hint-size="14px,14px"></x-import>{{ destDetail }}</div>
+                  </div>
+                  <div style="margin-left:auto;flex:none"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ backToSearch }}" hint-size="auto,34px">Change</x-import></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="font:var(--weight-heavy) 11px/1 var(--font-body);letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted)">Prioritise</div>
+                  <div style="flex:1;height:1px;background:var(--border-card)"></div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:7px;padding:2px 0 2px">
+                  <sc-for list="{{ tripModeTiles }}" as="m" hint-placeholder-count="5">
+                    <button onClick="{{ m.pick }}" style="{{ m.tileStyle }}">{{ m.label }}</button>
+                  </sc-for>
+                </div>
+                <div style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">{{ tripModeBlurb }}</div>
+                <sc-for list="{{ tripOptions }}" as="o" hint-placeholder-count="3">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="{{ o.tone }}" padding="tight" interactive="{{ true }}" on-click="{{ o.pick }}" hint-size="100%,170px">
+                    <div style="display:flex;align-items:baseline;gap:7px">
+                      <span style="font:var(--weight-heavy) 32px/1 var(--font-numeric);letter-spacing:-.022em;font-variant-numeric:tabular-nums;color:var(--text-strong)">{{ o.mins }}</span>
+                      <span style="font:var(--type-body);color:var(--text-muted)">min</span>
+                      <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="{{ o.tagTone }}" hint-size="auto,24px">{{ o.tag }}</x-import></div>
+                    </div>
+                    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:6px;font:var(--type-caption);color:var(--text-muted);font-variant-numeric:tabular-nums">
+                      <span style="display:inline-flex;align-items:center;gap:5px"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="clock" size="{{ 14 }}" hint-size="14px,14px"></x-import>{{ o.eta }}</span>
+                      <span style="display:inline-flex;align-items:center;gap:5px"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="wallet" size="{{ 14 }}" hint-size="14px,14px"></x-import>{{ o.fare }}</span>
+                      <span style="display:inline-flex;align-items:center;gap:5px"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="footprints" size="{{ 14 }}" hint-size="14px,14px"></x-import>{{ o.walk }}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px">
+                      <sc-for list="{{ o.legs }}" as="l" hint-placeholder-count="3"><span style="{{ l.style }}">{{ l.label }}</span></sc-for>
+                    </div>
+                    <div style="margin-top:10px"><div style="display:inline-flex;align-items:center;gap:8px">
+                      <div style="display:flex;align-items:center;gap:3px"><sc-for list="{{ o.bars }}" as="b" hint-placeholder-count="1"><span style="{{ b.style }}"></span></sc-for></div>
+                      <span style="font:var(--weight-bold) var(--size-body-sm)/1 var(--font-body);color:var(--text-strong)">{{ o.crowd }}</span>
+                    </div></div>
+                    <div style="display:flex;align-items:flex-end;gap:12px;margin-top:8px">
+                      <div style="flex:1;min-width:0;font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">{{ o.note }}</div>
+                      <div style="flex:none"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" icon-right="navigation" on-click="{{ o.start }}" hint-size="auto,44px">Go</x-import></div>
+                    </div>
+                  </x-import>
+                </sc-for>
+              </div>
+              <div style="flex:none;padding:8px 0 14px;font:var(--weight-regular) 10px/1.3 var(--font-body);color:var(--text-muted);text-align:center;background:var(--surface-card)">Map data © OneMap · Singapore Land Authority</div>
+            </section>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ fcPinned }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:14px;right:14px;bottom:88px;z-index:16;padding:14px 15px 15px;border-radius:22px;background:var(--surface-card);box-shadow:var(--shadow-sheet);animation:sv-rise 300ms cubic-bezier(.16,1,.3,1) both">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="{{ fcPinned.dotStyle }}"></span>
+              <div style="min-width:0;flex:1">
+                <div style="font:var(--weight-heavy) 16px/1.2 var(--font-body);letter-spacing:-.012em;color:var(--text-strong);text-wrap:pretty">{{ fcPinned.name }}</div>
+                <div style="font:var(--type-caption);color:var(--text-muted);margin-top:4px;text-wrap:pretty">{{ fcPinned.detail }}</div>
+              </div>
+              <div style="flex:none;text-align:right">
+                <div style="{{ fcPinned.pctStyle }}">{{ fcPinned.pct }}</div>
+                <div style="font:var(--type-caption);color:var(--text-muted);margin-top:2px">{{ fcPinned.word }}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:6px;margin-top:14px">
+              <sc-for list="{{ fcPinned.hours }}" as="h" hint-placeholder-count="6">
+                <button onClick="{{ h.pick }}" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;padding:0;cursor:pointer">
+                  <span style="{{ h.barStyle }}"></span>
+                  <span style="{{ h.labelStyle }}">{{ h.label }}</span>
+                </button>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:9px;margin-top:14px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" icon-left="bell" on-click="{{ fcWatchPinned }}" hint-size="auto,44px">{{ fcWatchLabel }}</x-import>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" on-click="{{ fcRoutesHere }}" hint-size="auto,44px">Routes</x-import>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="md" on-click="{{ fcClearPin }}" hint-size="auto,44px">Clear</x-import>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ fcAlertsOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;inset:0;z-index:24;background:rgba(32,30,29,.34);display:flex;flex-direction:column;justify-content:flex-end">
+            <div onClick="{{ fcToggleAlerts }}" style="flex:1"></div>
+            <section style="flex:none;max-height:76%;display:flex;flex-direction:column;background:var(--surface-card);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;box-shadow:var(--shadow-sheet);padding:0 16px 18px;animation:sv-rise 320ms cubic-bezier(.16,1,.3,1) both">
+              <div style="flex:none;padding:12px 0 6px;display:flex;justify-content:center"><div style="width:42px;height:4px;border-radius:999px;background:var(--border-strong)"></div></div>
+              <div style="flex:none;display:flex;align-items:center;gap:10px;padding:4px 0 12px">
+                <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong)">Alerts</div>
+                <div style="{{ fcFaultCountStyle }}">{{ fcFaultCount }}</div>
+                <div style="margin-left:auto;display:flex;gap:4px">
+                  <sc-if value="{{ fcHasUnread }}" hint-placeholder-val="{{ true }}">
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ fcMarkAllRead }}" hint-size="auto,34px">Mark all read</x-import>
+                  </sc-if>
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ fcToggleAlerts }}" hint-size="auto,34px">Close</x-import>
+                </div>
+              </div>
+              <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-bottom:4px">
+                <sc-for list="{{ fcFaults }}" as="f" hint-placeholder-count="4">
+                  <button onClick="{{ f.toggleRead }}" style="{{ f.cardStyle }}">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="{{ f.badgeStyle }}">{{ f.line }}</span>
+                      <span style="{{ f.tagStyle }}">{{ f.tag }}</span>
+                      <span style="{{ f.readDotStyle }}"></span>
+                      <span style="margin-left:auto;font:var(--type-caption);color:var(--text-muted);font-variant-numeric:tabular-nums">{{ f.time }}</span>
+                    </div>
+                    <div style="font:var(--weight-bold) 14.5px/1.3 var(--font-body);color:var(--text-strong);margin-top:9px;text-wrap:pretty">{{ f.title }}</div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);margin-top:5px;text-wrap:pretty">{{ f.detail }}</div>
+                    <div style="font:var(--weight-bold) 11px/1 var(--font-body);letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin-top:9px">{{ f.readLabel }}</div>
+                  </button>
+                </sc-for>
+              </div>
+            </section>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasPin }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:14px;right:14px;bottom:88px;background:var(--surface-card);border-radius:var(--radius-card);box-shadow:var(--shadow-sheet);padding:14px 15px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:flex-start;gap:11px">
+              <div style="flex:none;width:34px;height:34px;border-radius:999px;background:var(--accent-soft);color:var(--text-accent);display:flex;align-items:center;justify-content:center">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="map-pin" size="{{ 18 }}" hint-size="18px,18px"></x-import>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ pinName }}</div>
+                <div style="font:var(--type-caption);color:var(--text-muted);margin-top:3px;font-variant-numeric:tabular-nums;text-wrap:pretty">{{ pinDetail }}</div>
+              </div>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="x" label="Remove pin" tone="ghost" size="sm" on-click="{{ clearPin }}" hint-size="34px,34px"></x-import>
+            </div>
+            <div style="display:flex;gap:8px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" full-width="{{ true }}" icon-right="arrow-right" on-click="{{ pinDirections }}" hint-size="100%,44px">Routes here</x-import>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" full-width="{{ true }}" on-click="{{ pinSearch }}" hint-size="100%,44px">Search area</x-import>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showCrowdBar }}" hint-placeholder-val="{{ true }}">
+          <div style="position:absolute;left:14px;right:14px;bottom:88px;z-index:14;padding:11px 12px 12px;border-radius:20px;background:var(--surface-card);box-shadow:var(--shadow-sheet)">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <sc-for list="{{ fcLegend }}" as="g" hint-placeholder-count="3">
+                <span style="display:inline-flex;align-items:center;gap:5px">
+                  <span style="{{ g.swatch }}"></span>
+                  <span style="font:var(--weight-semibold) 10.5px/1 var(--font-body);color:var(--text-muted);white-space:nowrap">{{ g.short }}</span>
+                </span>
+              </sc-for>
+              <span style="margin-left:auto;font:var(--weight-semibold) 10.5px/1 var(--font-body);color:var(--text-muted);white-space:nowrap">Tap an area for its outlook</span>
+            </div>
+            <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:10px;padding-bottom:2px">
+              <sc-for list="{{ fcSlots }}" as="h" hint-placeholder-count="6">
+                <button onClick="{{ h.pick }}" style="{{ h.style }}">
+                  <span style="{{ h.timeStyle }}">{{ h.label }}</span>
+                  <span style="{{ h.barStyle }}"></span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showPinHint }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:120px;display:flex;align-items:center;gap:7px;background:var(--surface-card);border-radius:999px;padding:8px 14px;box-shadow:var(--shadow-nav);font:var(--type-caption);color:var(--text-body);white-space:nowrap">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="map-pin" size="{{ 14 }}" hint-size="14px,14px"></x-import>Tap anywhere to drop a pin
+          </div>
+        </sc-if>
+        <sc-if value="{{ showMapAttrib }}" hint-placeholder-val="{{ true }}">
+          <div style="position:absolute;left:16px;bottom:92px;font:var(--weight-regular) 10px/1.3 var(--font-body);color:var(--sand-700);text-shadow:0 1px 2px rgba(255,255,255,.9)">Map data © OneMap · Singapore Land Authority</div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isNav }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0">
+        <x-import component="OneMapCanvas" from="./onemap-canvas.jsx" center="{{ navCoord }}" zoom="{{ 15 }}" route="{{ routeCoords }}" marker="{{ navCoord }}" dest="{{ destCoord }}" fit-route="{{ false }}" zoom-controls="{{ false }}" height="100%" hint-size="100%,100%"></x-import>
+
+        <div style="position:absolute;left:14px;right:14px;top:14px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="x" label="End trip" tone="plain" size="md" on-click="{{ endTrip }}" hint-size="44px,44px"></x-import>
+            <div style="font:var(--weight-bold) 12px/1 var(--font-body);color:var(--text-strong);background:var(--surface-card);border-radius:999px;padding:9px 15px;box-shadow:var(--shadow-nav);white-space:nowrap;flex:none">{{ navStepLabel }}</div>
+          </div>
+          <div style="background:var(--accent);color:var(--text-on-accent);border-radius:var(--radius-card);padding:15px 16px;box-shadow:var(--shadow-nav);display:flex;align-items:flex-start;gap:13px">
+            <div style="flex:none;width:42px;height:42px;border-radius:999px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ navIcon }}" size="{{ 21 }}" hint-size="21px,21px"></x-import>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font:var(--weight-heavy) 19px/1.25 var(--font-display);letter-spacing:-.02em;text-wrap:pretty">{{ navTitle }}</div>
+              <div style="font:var(--type-caption);opacity:.74;margin-top:5px;text-wrap:pretty">{{ navDetail }}</div>
+            </div>
+            <div style="flex:none;text-align:right">
+              <div style="font:var(--weight-heavy) 20px/1 var(--font-numeric);font-variant-numeric:tabular-nums">{{ navCountdown }}</div>
+              <div style="font:var(--weight-regular) 10px/1 var(--font-body);opacity:.68;margin-top:5px">to go</div>
+            </div>
+          </div>
+          <div style="height:5px;border-radius:999px;background:var(--surface-card);box-shadow:var(--shadow-nav);overflow:hidden"><div style="{{ navProgressStyle }}"></div></div>
+        </div>
+
+        <div style="{{ navSheetStyle }}">
+          <div onPointerDown="{{ navSheetDrag }}" onDoubleClick="{{ navSheetCycle }}" style="{{ navGrabStyle }}"><div style="width:42px;height:4px;border-radius:999px;background:var(--border-strong);margin:0 auto"></div></div>
+          <div style="display:flex;align-items:baseline;gap:9px">
+            <div style="font:var(--weight-heavy) 26px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:var(--text-strong)">{{ navEta }}</div>
+            <div style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">{{ navRemainLabel }}</div>
+          </div>
+          <div ref="{{ setStepsRef }}" onScroll="{{ onStepsScroll }}" onPointerDown="{{ stepsDragStart }}" style="{{ stepsPagerStyle }}">
+            <sc-for list="{{ navList }}" as="st" hint-placeholder-count="5">
+              <div style="{{ st.cardStyle }}">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="{{ st.iconWrapStyle }}"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ st.icon }}" size="{{ 17 }}" hint-size="17px,17px"></x-import></div>
+                  <div style="{{ st.chipStyle }}">{{ st.state }}</div>
+                  <div style="margin-left:auto;font:var(--type-caption);color:var(--text-muted);font-variant-numeric:tabular-nums">{{ st.dur }}</div>
+                </div>
+                <div style="{{ st.titleStyle }}">{{ st.title }}</div>
+                <div style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">{{ st.detail }}</div>
+                <sc-if value="{{ st.hasStops }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ st.laneWrapStyle }}">
+                    <div style="{{ st.laneStyle }}"></div>
+                    <div style="{{ st.laneFillStyle }}"></div>
+                    <sc-if value="{{ st.showVehicle }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ st.vehicleStyle }}"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ st.icon }}" size="{{ 15 }}" hint-size="15px,15px"></x-import></div>
+                    </sc-if>
+                    <sc-for list="{{ st.stopList }}" as="sp" hint-placeholder-count="4">
+                      <div style="{{ sp.rowStyle }}">
+                        <div style="width:26px;flex:none;display:flex;justify-content:center"><div style="{{ sp.dotStyle }}"></div></div>
+                        <div style="{{ sp.style }}">{{ sp.name }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="{{ navDotsWrapStyle }}">
+            <sc-for list="{{ navDots }}" as="d" hint-placeholder-count="5"><span style="{{ d.style }}"></span></sc-for>
+          </div>
+          <div style="display:flex;gap:10px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" full-width="{{ true }}" icon-right="megaphone" on-click="{{ goReport }}" hint-size="100%,44px">Report</x-import>
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="md" full-width="{{ true }}" on-click="{{ endTrip }}" hint-size="100%,44px">End trip</x-import>
+          </div>
+        </div>
+
+        <sc-if value="{{ navRepOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;inset:0;z-index:40;background:rgba(32,30,29,.38);display:flex;flex-direction:column;justify-content:flex-end">
+            <div onClick="{{ closeNavRep }}" style="flex:1"></div>
+            <section style="flex:none;max-height:82%;display:flex;flex-direction:column;background:var(--surface-card);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;box-shadow:var(--shadow-sheet);padding:0 18px 18px;animation:sv-rise 320ms cubic-bezier(.16,1,.3,1) both">
+              <div style="flex:none;padding:12px 0 8px;display:flex;justify-content:center"><div style="width:42px;height:4px;border-radius:999px;background:var(--sand-400)"></div></div>
+              <div style="flex:none;display:flex;align-items:center;gap:10px;padding-bottom:12px">
+                <sc-if value="{{ navRepForm }}" hint-placeholder-val="{{ false }}">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="arrow-left" label="Back" tone="ghost" size="sm" on-click="{{ navRepBack }}" hint-size="34px,34px"></x-import>
+                </sc-if>
+                <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong);text-wrap:pretty">{{ navRepTitle }}</div>
+                <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ closeNavRep }}" hint-size="auto,34px">Cancel</x-import></div>
+              </div>
+              <div style="flex:1;min-height:0;overflow-y:auto;padding-bottom:4px">
+                <sc-if value="{{ navRepPick }}" hint-placeholder-val="{{ true }}">
+                  <div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);padding-bottom:11px;text-wrap:pretty">Reported against your current step. Your trip keeps running.</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                      <sc-for list="{{ navRepTypes }}" as="t" hint-placeholder-count="6">
+                        <button onClick="{{ t.pick }}" style="{{ t.style }}">
+                          <span style="width:30px;height:30px;border-radius:999px;background:var(--accent-soft);color:var(--text-accent);display:flex;align-items:center;justify-content:center">
+                            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ t.icon }}" size="{{ 16 }}" hint-size="16px,16px"></x-import>
+                          </span>
+                          <span style="font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ t.label }}</span>
+                          <span style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">+{{ t.pts }} pts</span>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ navRepForm }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:14px">
+                    <div>
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">{{ navRepSevQ }}</x-import>
+                      <div style="display:flex;flex-direction:column;gap:8px;margin-top:9px">
+                        <sc-for list="{{ navRepSevs }}" as="v" hint-placeholder-count="3">
+                          <button onClick="{{ v.pick }}" style="{{ v.style }}">{{ v.label }}</button>
+                        </sc-for>
+                      </div>
+                    </div>
+                    <div>
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Photo · required</x-import>
+                      <sc-if value="{{ navRepNoPhoto }}" hint-placeholder-val="{{ true }}">
+                        <label style="display:flex;align-items:center;gap:12px;margin-top:9px;padding:14px 15px;border-radius:var(--radius-card);border:1px dashed var(--sand-400);background:var(--accent-soft);cursor:pointer">
+                          <input type="file" accept="image/*" capture="environment" onChange="{{ onNavRepPhoto }}" style="position:absolute;width:1px;height:1px;opacity:0" />
+                          <span style="flex:none;width:40px;height:40px;border-radius:999px;background:var(--accent);color:var(--text-on-accent);display:flex;align-items:center;justify-content:center">
+                            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="camera" size="{{ 19 }}" hint-size="19px,19px"></x-import>
+                          </span>
+                          <span style="flex:1;min-width:0">
+                            <span style="display:block;font:var(--type-body-strong);color:var(--text-strong)">Take a photo</span>
+                            <span style="display:block;font:var(--type-caption);color:var(--text-muted);margin-top:3px;text-wrap:pretty">Faces are blurred automatically.</span>
+                          </span>
+                        </label>
+                      </sc-if>
+                      <sc-if value="{{ navRepHasPhoto }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:12px;margin-top:9px">
+                          <div style="flex:none;width:66px;height:66px;border-radius:var(--radius-sm,12px);overflow:hidden;background:var(--sand-100)">{{ navRepThumb }}</div>
+                          <div style="flex:1;min-width:0">
+                            <div style="font:var(--type-body-strong);color:var(--text-strong)">Photo attached</div>
+                            <div style="font:var(--type-caption);color:var(--text-muted);margin-top:3px;text-wrap:pretty">{{ navRepPhotoName }}</div>
+                          </div>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+              <sc-if value="{{ navRepForm }}" hint-placeholder-val="{{ false }}">
+                <div style="flex:none;padding-top:12px">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="lg" full-width="{{ true }}" disabled="{{ navRepNoPhoto }}" on-click="{{ navRepPost }}" hint-size="100%,56px">{{ navRepCta }}</x-import>
+                </div>
+              </sc-if>
+            </section>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showStatus }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:14px 22px 0;background:var(--surface-card)">
+        <div style="font:var(--weight-bold) 13px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:var(--text-strong)">07:21</div>
+        <div style="display:flex;gap:5px">
+          <div style="width:16px;height:9px;border:1.5px solid var(--sand-500);border-radius:2px"></div>
+          <div style="width:16px;height:9px;border:1.5px solid var(--sand-500);border-radius:2px;background:linear-gradient(90deg,var(--sand-500) 62%,transparent 62%)"></div>
+        </div>
+      </div>
+      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.AppHeader" title="{{ headerTitle }}" subtitle="{{ headerSub }}" hint-size="100%,92px"></x-import>
+    </sc-if>
+
+    <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+      
+    </sc-if>
+
+    <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 16px 96px">
+
+      <sc-if value="{{ isReport }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:14px;padding-top:14px">
+          <sc-if value="{{ reportPick }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="position:relative;overflow:hidden;background:var(--surface-dark);color:var(--text-on-dark);border-radius:var(--radius-card);padding:16px 17px;display:flex;align-items:center;gap:13px">
+                <div style="position:absolute;right:-30px;top:-40px;width:130px;height:130px;border-radius:999px;background:rgba(255,255,255,.06)"></div>
+                <div style="position:relative;flex:none;width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="radar" size="{{ 20 }}" hint-size="20px,20px"></x-import>
+                </div>
+                <div style="position:relative;flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:7px">
+                    <span style="width:7px;height:7px;border-radius:999px;background:var(--crowd-busy);animation:sv-ping 1.8s var(--ease-standard) infinite"></span>
+                    <span style="font:var(--weight-bold) 11px/1 var(--font-body);letter-spacing:.07em;text-transform:uppercase;opacity:.8">{{ locEyebrow }}</span>
+                  </div>
+                  <div style="font:var(--weight-heavy) 18px/1.25 var(--font-display);letter-spacing:-.02em;margin-top:7px">{{ locStopName }}</div>
+                  <div style="font:var(--type-caption);opacity:.72;margin-top:4px;text-wrap:pretty">{{ locDetail }}</div>
+                </div>
+                <button onClick="{{ locRecheck }}" style="position:relative;flex:none;align-self:flex-start;display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.14);border:none;color:var(--text-on-dark);cursor:pointer;font:var(--weight-bold) 12px/1 var(--font-body)">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="crosshair" size="{{ 14 }}" hint-size="14px,14px"></x-import>{{ locRecheckLabel }}
+                </button>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <sc-for list="{{ reportTypes }}" as="t" hint-placeholder-count="6">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="{{ t.tone }}" padding="tight" interactive="{{ true }}" on-click="{{ t.pick }}" hint-size="100%,140px">
+                    <div style="display:flex;flex-direction:column;gap:9px">
+                      <div style="{{ t.iconStyle }}"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ t.icon }}" size="{{ 17 }}" hint-size="17px,17px"></x-import></div>
+                      <div style="font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ t.label }}</div>
+                      <div style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">{{ t.sub }}</div>
+                      <div style="{{ t.ptsStyle }}">+{{ t.pts }} pts</div>
+                    </div>
+                  </x-import>
+                </sc-for>
+              </div>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,180px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Nearby · last 30 min</x-import>
+                <div style="display:flex;flex-direction:column;gap:2px;margin-top:10px">
+                  <sc-for list="{{ recentReports }}" as="r" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid var(--border-card)">
+                      <div style="{{ r.dotStyle }}"></div>
+                      <div style="flex:1;min-width:0">
+                        <div style="font:var(--type-body);color:var(--text-body);text-wrap:pretty">{{ r.text }}</div>
+                        <div style="font:var(--type-caption);color:var(--text-muted);margin-top:3px;font-variant-numeric:tabular-nums">{{ r.ago }} ago · {{ r.votes }} confirmed</div>
+                      </div>
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="sm" icon-left="thumbs-up" on-click="{{ r.confirm }}" hint-size="auto,34px">Still there</x-import>
+                    </div>
+                  </sc-for>
+                </div>
+              </x-import>
+            </div>
+          </sc-if>
+          <sc-if value="{{ reportConfirm }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" icon-left="arrow-left" on-click="{{ backToPick }}" hint-size="auto,34px">Change</x-import>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,260px">
+                <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong)">{{ chosenLabel }}</div>
+                <div style="font:var(--type-body);color:var(--text-muted);margin-top:6px">{{ locStopName }} · stays live 30 min</div>
+                <div style="height:14px"></div>
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">{{ severityQ }}</x-import>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+                  <sc-for list="{{ severities }}" as="s" hint-placeholder-count="3">
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.TogglePill" pressed="{{ s.on }}" on-change="{{ s.pick }}" full-width="{{ true }}" hint-size="100%,44px">{{ s.label }}</x-import>
+                  </sc-for>
+                </div>
+              </x-import>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" hint-size="100%,200px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Photo · required</x-import>
+                <sc-if value="{{ noPhoto }}" hint-placeholder-val="{{ true }}">
+                  <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;margin-top:10px;padding:26px 16px;border-radius:var(--radius-card);border:1px dashed var(--sand-400);background:var(--accent-soft);cursor:pointer;text-align:center">
+                    <input type="file" accept="image/*" capture="environment" onChange="{{ onPhoto }}" style="position:absolute;width:1px;height:1px;opacity:0" />
+                    <div style="width:46px;height:46px;border-radius:999px;background:var(--accent);color:var(--text-on-accent);display:flex;align-items:center;justify-content:center">
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="camera" size="{{ 22 }}" hint-size="22px,22px"></x-import>
+                    </div>
+                    <div style="font:var(--type-body-strong);color:var(--text-strong)">Take a photo</div>
+                    <div style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">Nearby commuters trust reports with a photo. Faces are blurred automatically.</div>
+                  </label>
+                </sc-if>
+                <sc-if value="{{ hasPhoto }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+                    <div style="flex:none;width:84px;height:84px;border-radius:var(--radius-sm,12px);overflow:hidden;background:var(--sand-100)">{{ photoThumb }}</div>
+                    <div style="flex:1;min-width:0">
+                      <div style="font:var(--type-body-strong);color:var(--text-strong)">Photo attached</div>
+                      <div style="font:var(--type-caption);color:var(--text-muted);margin-top:3px;text-wrap:pretty">{{ photoName }}</div>
+                    </div>
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="x" label="Remove photo" tone="ghost" size="sm" on-click="{{ clearPhoto }}" hint-size="34px,34px"></x-import>
+                  </div>
+                </sc-if>
+              </x-import>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="lg" full-width="{{ true }}" disabled="{{ noPhoto }}" on-click="{{ submitReport }}" hint-size="100%,56px">{{ reportCta }}</x-import>
+              <div style="font:var(--type-caption);color:var(--text-muted);text-align:center;text-wrap:pretty">Shared anonymously with nearby commuters and LTA.</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ reportDone }}" hint-placeholder-val="{{ false }}">
+            <div style="padding-top:40px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center">
+              <div style="width:84px;height:84px;border-radius:50%;background:var(--accent);color:var(--text-on-accent);font:var(--weight-heavy) 28px/84px var(--font-numeric);font-variant-numeric:tabular-nums">{{ chosenPts }}</div>
+              <div style="font:var(--type-title);letter-spacing:var(--tracking-title);color:var(--text-strong)">Report is live</div>
+              <div style="font:var(--type-body);color:var(--text-muted);max-width:300px;text-wrap:pretty">247 commuters heading to Bishan in the next 15 minutes can see it.</div>
+              <div style="display:flex;gap:10px;margin-top:6px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" on-click="{{ goRewards }}" hint-size="auto,44px">See points</x-import>
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" on-click="{{ backToPick }}" hint-size="auto,44px">Report again</x-import>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isRewards }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:14px;padding-top:14px">
+          <div style="position:relative;overflow:hidden;background:var(--surface-dark);color:var(--text-on-dark);border-radius:var(--radius-card);padding:20px;box-shadow:var(--shadow-card)">
+            <div style="position:absolute;right:-38px;top:-38px;width:150px;height:150px;border-radius:999px;background:rgba(255,255,255,.06)"></div>
+            <div style="position:absolute;right:6px;bottom:-52px;width:110px;height:110px;border-radius:999px;background:rgba(255,255,255,.05)"></div>
+            <div style="position:relative;display:flex;align-items:center;gap:9px">
+              <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.14);border-radius:999px;padding:6px 11px;font:var(--weight-bold) 11px/1 var(--font-body);letter-spacing:.06em;text-transform:uppercase">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="medal" size="{{ 14 }}" hint-size="14px,14px"></x-import>Silver tier
+              </div>
+              <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.14);border-radius:999px;padding:6px 11px;font:var(--weight-bold) 11px/1 var(--font-body)">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="flame" size="{{ 14 }}" hint-size="14px,14px"></x-import>6-day streak
+              </div>
+            </div>
+            <div style="position:relative;display:flex;align-items:baseline;gap:9px;margin-top:16px">
+              <div style="font:var(--weight-heavy) 52px/1 var(--font-numeric);font-variant-numeric:tabular-nums;letter-spacing:-.03em">{{ points }}</div>
+              <div style="font:var(--type-body);opacity:.72">points</div>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:5px;font:var(--weight-bold) 12px/1 var(--font-body);color:var(--crowd-light)">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="trending-up" size="{{ 15 }}" hint-size="15px,15px"></x-import>+180 this week
+              </div>
+            </div>
+            <div style="position:relative;margin-top:18px">
+              <div style="height:8px;border-radius:999px;background:rgba(255,255,255,.16);overflow:hidden"><div style="{{ tierBarStyle }}"></div></div>
+              <div style="display:flex;justify-content:space-between;margin-top:9px;font:var(--weight-regular) 11px/1 var(--font-body);opacity:.76">
+                <span>Silver</span><span>{{ toGold }} points to Gold</span><span>Gold</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <sc-for list="{{ pointStats }}" as="ps" hint-placeholder-count="3">
+              <div style="background:var(--surface-card);border:1px solid var(--border-card);border-radius:var(--radius-card);padding:13px 12px;display:flex;flex-direction:column;gap:7px">
+                <div style="width:28px;height:28px;border-radius:999px;background:var(--accent-soft);color:var(--text-accent);display:flex;align-items:center;justify-content:center">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ ps.icon }}" size="{{ 15 }}" hint-size="15px,15px"></x-import>
+                </div>
+                <div style="font:var(--weight-heavy) 20px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:var(--text-strong)">{{ ps.value }}</div>
+                <div style="font:var(--weight-regular) 11px/1.25 var(--font-body);color:var(--text-muted);text-wrap:pretty">{{ ps.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Redeem</x-import>
+          <sc-for list="{{ vouchers }}" as="v" hint-placeholder-count="4">
+            <div style="{{ v.cardStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:12px">
+                <div style="{{ v.iconStyle }}"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ v.icon }}" size="{{ 17 }}" hint-size="17px,17px"></x-import></div>
+                <div style="min-width:0;flex:1">
+                  <div style="font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ v.title }}</div>
+                  <div style="font:var(--type-caption);color:var(--text-muted);margin-top:4px;text-wrap:pretty">{{ v.sub }}</div>
+                </div>
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="{{ v.variant }}" size="sm" disabled="{{ v.disabled }}" on-click="{{ v.redeem }}" hint-size="auto,34px">{{ v.cta }}</x-import>
+              </div>
+              <sc-if value="{{ v.locked }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:12px">
+                  <div style="height:5px;border-radius:999px;background:var(--sand-200);overflow:hidden"><div style="{{ v.barStyle }}"></div></div>
+                  <div style="font:var(--type-caption);color:var(--text-muted);margin-top:7px">{{ v.gap }} points to go</div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+          <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="hairline" hint-size="100%,130px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Why reports earn points</x-import>
+            <div style="font:var(--type-body);color:var(--text-muted);margin-top:8px;text-wrap:pretty">Verified reports give LTA a live picture of the network — faster than a camera sweep, cheaper than a sensor rollout.</div>
+          </x-import>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:14px;padding-top:14px;padding-bottom:104px">
+          <sc-if value="{{ planHasNext }}" hint-placeholder-val="{{ true }}">
+            <div style="position:relative;overflow:hidden;background:var(--surface-dark);color:var(--text-on-dark);border-radius:var(--radius-card);padding:20px;box-shadow:var(--shadow-card);animation:sv-rise 420ms cubic-bezier(.16,1,.3,1) both">
+              <div style="position:absolute;right:-46px;top:-58px;width:180px;height:180px;border-radius:999px;background:rgba(255,255,255,.05)"></div>
+              <div style="position:relative;display:flex;align-items:center;gap:7px">
+                <span style="width:7px;height:7px;border-radius:999px;background:var(--crowd-moderate);animation:sv-ping 1.8s var(--ease-standard) infinite"></span>
+                <span style="font:var(--weight-bold) 11px/1 var(--font-body);letter-spacing:.09em;text-transform:uppercase;opacity:.78">Next up · {{ planNextIn }}</span>
+              </div>
+              <div style="position:relative;display:flex;align-items:flex-end;gap:12px;margin-top:14px">
+                <div style="font:var(--weight-heavy) 54px/1 var(--font-numeric);letter-spacing:-.03em;font-variant-numeric:tabular-nums">{{ planNextLeave }}</div>
+                <div style="padding-bottom:6px">
+                  <div style="font:var(--weight-heavy) 17px/1.2 var(--font-display);letter-spacing:-.02em;text-wrap:pretty">{{ planNextName }}</div>
+                  <div style="font:var(--type-caption);opacity:.72;margin-top:4px;text-wrap:pretty">{{ planNextRoute }}</div>
+                </div>
+              </div>
+              <div style="position:relative;display:flex;align-items:center;gap:8px;margin-top:14px;font:var(--type-caption);opacity:.74;text-wrap:pretty">{{ planNextNote }}</div>
+              <div style="position:relative;display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" icon-right="arrow-right" on-click="{{ startNext }}" hint-size="auto,44px">See routes</x-import>
+                <button onClick="{{ watchNext }}" style="display:flex;align-items:center;gap:7px;padding:0 16px;height:44px;border-radius:999px;cursor:pointer;background:rgba(255,255,255,.14);border:none;color:var(--text-on-dark);font:var(--weight-bold) 14px/1 var(--font-body)">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="bell" size="{{ 16 }}" hint-size="16px,16px"></x-import>Alert me
+                </button>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:0 13px;height:44px;border-radius:999px;background:rgba(255,255,255,.09);font:var(--weight-bold) 12px/1 var(--font-body)">
+                  <span style="width:7px;height:7px;border-radius:999px;background:var(--crowd-moderate)"></span>{{ planNextCrowd }}
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ calOff }}" hint-placeholder-val="{{ true }}">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.PromptCard" icon="calendar" title="Connect Google Calendar" description="Pull meetings in, get leave-by nudges" action-label="{{ calCta }}" on-action="{{ connectCal }}" hint-size="100%,130px"></x-import>
+          </sc-if>
+          <sc-if value="{{ calOn }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Card" tone="plain" padding="tight" hint-size="100%,66px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></div>
+                  <div style="font:var(--type-body-strong);color:var(--text-strong)">Google Calendar connected</div>
+                  <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ disconnectCal }}" hint-size="auto,34px">Disconnect</x-import></div>
+                </div>
+              </x-import>
+              <sc-for list="{{ calTrips }}" as="c" hint-placeholder-count="3">
+                <div ref="{{ c.setRef }}">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.TripCard" time="{{ c.time }}" leave-at="{{ c.leave }}" title="{{ c.title }}" route="{{ c.route }}" tags="{{ c.tags }}" highlighted="{{ c.urgent }}" on-click="{{ c.toggle }}" hint-size="100%,150px"></x-import>
+                  <sc-if value="{{ c.open }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin:8px 4px 0;padding:14px 15px;border-radius:var(--radius-card);background:var(--accent-soft);animation:sv-rise 240ms cubic-bezier(.16,1,.3,1) both">
+                      <div style="font:var(--type-body);color:var(--text-body);text-wrap:pretty">{{ c.detail }}</div>
+                      <div style="display:flex;gap:9px;margin-top:13px;flex-wrap:wrap">
+                        <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="md" icon-right="arrow-right" on-click="{{ c.plan }}" hint-size="auto,44px">See routes</x-import>
+                        <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="secondary" size="md" icon-left="bell" on-click="{{ c.watch }}" hint-size="auto,44px">Alert me</x-import>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin:0 4px 9px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="auto,16px">Your places</x-import>
+              <div style="margin-left:auto;flex:none"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" icon-left="pencil" on-click="{{ openPlaces }}" hint-size="auto,34px">Edit</x-import></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px">
+              <sc-for list="{{ placeRows }}" as="p" hint-placeholder-count="3">
+                <button onClick="{{ openPlaces }}" style="display:flex;flex-direction:column;gap:8px;text-align:left;padding:13px 12px;border-radius:20px;cursor:pointer;background:var(--surface-card);border:1px solid var(--border-card)">
+                  <span style="flex:none;width:30px;height:30px;border-radius:999px;background:var(--accent-soft);color:var(--text-accent);display:flex;align-items:center;justify-content:center">
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ p.icon }}" size="{{ 15 }}" hint-size="15px,15px"></x-import>
+                  </span>
+                  <span style="display:block;font:var(--weight-bold) 10.5px/1 var(--font-body);letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted)">{{ p.short }}</span>
+                  <span style="display:block;font:var(--weight-bold) 13.5px/1.25 var(--font-body);color:var(--text-strong);text-wrap:pretty">{{ p.shown }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;margin:0 4px 9px">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="auto,16px">Watched daily</x-import>
+              <div style="margin-left:auto;flex:none"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" icon-left="plus" on-click="{{ openAdd }}" hint-size="auto,34px">Add</x-import></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ saved }}" as="s" hint-placeholder-count="2">
+                <button onClick="{{ s.edit }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px 15px;border-radius:20px;cursor:pointer;background:var(--surface-card);border:1px solid var(--border-card)">
+                  <span style="flex:none;font:var(--weight-heavy) 19px/1 var(--font-numeric);font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:var(--text-strong)">{{ s.clock }}</span>
+                  <span style="flex:none;width:1px;height:34px;background:var(--border-card)"></span>
+                  <span style="min-width:0;flex:1">
+                    <span style="display:block;font:var(--type-body-strong);color:var(--text-strong)">{{ s.name }}</span>
+                    <span style="display:block;font:var(--type-caption);color:var(--text-muted);margin-top:3px;text-wrap:pretty">{{ s.sub }}</span>
+                  </span>
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="soft" hint-size="auto,24px">{{ s.mode }}</x-import>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+
+    <sc-if value="{{ placesOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:32;background:rgba(32,30,29,.34);display:flex;flex-direction:column;justify-content:flex-end">
+        <div onClick="{{ closePlaces }}" style="flex:1"></div>
+        <section style="flex:none;max-height:80%;display:flex;flex-direction:column;background:var(--surface-card);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;box-shadow:var(--shadow-sheet);padding:0 18px 18px;animation:sv-rise 320ms cubic-bezier(.16,1,.3,1) both">
+          <div style="flex:none;padding:12px 0 6px;display:flex;justify-content:center"><div style="width:42px;height:4px;border-radius:999px;background:var(--sand-400)"></div></div>
+          <div style="flex:none;display:flex;align-items:center;gap:10px;padding:4px 0 14px">
+            <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong)">Your places</div>
+            <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ closePlaces }}" hint-size="auto,34px">Cancel</x-import></div>
+          </div>
+          <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding-bottom:6px">
+            <div style="font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">These set the Home and Work chips on every commute, and the routes Solvik watches for you.</div>
+            <sc-for list="{{ placeRows }}" as="p" hint-placeholder-count="3">
+              <div>
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">{{ p.label }}</x-import>
+                <div style="margin-top:8px">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SearchField" value="{{ p.value }}" placeholder="{{ p.placeholder }}" icon="{{ p.icon }}" on-change="{{ p.set }}" hint-size="100%,48px"></x-import>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="flex:none;padding-top:14px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="lg" full-width="{{ true }}" on-click="{{ savePlaces }}" hint-size="100%,56px">Save addresses</x-import>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:30;background:rgba(32,30,29,.34);display:flex;flex-direction:column;justify-content:flex-end">
+        <div onClick="{{ closeAdd }}" style="flex:1"></div>
+        <section style="position:relative;flex:none;max-height:86%;display:flex;flex-direction:column;background:var(--surface-card);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;box-shadow:var(--shadow-sheet);padding:0 18px 18px;animation:sv-rise 320ms cubic-bezier(.16,1,.3,1) both">
+          <sc-if value="{{ addSearchOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;inset:0;z-index:4;background:var(--surface-card);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;padding:12px 18px 18px;display:flex;flex-direction:column">
+              <div style="flex:none;display:flex;justify-content:center;padding-bottom:10px"><div style="width:42px;height:4px;border-radius:999px;background:var(--sand-400)"></div></div>
+              <div style="flex:none;display:flex;align-items:center;gap:10px;padding-bottom:12px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="arrow-left" label="Back" tone="ghost" size="sm" on-click="{{ addSearchClose }}" hint-size="34px,34px"></x-import>
+                <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong)">{{ addSearchTitle }}</div>
+              </div>
+              <div style="flex:none">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SearchField" value="{{ addQuery }}" placeholder="Search address, stop or area" icon="search" on-change="{{ setAddQuery }}" hint-size="100%,48px"></x-import>
+              </div>
+              <div style="flex:1;min-height:0;overflow-y:auto;margin-top:6px">
+                <sc-for list="{{ addResults }}" as="r" hint-placeholder-count="5">
+                  <button onClick="{{ r.pick }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border-card);padding:14px 2px;cursor:pointer">
+                    <div style="flex:none;width:32px;height:32px;border-radius:999px;background:var(--accent-soft);color:var(--text-accent);display:flex;align-items:center;justify-content:center">
+                      <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="map-pin" size="{{ 16 }}" hint-size="16px,16px"></x-import>
+                    </div>
+                    <div style="flex:1;min-width:0">
+                      <div style="font:var(--weight-bold) 15px/1.3 var(--font-body);color:var(--text-strong);text-wrap:pretty">{{ r.label }}</div>
+                      <div style="font:var(--type-caption);color:var(--text-muted);margin-top:3px;text-wrap:pretty">{{ r.detail }}</div>
+                    </div>
+                    <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Tag" tone="neutral" hint-size="auto,24px">{{ r.kind }}</x-import>
+                  </button>
+                </sc-for>
+                <sc-if value="{{ addNoResults }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:26px 4px;font:var(--type-body);color:var(--text-muted);text-wrap:pretty">No match for “{{ addQuery }}”. Try a postal code, MRT stop or building name.</div>
+                </sc-if>
+                <div style="font:var(--type-caption);color:var(--text-muted);margin-top:14px">Results from OneMap · Singapore Land Authority</div>
+              </div>
+            </div>
+          </sc-if>
+          <div style="flex:none;padding:12px 0 6px;display:flex;justify-content:center"><div style="width:42px;height:4px;border-radius:999px;background:var(--sand-400)"></div></div>
+          <div style="flex:none;display:flex;align-items:center;gap:10px;padding:4px 0 14px">
+            <div style="font:var(--type-heading);letter-spacing:var(--tracking-heading);color:var(--text-strong)">{{ addSheetTitle }}</div>
+            <div style="margin-left:auto"><x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="sm" on-click="{{ closeAdd }}" hint-size="auto,34px">Cancel</x-import></div>
+          </div>
+          <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding-bottom:6px">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="auto,16px">From</x-import>
+                <div style="margin-left:auto;flex:none">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="search" label="Search another place" tone="ghost" size="sm" on-click="{{ addSearchFrom }}" hint-size="34px,34px"></x-import>
+                </div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:7px">
+                <sc-for list="{{ addFromOpts }}" as="p" hint-placeholder-count="5">
+                  <button onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="auto,16px">To</x-import>
+                <div style="margin-left:auto;flex:none">
+                  <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="search" label="Search another place" tone="ghost" size="sm" on-click="{{ addSearchTo }}" hint-size="34px,34px"></x-import>
+                </div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:7px">
+                <sc-for list="{{ addToOpts }}" as="p" hint-placeholder-count="5">
+                  <button onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 15px;border-radius:var(--radius-card);background:var(--accent-soft)">
+              <div style="min-width:0;flex:1">
+                <div style="font:var(--weight-bold) 11px/1 var(--font-body);letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted)">Leave by</div>
+                <div style="font:var(--weight-heavy) 30px/1 var(--font-numeric);font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:var(--text-strong);margin-top:8px">{{ addTime }}</div>
+                <div style="font:var(--type-caption);color:var(--text-muted);margin-top:6px;text-wrap:pretty">{{ addArrive }}</div>
+              </div>
+              <div style="flex:none;display:flex;gap:8px">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="minus" label="Earlier" tone="plain" size="md" on-click="{{ addTimeDown }}" hint-size="44px,44px"></x-import>
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.IconButton" icon="plus" label="Later" tone="plain" size="md" on-click="{{ addTimeUp }}" hint-size="44px,44px"></x-import>
+              </div>
+            </div>
+            <div>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Repeats · {{ addDaysLabel }}</x-import>
+              <div style="display:flex;gap:6px;margin-top:9px">
+                <sc-for list="{{ addDayOpts }}" as="d" hint-placeholder-count="7">
+                  <button onClick="{{ d.toggle }}" style="{{ d.style }}">{{ d.label }}</button>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:7px;margin-top:10px">
+                <sc-for list="{{ addDayPresets }}" as="p" hint-placeholder-count="3">
+                  <button onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.SectionLabel" hint-size="100%,16px">Watch for</x-import>
+              <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">
+                <sc-for list="{{ addModeOpts }}" as="m" hint-placeholder-count="3">
+                  <button onClick="{{ m.pick }}" style="{{ m.style }}">{{ m.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border-radius:var(--radius-card);border:1px solid var(--border-card)">
+              <div style="flex:none;width:30px;height:30px;border-radius:999px;background:var(--accent-soft);color:var(--text-accent);display:flex;align-items:center;justify-content:center">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="bell" size="{{ 15 }}" hint-size="15px,15px"></x-import>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div style="font:var(--type-body-strong);color:var(--text-strong);text-wrap:pretty">{{ addPreviewName }}</div>
+                <div style="font:var(--type-caption);color:var(--text-muted);margin-top:4px;text-wrap:pretty">{{ addPreviewDetail }}</div>
+              </div>
+            </div>
+          </div>
+          <div style="flex:none;padding-top:14px;display:flex;flex-direction:column;gap:8px">
+            <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" size="lg" full-width="{{ true }}" disabled="{{ addInvalid }}" on-click="{{ saveCommute }}" hint-size="100%,56px">{{ addCta }}</x-import>
+            <sc-if value="{{ addEditing }}" hint-placeholder-val="{{ false }}">
+              <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Button" variant="ghost" size="md" full-width="{{ true }}" icon-left="trash-2" on-click="{{ deleteCommute }}" hint-size="100%,44px">Delete commute</x-import>
+            </sc-if>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showTabs }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:14px;right:14px;bottom:14px;z-index:20">
+        <div style="position:relative;display:grid;grid-template-columns:repeat(4,1fr);padding:7px;background:var(--surface-card);border-radius:var(--radius-pill);box-shadow:var(--shadow-nav)">
+          <span aria-hidden="true" style="{{ tabPill }}"></span>
+          <sc-for list="{{ navTabs }}" as="t" hint-placeholder-count="4">
+            <button onClick="{{ t.go }}" onMouseEnter="{{ t.enter }}" onMouseLeave="{{ t.leave }}" onMouseDown="{{ t.down }}" onMouseUp="{{ t.up }}" style="{{ t.style }}">
+              <span style="{{ t.iconStyle }}">
+                <x-import component-from-global-scope="SolvikDesignSystem_b39a97.Icon" name="{{ t.icon }}" size="{{ 21 }}" stroke-width="{{ 2.1 }}" hint-size="21px,21px"></x-import>
+                <sc-if value="{{ t.dot }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ t.dotStyle }}"></span>
+                </sc-if>
+              </span>
+              <span style="{{ t.labelStyle }}">{{ t.label }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <div style="max-width:560px;text-align:center;font:var(--type-caption);color:var(--text-muted);text-wrap:pretty">Start on the lock screen to follow the core flow: alert, reroute, trip. Crowding data is illustrative.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:900,&quot;height&quot;:1060}}">
+const CROWD = { light: 'var(--crowd-light)', moderate: 'var(--crowd-moderate)', busy: 'var(--crowd-busy)' };
+const WORD = { light: 'Light', moderate: 'Moderate', busy: 'Busy' };
+
+class Component extends DCLogic {
+  state = { savedList: [{ from: 'home', to: 'work', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], mins: 462, mode: 'Comfort' }, { from: 'work', to: 'home', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], mins: 1100, mode: 'Comfort' }], addEdit: null, placesOpen: false, plHome: 'Yishun', plWork: 'Raffles Place', plSchool: '', addOpen: false, addFrom: 'home', addTo: 'work', addDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], addMode: 'Comfort', addMins: 462, commutes: [], fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [], hoverTab: null, pressTab: null, sheetH: 430, sheetDrag: false, navRoute: null, navStart: null, navPage: 0, stepsDrag: false, pin: null, screen: 'map', mode: 'comfort', route: 0, fc: 2, filter: 'all', rep: 'pick', repType: null, sev: 1, cal: 'off', points: 2480, toast: null, tick: 0, query: '', dest: null, searchOpen: false, tripMode: 'fast', tripRoute: 0 };
+
+  addCommuteVals(s) {
+    const PLACES = [
+      { id: 'home', label: 'Home', place: (s.plHome || 'Yishun'), mins: 47 },
+      { id: 'work', label: 'Work', place: (s.plWork || 'Raffles Place'), mins: 44 },
+      { id: 'bishan', label: 'Bishan', place: 'Bishan', mins: 26 },
+      { id: 'ntu', label: 'NTU', place: 'Jurong West', mins: 62 },
+      { id: 'clinic', label: 'Polyclinic', place: 'Ang Mo Kio', mins: 22 },
+      { id: 'changi', label: 'Airport', place: 'Changi T3', mins: 58 }
+    ].concat(s.addExtra || []);
+    const DIRECTORY = [
+      { id: 'd-ttsh', label: 'Tan Tock Seng Hospital', place: 'Novena', detail: '11 Jalan Tan Tock Seng · 308433', kind: 'Address', mins: 38 },
+      { id: 'd-jem', label: 'Jem', place: 'Jurong East', detail: '50 Jurong Gateway Rd · 608549', kind: 'Mall', mins: 54 },
+      { id: 'd-amk-hub', label: 'AMK Hub', place: 'Ang Mo Kio', detail: '53 Ang Mo Kio Ave 3 · 569933', kind: 'Mall', mins: 21 },
+      { id: 'd-nus', label: 'National University of Singapore', place: 'Kent Ridge', detail: '21 Lower Kent Ridge Rd · 119077', kind: 'Campus', mins: 57 },
+      { id: 'd-woodlands', label: 'Woodlands Interchange', place: 'Woodlands', detail: '30 Woodlands Ave 2 · 738343', kind: 'Bus stop', mins: 19 },
+      { id: 'd-sgh', label: 'Singapore General Hospital', place: 'Outram', detail: '1 Hospital Cres · 169608', kind: 'Address', mins: 49 },
+      { id: 'd-tampines', label: 'Tampines MRT', place: 'Tampines', detail: '20 Tampines Central 1 · 529538', kind: 'MRT', mins: 52 },
+      { id: 'd-marina', label: 'Marina Bay Financial Centre', place: 'Marina Bay', detail: '8 Marina Blvd · 018981', kind: 'Office', mins: 46 },
+      { id: 'd-sengkang', label: 'Sengkang Riverside', place: 'Sengkang', detail: 'Anchorvale St · 544644', kind: 'Area', mins: 31 },
+      { id: 'd-changi-biz', label: 'Changi Business Park', place: 'Expo', detail: '1 Changi Business Park Ave 1 · 486036', kind: 'Office', mins: 51 }
+    ];
+    const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const from = s.addFrom || 'home', to = s.addTo || 'work';
+    const days = s.addDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const mode = s.addMode || 'Comfort';
+    const mins = s.addMins == null ? 462 : s.addMins;
+    const fromP = PLACES.find((p) => p.id === from) || PLACES[0];
+    const toP = PLACES.find((p) => p.id === to) || PLACES[1];
+    const clock = (m) => String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+    const weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const dayLabel = days.length === 0 ? 'no days yet'
+      : days.length === 7 ? 'every day'
+      : weekday.every((d) => days.indexOf(d) >= 0) && days.length === 5 ? 'Mon to Fri'
+      : days.length === 2 && days.indexOf('Sat') >= 0 && days.indexOf('Sun') >= 0 ? 'weekends'
+      : DAYS.filter((d) => days.indexOf(d) >= 0).join(', ');
+    const pill = (on) => 'flex:none;padding:10px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;'
+      + 'font:var(--weight-bold) 13px/1 var(--font-body);transition:background .15s,color .15s;'
+      + (on ? 'background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);'
+            : 'background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);');
+    const aq = (s.addQuery || '').trim().toLowerCase();
+    const aResults = (aq ? DIRECTORY.filter((p) => (p.label + ' ' + p.place + ' ' + p.detail).toLowerCase().indexOf(aq) >= 0) : DIRECTORY).slice(0, 7);
+    const invalid = from === to || days.length === 0;
+    const name = fromP.label + ' → ' + toP.label;
+    const detail = fromP.place + ' → ' + toP.place + ' · ' + dayLabel + ', ' + clock(mins);
+    return {
+      addOpen: !!s.addOpen,
+      closeAdd: () => this.setState({ addOpen: false, addEdit: null }),
+      addFromOpts: PLACES.map((p) => ({ label: p.label, style: pill(p.id === from), pick: () => this.setState({ addFrom: p.id }) })),
+      addToOpts: PLACES.map((p) => ({ label: p.label, style: pill(p.id === to), pick: () => this.setState({ addTo: p.id }) })),
+      addSearchOpen: !!s.addSearchFor,
+      addSearchTitle: s.addSearchFor === 'to' ? 'Where are you going?' : 'Where do you start?',
+      addSearchFrom: () => this.setState({ addSearchFor: 'from', addQuery: '' }),
+      addSearchTo: () => this.setState({ addSearchFor: 'to', addQuery: '' }),
+      addSearchClose: () => this.setState({ addSearchFor: null, addQuery: '' }),
+      addQuery: s.addQuery || '',
+      setAddQuery: (v) => this.setState({ addQuery: typeof v === 'string' ? v : (v && v.target ? v.target.value : '') }),
+      addNoResults: !!aq && aResults.length === 0,
+      addResults: aResults.map((p) => ({
+        label: p.label, detail: p.detail, kind: p.kind,
+        pick: () => {
+          const extra = (s.addExtra || []).filter((x) => x.id !== p.id)
+            .concat([{ id: p.id, label: p.label, place: p.place, mins: p.mins }]).slice(-4);
+          const key = s.addSearchFor === 'to' ? 'addTo' : 'addFrom';
+          this.setState({ addExtra: extra, [key]: p.id, addSearchFor: null, addQuery: '' });
+        }
+      })),
+      addTime: clock(mins),
+      addArrive: invalid ? 'Pick two different places and at least one day.' : 'Arrive about ' + clock(mins + toP.mins) + ' · ' + toP.mins + ' min door to door',
+      addTimeUp: () => this.setState({ addMins: mins + 5 }),
+      addTimeDown: () => this.setState({ addMins: mins - 5 }),
+      addDaysLabel: dayLabel,
+      addDayOpts: DAYS.map((d) => {
+        const on = days.indexOf(d) >= 0;
+        return {
+          label: d.slice(0, 1),
+          toggle: () => this.setState({ addDays: on ? days.filter((x) => x !== d) : DAYS.filter((x) => days.indexOf(x) >= 0 || x === d) }),
+          style: 'flex:1;min-width:0;height:40px;border-radius:999px;cursor:pointer;font:var(--weight-bold) 13px/1 var(--font-body);'
+            + (on ? 'background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);'
+                  : 'background:var(--sand-100);border:1px solid var(--border-card);color:var(--text-muted);')
+        };
+      }),
+      addDayPresets: [
+        { label: 'Weekdays', set: weekday },
+        { label: 'Weekends', set: ['Sat', 'Sun'] },
+        { label: 'Every day', set: DAYS }
+      ].map((p) => ({
+        label: p.label,
+        pick: () => this.setState({ addDays: p.set }),
+        style: 'flex:none;padding:8px 13px;border-radius:999px;cursor:pointer;font:var(--weight-semibold) 12px/1 var(--font-body);'
+          + 'background:var(--surface-card);border:1px solid var(--border-card);color:var(--text-body)'
+      })),
+      addModeOpts: ['Fastest', 'Comfort', 'Step-free'].map((m) => ({
+        label: m, style: pill(m === mode), pick: () => this.setState({ addMode: m })
+      })),
+      addPreviewName: invalid ? 'Not ready yet' : 'Alerts for ' + name,
+      addPreviewDetail: invalid ? 'Choose a different destination, or tap a day.' : 'Checked 25 min before ' + clock(mins) + ' on ' + dayLabel.toLowerCase() + '. ' + mode + ' routes preferred.',
+      addInvalid: invalid,
+      addEditing: s.addEdit != null,
+      addSheetTitle: s.addEdit != null ? 'Edit commute' : 'Add a commute',
+      addCta: invalid ? 'Pick places and days' : (s.addEdit != null ? 'Save changes · ' + name : 'Save · watch ' + name),
+      deleteCommute: () => {
+        const list = (s.savedList || []).filter((x, i) => i !== s.addEdit);
+        this.setState({ savedList: list, addOpen: false, addEdit: null });
+        this.flash('Commute removed');
+      },
+      saved: (s.savedList || []).map((c, i) => {
+        const f = PLACES.find((p) => p.id === c.from) || PLACES[0];
+        const t = PLACES.find((p) => p.id === c.to) || PLACES[1];
+        const ds = c.days || [];
+        const dl = ds.length === 0 ? 'no days'
+          : ds.length === 7 ? 'every day'
+          : ds.length === 5 && weekday.every((d) => ds.indexOf(d) >= 0) ? 'Mon to Fri'
+          : ds.length === 2 && ds.indexOf('Sat') >= 0 && ds.indexOf('Sun') >= 0 ? 'weekends'
+          : DAYS.filter((d) => ds.indexOf(d) >= 0).join(', ');
+        return {
+          name: f.label + ' → ' + t.label,
+          clock: clock(c.mins),
+          sub: f.place + ' → ' + t.place + ' · ' + dl,
+          detail: f.place + ' → ' + t.place + ' · ' + dl + ', ' + clock(c.mins),
+          mode: c.mode,
+          edit: () => this.setState({
+            addOpen: true, addEdit: i, addFrom: c.from, addTo: c.to,
+            addDays: ds.slice(), addMins: c.mins, addMode: c.mode
+          })
+        };
+      }),
+      ...(() => {
+        const list = s.savedList || [];
+        const nowMins = 7 * 60 + 21;
+        const next = list.slice().sort((a, b) => {
+          const da = ((a.mins - nowMins) + 1440) % 1440, db = ((b.mins - nowMins) + 1440) % 1440;
+          return da - db;
+        })[0];
+        if (!next) return { planHasNext: false, planNextName: '', planNextLeave: '', planNextIn: '', planNextRoute: '', planNextNote: '', planNextCrowd: '', startNext: () => {}, watchNext: () => {} };
+        const f = PLACES.find((p) => p.id === next.from) || PLACES[0];
+        const t = PLACES.find((p) => p.id === next.to) || PLACES[1];
+        const inMins = ((next.mins - nowMins) + 1440) % 1440;
+        return {
+          planHasNext: true,
+          planNextName: f.label + ' → ' + t.label,
+          planNextLeave: clock(next.mins),
+          planNextIn: inMins < 60 ? 'leave in ' + inMins + ' min' : 'leave in ' + Math.floor(inMins / 60) + ' h ' + (inMins % 60) + ' min',
+          planNextRoute: f.place + ' → ' + t.place,
+          planNextNote: 'Arrive about ' + clock(next.mins + t.mins) + ' · ' + t.mins + ' min door to door · ' + next.mode.toLowerCase() + ' routes',
+          planNextCrowd: inMins < 40 ? 'Filling now' : 'Light now',
+          startNext: () => { this.setState({ screen: 'map' }); this.flash('Routes for ' + f.label + ' → ' + t.label + ' · leave ' + clock(next.mins)); },
+          watchNext: () => this.flash('Alert set · 25 min before ' + clock(next.mins))
+        };
+      })(),
+      openAdd: () => this.setState({ addOpen: true, addEdit: null, addFrom: 'home', addTo: 'work', addDays: weekday.slice(), addMins: 462, addMode: 'Comfort' }),
+      placesOpen: !!s.placesOpen,
+      openPlaces: () => this.setState({ placesOpen: true }),
+      closePlaces: () => this.setState({ placesOpen: false }),
+      savePlaces: () => { this.setState({ placesOpen: false }); this.flash('Places saved · ' + ((s.plHome || 'Yishun') + ' → ' + (s.plWork || 'Raffles Place'))); },
+      placeRows: [
+        { key: 'plHome', label: 'Home', short: 'Home', icon: 'house', placeholder: 'Block, street or MRT stop' },
+        { key: 'plWork', label: 'Work', short: 'Work', icon: 'briefcase', placeholder: 'Office, building or area' },
+        { key: 'plSchool', label: 'School or campus', short: 'School', icon: 'graduation-cap', placeholder: 'Optional' }
+      ].map((p) => ({
+        label: p.label, short: p.short, icon: p.icon, placeholder: p.placeholder,
+        value: s[p.key] || '',
+        shown: (s[p.key] || '').trim() || 'Add',
+        set: (v) => this.setState({ [p.key]: typeof v === 'string' ? v : (v && v.target ? v.target.value : '') })
+      })),
+      saveCommute: () => {
+        if (invalid) return;
+        const entry = { from: from, to: to, days: days.slice(), mins: mins, mode: mode };
+        const list = (s.savedList || []).slice();
+        if (s.addEdit != null) list[s.addEdit] = entry; else list.push(entry);
+        this.setState({
+          savedList: list, addEdit: null,
+          addOpen: false
+        });
+        this.flash('Watching ' + name + ' · ' + dayLabel + ', ' + clock(mins));
+      }
+    };
+  }
+
+  forecastVals(s) {
+    const SLOTS = [
+      { label: 'Now', clock: '07:21', peak: .92 },
+      { label: '08:00', clock: '08:00', peak: 1 },
+      { label: '09:00', clock: '09:00', peak: .74 },
+      { label: '12:00', clock: '12:00', peak: .4 },
+      { label: '17:30', clock: '17:30', peak: .86 },
+      { label: '19:00', clock: '19:00', peak: .58 }
+    ];
+    const i = Math.min(s.fcSlot || 0, SLOTS.length - 1);
+    const slot = SLOTS[i];
+    const AREAS = [
+      { id: 'city', name: 'City Hall / Raffles Place', ll: [1.2930, 103.8520], radius: 1500, base: 1, detail: 'NSL + EWL interchange · platform queueing' },
+      { id: 'bishan', name: 'Bishan', ll: [1.3509, 103.8485], radius: 1250, base: .95, detail: 'Signal fault · bus bridging in place' },
+      { id: 'jurong', name: 'Jurong East', ll: [1.3330, 103.7420], radius: 1500, base: .72, detail: 'Westbound boarding at the terminus' },
+      { id: 'woodlands', name: 'Woodlands', ll: [1.4370, 103.7865], radius: 1500, base: .62, detail: 'TEL + NSL transfers, heavy northbound' },
+      { id: 'yishun', name: 'Yishun', ll: [1.4295, 103.8350], radius: 1200, base: .55, detail: 'Your home cluster · southbound platform' },
+      { id: 'changi', name: 'Changi', ll: [1.3563, 103.9865], radius: 1600, base: .3, detail: 'Airport line running light' }
+    ];
+    const level = (v) => (v >= .72 ? 'busy' : v >= .45 ? 'moderate' : 'light');
+    const word = { busy: 'Busy', moderate: 'Filling', light: 'Light' };
+    const scored = AREAS.map((a) => {
+      const v = Math.max(.12, Math.min(.99, a.base * slot.peak));
+      const lv = level(v);
+      const prev = i > 0 ? a.base * SLOTS[i - 1].peak : a.base * .82;
+      return { ...a, v, lv, rising: v > prev + .01 };
+    }).sort((a, b) => b.v - a.v);
+    const busiest = scored[0];
+    const tone = (lv) => 'var(--crowd-' + lv + ')';
+    const FAULTS = [
+      { line: 'NSL', tag: 'Fault', sev: 'fault', time: '07:04', title: 'Signal fault between Ang Mo Kio and Newton', detail: 'Trains run at reduced speed, adding about 12 min. Free bus bridging at exits A and C.' },
+      { line: 'EWL', tag: 'Delay', sev: 'warn', time: '06:48', title: 'Westbound delays after a door fault at Bugis', detail: 'The faulty train was withdrawn at Lavender. Expect 5–7 min longer waits until 09:00.' },
+      { line: 'BUS 969', tag: 'Diversion', sev: 'warn', time: '05:30', title: 'Diverted around Woodlands Ave 2 roadworks', detail: 'Three stops skipped in both directions. Nearest alternative: stop 46201 on Ave 6.' },
+      { line: 'TEL', tag: 'Lift', sev: 'info', time: 'Mon', title: 'Newton lift out of service until Thursday', detail: 'Step-free route is via Little India. Staff assistance available at the passenger service centre.' }
+    ];
+    const sevTone = { fault: 'var(--status-fault)', warn: 'var(--status-warn)', info: 'var(--sand-500)' };
+    const fcRead = s.fcRead || [];
+    const unread = FAULTS.map((f, i) => i).filter((i) => fcRead.indexOf(i) < 0 && FAULTS[i].sev !== 'info');
+    const pinned = s.crowdOn !== false ? (scored.find((a) => a.id === s.fcPin) || null) : null;
+    const watched = s.fcWatch || [];
+    const crowdOn = s.crowdOn !== false;
+    const zones = scored.map((a) => ({
+      id: a.id, ll: a.ll, radius: a.radius, level: a.lv,
+      label: a.name.split(' / ')[0], pct: Math.round(a.v * 100) + '%',
+      selected: a.id === s.fcPin
+    }));
+    return {
+      fcMapCenter: [1.3521, 103.8300],
+      fcClock: slot.clock,
+      crowdOn,
+      mapZones: crowdOn && !s.dest ? zones : [],
+      showCrowdBar: crowdOn && !s.dest && !s.searchOpen && !(s.query || '').trim() && !s.fcPin && !s.pin,
+      toggleCrowd: () => this.setState({ crowdOn: !crowdOn, fcPin: null }),
+      crowdToggleLabel: crowdOn ? 'Crowding layer on' : 'Crowding layer off',
+      crowdToggleStyle: 'position:relative;flex:none;width:46px;height:46px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;'
+        + 'box-shadow:0 4px 14px rgba(32,30,29,.18);'
+        + (crowdOn ? 'background:var(--accent);color:var(--text-on-accent,#fff);' : 'background:var(--surface-card);color:var(--text-body);'),
+      fcZones: zones,
+      fcPickZone: (id) => this.setState({ fcPin: id, fcAlerts: false, pin: null, searchOpen: false }),
+      fcRoutesHere: () => {
+        if (!pinned) return;
+        this.setState({ dest: { name: pinned.name, detail: word[pinned.lv] + ' now · ' + pinned.detail, ll: pinned.ll }, fcPin: null, tripRoute: 0 });
+      },
+      fcClearPin: () => this.setState({ fcPin: null }),
+      fcNoPin: !pinned,
+      fcWatchLabel: pinned && watched.indexOf(pinned.id) >= 0 ? 'Watching' : 'Alert me',
+      fcWatchPinned: () => {
+        if (!pinned) return;
+        const on = watched.indexOf(pinned.id) >= 0;
+        this.setState({ fcWatch: on ? watched.filter((x) => x !== pinned.id) : watched.concat([pinned.id]) });
+        this.flash(on ? 'Stopped watching ' + pinned.name.split(' / ')[0] : 'Alerts on for ' + pinned.name.split(' / ')[0]);
+      },
+      fcPinned: pinned && {
+        name: pinned.name,
+        detail: pinned.detail,
+        pct: Math.round(pinned.v * 100) + '%',
+        word: word[pinned.lv] + (pinned.rising ? ' · rising' : ' · easing'),
+        dotStyle: 'flex:none;margin-top:4px;width:12px;height:12px;border-radius:999px;background:' + tone(pinned.lv),
+        pctStyle: 'font:var(--weight-heavy) 24px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:' + tone(pinned.lv),
+        hours: SLOTS.map((sl, n) => {
+          const v = Math.max(.12, Math.min(.99, pinned.base * sl.peak));
+          const lv = level(v);
+          const on = n === i;
+          return {
+            label: sl.label,
+            pick: () => this.setState({ fcSlot: n }),
+            barStyle: 'display:block;width:100%;border-radius:6px 6px 3px 3px;height:' + Math.round(16 + v * 42) + 'px;background:' + tone(lv)
+              + ';opacity:' + (on ? 1 : .42) + (on ? ';box-shadow:0 0 0 1.5px var(--text-strong)' : ''),
+            labelStyle: 'display:block;font:' + (on ? 'var(--weight-bold)' : 'var(--weight-regular,400)') + ' 10.5px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:'
+              + (on ? 'var(--text-strong)' : 'var(--text-muted)')
+          };
+        })
+      },
+      fcHeadline: (i === 0 ? 'Live · ' : slot.clock + ' · ') + word[busiest.lv].toLowerCase() + ' around ' + busiest.name.split(' / ')[0],
+      fcLegend: ['busy', 'moderate', 'light'].map((lv) => ({
+        label: { busy: 'Busy — expect to stand', moderate: 'Filling up', light: 'Light — seats likely' }[lv],
+        short: { busy: 'Busy', moderate: 'Filling', light: 'Light' }[lv],
+        swatch: 'width:9px;height:9px;border-radius:999px;flex:none;background:' + tone(lv) + ';opacity:.9'
+      })),
+      fcSlots: SLOTS.map((sl, n) => {
+        const on = n === i;
+        const lv = level(Math.min(.99, 1 * sl.peak));
+        return {
+          label: sl.label,
+          pick: () => this.setState({ fcSlot: n }),
+          style: 'flex:none;display:flex;flex-direction:column;align-items:center;gap:7px;padding:9px 13px;border-radius:14px;cursor:pointer;transition:background .16s,border-color .16s;'
+            + (on ? 'background:var(--accent);border:1.5px solid var(--accent);' : 'background:var(--sand-100);border:1.5px solid var(--border-card);'),
+          timeStyle: 'font:var(--weight-bold) 12.5px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:' + (on ? '#fff' : 'var(--text-body)'),
+          barStyle: 'display:block;width:30px;height:4px;border-radius:999px;background:' + (on ? '#fff' : tone(lv)) + ';opacity:' + (on ? .9 : .8)
+        };
+      }),
+      fcAreas: scored.slice(0, 4).map((a) => ({
+        name: a.name,
+        detail: a.detail,
+        pct: Math.round(a.v * 100) + '%',
+        trend: a.rising ? 'rising' : 'easing',
+        dotStyle: 'flex:none;width:12px;height:12px;border-radius:999px;background:' + tone(a.lv)
+          + (a.lv === 'busy' ? ';box-shadow:0 0 0 4px color-mix(in oklch, var(--crowd-busy) 18%, transparent)' : ''),
+        pctStyle: 'font:var(--weight-heavy) 17px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:' + tone(a.lv)
+      })),
+      fcFaults: FAULTS.map((f, fi) => ({
+        ...f,
+        readLabel: fcRead.indexOf(fi) >= 0 ? 'Read · tap to mark unread' : 'Tap to mark as read',
+        readDotStyle: fcRead.indexOf(fi) >= 0
+          ? 'display:none'
+          : 'width:7px;height:7px;border-radius:999px;background:var(--status-fault)',
+        toggleRead: () => this.setState({
+          fcRead: fcRead.indexOf(fi) >= 0 ? fcRead.filter((x) => x !== fi) : fcRead.concat([fi])
+        }),
+        cardStyle: 'width:100%;text-align:left;display:block;cursor:pointer;padding:13px 14px;border-radius:16px;background:var(--surface-card);'
+          + 'opacity:' + (fcRead.indexOf(fi) >= 0 ? '.6' : '1') + ';border:1px solid '
+          + (fcRead.indexOf(fi) >= 0 ? 'var(--border-card)' : (f.sev === 'info' ? 'var(--border-card)' : sevTone[f.sev])),
+        badgeStyle: 'flex:none;padding:3px 8px;border-radius:999px;font:var(--weight-heavy) 11px/1.3 var(--font-body);letter-spacing:.02em;color:#fff;background:' + sevTone[f.sev],
+        tagStyle: 'font:var(--weight-semibold) 11px/1 var(--font-body);letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)'
+      })),
+      fcFaultCount: unread.length ? unread.length + ' unread' : 'All read',
+      fcFaultN: unread.length,
+      fcHasFaults: unread.length > 0,
+      fcHasUnread: unread.length > 0,
+      fcMarkAllRead: () => { this.setState({ fcRead: FAULTS.map((f, i) => i) }); this.flash('All alerts marked read'); },
+      fcAlertsOpen: !!s.fcAlerts,
+      fcToggleAlerts: () => this.setState({ fcAlerts: !s.fcAlerts }),
+      fcBellStyle: 'position:relative;flex:none;margin-left:auto;width:46px;height:46px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;'
+        + 'border:none;color:' + (s.fcAlerts ? '#fff' : 'var(--text-strong)')
+        + ';background:' + (s.fcAlerts ? 'var(--text-strong)' : 'var(--surface-card)')
+        + ';box-shadow:0 4px 14px rgba(32,30,29,.18)',
+      fcBellDotStyle: 'position:absolute;top:5px;right:5px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;display:flex;align-items:center;justify-content:center;'
+        + 'font:var(--weight-heavy) 10.5px/1 var(--font-numeric);color:#fff;background:var(--status-fault);border:2px solid ' + (s.fcAlerts ? 'var(--text-strong)' : 'var(--surface-card)'),
+      fcFaultCountStyle: 'font:var(--weight-bold) 11px/1 var(--font-body);padding:4px 9px;border-radius:999px;color:var(--status-fault);background:color-mix(in oklch, var(--status-fault) 12%, transparent)'
+    };
+  }
+
+  componentDidUpdate() {
+    if (this.state.screen !== 'nav' || !this.stepsEl) return;
+    const idx = this._navIdx || 0;
+    if (idx !== this._scrolledTo && (!this.userScrolled || Date.now() - this.userScrolled > 6000)) {
+      this._scrolledTo = idx;
+      this.stepsEl.scrollTo({ left: idx * (this.stepsEl.clientWidth + 10), behavior: 'smooth' });
+      if (idx !== this.state.navPage) this.setState({ navPage: idx });
+    }
+  }
+  componentDidMount() {
+    this.t0 = Date.now();
+    this.iv = setInterval(() => this.setState({ tick: Date.now() }), 1000);
+    this.locT = setTimeout(() => this.setState({ locFix: true }), 1400);
+  }
+  componentWillUnmount() { clearInterval(this.iv); if (this.tt) clearTimeout(this.tt); }
+
+  navSnaps = [152, 336, 620];
+  navSnap(h) { return this.navSnaps.reduce((a, b) => Math.abs(b - h) < Math.abs(a - h) ? b : a, this.navSnaps[0]); }
+  startNavDrag = (e) => {
+    const startY = e.clientY, startH = this.state.navSheetH == null ? 336 : this.state.navSheetH;
+    this.setState({ navDragging: true });
+    const move = (ev) => {
+      const h = Math.max(148, Math.min(680, startH - (ev.clientY - startY)));
+      this.setState({ navSheetH: h });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      this.setState((st) => ({ navDragging: false, navSheetH: this.navSnap(st.navSheetH == null ? 336 : st.navSheetH) }));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  cycleNavSheet = () => {
+    const h = this.state.navSheetH == null ? 336 : this.state.navSheetH;
+    const i = this.navSnaps.indexOf(this.navSnap(h));
+    this.setState({ navSheetH: this.navSnaps[(i + 1) % this.navSnaps.length] });
+  };
+  introVals(s, sc) {
+    const step = s.introStep || 0;
+    const roles = s.introRoles || [];
+    const has = (id) => roles.indexOf(id) >= 0;
+    const ROLES = [
+      { id: 'commuter', label: 'Daily commuter', sub: 'Same trip most weekdays', icon: 'train-front' },
+      { id: 'student', label: 'Student', sub: 'Campus trips, concession fares', icon: 'graduation-cap' },
+      { id: 'wheelchair', label: 'Wheelchair user', sub: 'Lifts and level boarding only', icon: 'accessibility' },
+      { id: 'pram', label: 'Travelling with a pram', sub: 'Avoid stairs and tight gantries', icon: 'baby' },
+      { id: 'senior', label: 'Senior', sub: 'Longer buffers, a seat matters', icon: 'heart-handshake' }
+    ];
+    const stepFree = has('wheelchair') || has('pram');
+    const wantsSchool = has('student');
+    const rolePill = (on) => 'display:flex;align-items:center;gap:12px;padding:14px 15px;border-radius:var(--radius-card);cursor:pointer;'
+      + 'font:var(--font-body);transition:background .15s,border-color .15s;'
+      + (on ? 'background:var(--accent-soft);border:1px solid var(--accent);color:var(--text-strong);'
+            : 'background:var(--surface-card);border:1px solid var(--border-card);color:var(--text-strong);');
+    const sug = (field, list) => list.map((label) => ({
+      label,
+      pick: () => this.setState({ [field]: label }),
+      style: 'padding:8px 13px;border-radius:999px;cursor:pointer;white-space:nowrap;font:var(--weight-bold) 12px/1 var(--font-body);'
+        + (s[field] === label
+          ? 'background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);'
+          : 'background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);')
+    }));
+    const places = [
+      { key: 'introHome', label: 'Home', placeholder: 'Block, street or MRT stop', icon: 'house', sugg: ['Yishun', 'Sengkang', 'Bukit Batok'] },
+      { key: 'introWork', label: wantsSchool ? 'Work or internship' : 'Work', placeholder: 'Office, building or area', icon: 'briefcase', sugg: ['Raffles Place', 'Changi Business Park', 'Jurong East'] }
+    ].concat(wantsSchool
+      ? [{ key: 'introSchool', label: 'School or campus', placeholder: 'Campus or faculty', icon: 'graduation-cap', sugg: ['NTU', 'NUS Kent Ridge', 'SMU'] }]
+      : []);
+    const filled = places.filter((p) => (s[p.key] || '').trim()).length;
+    const total = 4;
+    const homeLabel = (s.introHome || '').trim() || 'Yishun';
+    const workLabel = (s.introWork || '').trim() || 'Raffles Place';
+    const summary = [
+      { text: 'Watching ' + homeLabel + ' → ' + workLabel + ', with a leave-by alert 25 min ahead.' },
+      { text: stepFree
+        ? 'Step-free routing is on. Lifts, level boarding and wider gantries only — lift faults reroute you automatically.'
+        : (has('senior') ? 'Comfort routes come first, with longer transfer buffers and seat odds on every option.'
+          : 'Fastest routes come first, with crowding shown before you board.') },
+      { text: wantsSchool && (s.introSchool || '').trim()
+        ? 'Campus trips to ' + (s.introSchool || '').trim() + ' are saved, including term-time weekday mornings.'
+        : 'Crowding on your lines is checked every few minutes while you travel.' },
+      { text: 'Reports you post at your stop earn points towards fare vouchers.' }
+    ];
+    return {
+      isIntro: sc === 'intro',
+      introS0: step === 0, introS1: step === 1, introS2: step === 2, introS3: step === 3,
+      introCanBack: step > 0,
+      introDots: [0, 1, 2, 3].map((i) => ({
+        style: {
+          width: i === step ? 18 : 6, height: 6, borderRadius: 999,
+          background: i <= step ? 'var(--accent)' : 'var(--sand-300)',
+          transition: 'width 220ms cubic-bezier(.2,.7,.3,1),background-color 220ms linear'
+        }
+      })),
+      introPromises: [
+        { icon: 'bell', title: 'Leave-by alerts', detail: 'A nudge before your usual door-to-door time slips.' },
+        { icon: 'users', title: 'Crowding you can trust', detail: 'Live counts from LTA plus reports from people at the stop.' },
+        { icon: 'accessibility', title: 'Routes that fit you', detail: 'Step-free, fewest changes or least walking — your default, not an afterthought.' }
+      ],
+      introRoles: ROLES.map((r) => ({
+        ...r,
+        style: rolePill(has(r.id)),
+        iconStyle: 'flex:none;width:34px;height:34px;border-radius:999px;display:flex;align-items:center;justify-content:center;'
+          + (has(r.id) ? 'background:var(--accent);color:var(--text-on-accent);' : 'background:var(--accent-soft);color:var(--text-accent);'),
+        subStyle: 'display:block;font:var(--type-caption);color:var(--text-muted);margin-top:3px',
+        checkStyle: 'flex:none;width:24px;height:24px;border-radius:999px;display:flex;align-items:center;justify-content:center;'
+          + (has(r.id) ? 'background:var(--accent);color:var(--text-on-accent);' : 'background:transparent;color:transparent;'),
+        toggle: () => this.setState({ introRoles: has(r.id) ? roles.filter((x) => x !== r.id) : roles.concat([r.id]) })
+      })),
+      introPlaces: places.map((p) => ({
+        label: p.label, placeholder: p.placeholder, icon: p.icon, value: s[p.key] || '',
+        set: (v) => this.setState({ [p.key]: typeof v === 'string' ? v : (v && v.target ? v.target.value : '') }),
+        suggestions: sug(p.key, p.sugg)
+      })),
+      introSummaryTitle: 'Solvik is set up for ' + (stepFree ? 'step-free travel'
+        : has('student') ? 'student travel'
+        : has('senior') ? 'a calmer commute'
+        : has('commuter') ? 'your daily commute'
+        : 'your commute'),
+      introSummary: summary,
+      introCta: ['Set up in a minute', roles.length ? 'Next · ' + roles.length + ' selected' : 'Next', filled ? 'Next · ' + filled + ' saved' : 'Next', 'Start using Solvik'][step],
+      introNext: () => {
+        if (step < total - 1) return this.setState({ introStep: step + 1 });
+        this.setState({
+          screen: 'map', introStep: 0,
+          plHome: (s.introHome || '').trim() || 'Yishun',
+          plWork: (s.introWork || '').trim() || 'Raffles Place',
+          plSchool: (s.introSchool || '').trim(),
+          mode: stepFree ? 'silver' : (has('senior') ? 'comfort' : 'rush'),
+          tripMode: stepFree ? 'step' : 'fast'
+        });
+        this.flash(stepFree ? 'Step-free routing on · watching ' + homeLabel + ' → ' + workLabel : 'Watching ' + homeLabel + ' → ' + workLabel);
+      },
+      introBack: () => this.setState({ introStep: Math.max(0, step - 1) }),
+      introSkip: () => { this.setState({ screen: 'map', introStep: 0 }); this.flash('Set your places any time in Setup'); }
+    };
+  }
+  go = (screen) => this.setState({ screen, rep: 'pick', repType: null, sev: null });
+  flash = (toast) => { this.setState({ toast }); if (this.tt) clearTimeout(this.tt); this.tt = setTimeout(() => this.setState({ toast: null }), 2600); };
+  lineStyle(label) {
+    const L = [['NS', '#D42E12', '#fff'], ['EW', '#009645', '#fff'], ['NE', '#9900AA', '#fff'], ['CC', '#FA9E0D', '#201e1d'], ['DT', '#005EC4', '#fff'], ['TE', '#9D5B25', '#fff']];
+    const hit = L.find(([p]) => String(label).toUpperCase().indexOf(p) === 0);
+    const [bg, fg] = hit ? [hit[1], hit[2]] : ['#201e1d', '#fff'];
+    return { display: 'inline-flex', alignItems: 'center', borderRadius: '999px', padding: '5px 10px', font: 'var(--weight-bold) 12px/1 var(--font-body)', letterSpacing: '.01em', background: bg, color: fg, whiteSpace: 'nowrap' };
+  }
+  level(v) { return v < .45 ? 'light' : (v < .75 ? 'moderate' : 'busy'); }
+  levels(v) { const l = this.level(v); return l === 'light' ? ['light', 'light', 'moderate'] : (l === 'moderate' ? ['moderate', 'moderate', 'light'] : ['busy', 'busy', 'moderate']); }
+  barsFor(l) {
+    return [{ style: { width: '11px', height: '11px', borderRadius: '999px', background: CROWD[l], display: 'block' } }];
+  }
+  bars(v) { return this.barsFor(this.level(v)); }
+  snaps(H) { return [190, Math.round(H * 0.55), Math.round(H - 104)]; }
+  navSteps(o, destShort) {
+    if (!o) return [];
+    const legs = o.legs.map(l => typeof l === 'string' ? l : l.label);
+    const inter = ['Newton', 'Botanic Gardens', 'Bishan', 'Outram Park'];
+    const total = o.mins * 60, fixed = 5 * 60 + 4 * 60 + (legs.length - 1) * 3 * 60;
+    const ride = Math.max(150, Math.round((total - fixed) / Math.max(1, legs.length)));
+    const steps = [{ icon: 'footprints', title: 'Walk to Yishun (NS13)', detail: '350 m · Exit B, follow the covered walkway', secs: 300 }];
+    legs.forEach((lg, i) => {
+      const bus = /BUS/i.test(lg);
+      if (i > 0) steps.push({ icon: 'arrow-left-right', title: 'Transfer at ' + inter[(i - 1) % 4], detail: '3 min walk · follow signs to ' + lg, secs: 180 });
+      const SEQ = {
+        NS: ['Khatib', 'Yio Chu Kang', 'Ang Mo Kio', 'Bishan', 'Braddell', 'Toa Payoh', 'Novena', 'Newton'],
+        DT: ['Little India', 'Rochor', 'Bugis', 'Promenade', 'Bayfront', 'Downtown', 'Telok Ayer', 'Chinatown'],
+        TE: ['Springleaf', 'Lentor', 'Mayflower', 'Bright Hill', 'Upper Thomson', 'Caldecott', 'Stevens', 'Napier'],
+        EW: ['Clementi', 'Dover', 'Buona Vista', 'Commonwealth', 'Queenstown', 'Redhill', 'Tiong Bahru', 'Outram Park'],
+        BU: ['Yishun Ave 2', 'Khatib Stn', 'Yio Chu Kang Stn', 'AMK Hub', 'Bishan Stn', 'Marymount', 'Thomson Plaza']
+      };
+      const seq = SEQ[bus ? 'BU' : lg.slice(0, 2).toUpperCase()] || SEQ.NS;
+      const nStops = bus ? 6 : 4 + i * 2;
+      const stops = seq.slice(0, nStops);
+      steps.push({
+        icon: bus ? 'bus' : 'train-front',
+        title: 'Board ' + lg + ' toward ' + (bus ? 'Thomson Plaza' : (i % 2 ? 'Jurong East' : 'Marina South Pier')),
+        detail: nStops + ' stops · alight at ' + stops[stops.length - 1] + (bus ? '' : ' · Platform ' + (i % 2 ? 'A' : 'B')),
+        stops, alight: stops[stops.length - 1],
+        secs: ride
+      });
+    });
+    steps.push({ icon: 'flag', title: 'Walk to ' + destShort, detail: '300 m · arrive at the main entrance', secs: 240 });
+    return steps;
+  }
+  startStepsDrag(e) {
+    const el = this.stepsEl;
+    if (!el || e.button === 2) return;
+    const startX = e.clientX, startLeft = el.scrollLeft;
+    let moved = false;
+    this.setState({ stepsDrag: true });
+    const move = (ev) => {
+      const d = startX - ev.clientX;
+      if (Math.abs(d) > 3) moved = true;
+      el.scrollLeft = startLeft + d;
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      const w = Math.max(1, el.clientWidth + 10), page = Math.round(el.scrollLeft / w);
+      this.userScrolled = Date.now();
+      this.setState({ stepsDrag: false, navPage: page });
+      el.scrollTo({ left: page * w, behavior: 'smooth' });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    e.preventDefault();
+  }
+  lerpRoute(coords, f) {
+    if (!coords || coords.length < 2) return coords && coords[0];
+    const t = Math.max(0, Math.min(1, f)) * (coords.length - 1), i = Math.min(coords.length - 2, Math.floor(t)), k = t - i;
+    return [coords[i][0] + (coords[i + 1][0] - coords[i][0]) * k, coords[i][1] + (coords[i + 1][1] - coords[i][1]) * k];
+  }
+  startSheetDrag(e) {
+    const el = this.sheetEl, host = el && el.parentElement;
+    if (!host) return;
+    e.preventDefault();
+    const H = host.getBoundingClientRect().height;
+    const snaps = this.snaps(H), startY = e.clientY, startH = this.state.sheetH || snaps[1];
+    let moved = false, cur = startH;
+    this.setState({ sheetDrag: true });
+    const move = (ev) => {
+      const d = startY - ev.clientY;
+      if (Math.abs(d) > 4) moved = true;
+      cur = Math.max(150, Math.min(snaps[2], startH + d));
+      this.setState({ sheetH: cur });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      let target;
+      if (!moved) target = cur >= snaps[2] - 10 ? snaps[1] : snaps[2];
+      else target = snaps.reduce((a, b) => Math.abs(b - cur) < Math.abs(a - cur) ? b : a, snaps[0]);
+      this.setState({ sheetH: target, sheetDrag: false });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+  mins(base) { const el = (this.state.tick && this.t0) ? (this.state.tick - this.t0) / 60000 : 0; let t = base - el; while (t <= 0) t += 14; return t < 1 ? 1 : Math.round(t); }
+
+  renderVals() {
+    const s = this.state, sc = s.screen;
+    const modeName = { rush: 'Rush', comfort: 'Comfort', silver: 'Silver' }[s.mode];
+    const blurb = {
+      rush: 'Fastest arrival. Crowding is ignored — expect to stand from Bishan.',
+      comfort: 'Routes around the two busiest platforms. About 6 min slower, far better odds of a seat.',
+      silver: 'Fewest transfers, step-free throughout, longer walking buffers.'
+    }[s.mode];
+
+    const routeSets = {
+      rush: [
+        { mins: 41, eta: '08:22', tag: 'Fastest', tagTone: 'soft', legs: [['NSL', 'accent'], ['BUS 969', 'dark'], ['NSL', 'accent'], ['NEL', 'soft']], v: .88, note: 'Uses the affected stretch with bus bridging. Quickest, but standing.' },
+        { mins: 46, eta: '08:27', tag: 'Backup', tagTone: 'outline', legs: [['NSL', 'accent'], ['DTL', 'soft'], ['EWL', 'soft']], v: .74, note: 'One extra transfer. Skips the bridging queue at Ang Mo Kio.' },
+        { mins: 52, eta: '08:33', tag: 'Surface', tagTone: 'neutral', legs: [['BUS 855', 'dark'], ['NEL', 'soft']], v: .52, note: 'Road congestion on the CTE is moderate and clearing.' }
+      ],
+      comfort: [
+        { mins: 48, eta: '08:29', tag: 'Best seat odds', tagTone: 'soft', legs: [['NSL', 'accent'], ['DTL', 'soft'], ['EWL', 'soft']], v: .41, note: 'Boards the DTL two stops before the crowd builds.' },
+        { mins: 44, eta: '08:25', tag: 'Balanced', tagTone: 'outline', legs: [['NSL', 'accent'], ['BUS 969', 'dark'], ['NSL', 'accent']], v: .69, note: 'Quicker, but the bridging bus is standing-room from Bishan.' },
+        { mins: 55, eta: '08:36', tag: 'Quietest', tagTone: 'soft', legs: [['BUS 856', 'dark'], ['TEL', 'soft']], v: .28, note: 'The TEL is running light. Longest ride, emptiest carriage.' }
+      ],
+      silver: [
+        { mins: 51, eta: '08:32', tag: 'Step-free', tagTone: 'soft', legs: [['NSL direct', 'accent']], v: .44, note: 'No transfers. Lift at both ends, 9 min platform buffer.' },
+        { mins: 58, eta: '08:39', tag: 'Seated', tagTone: 'soft', legs: [['BUS 856', 'dark'], ['NSL', 'accent']], v: .3, note: 'Bus first, boarding at the terminus. A seat is near certain.' },
+        { mins: 47, eta: '08:28', tag: 'One transfer', tagTone: 'outline', legs: [['NSL', 'accent'], ['DTL', 'soft']], v: .58, note: 'Shorter, but Newton has 42 steps when the lift is busy.' }
+      ]
+    };
+    const routes = routeSets[s.mode].map((r, i) => ({
+      ...r, pick: () => this.setState({ route: i }), tone: s.route === i ? 'outlined' : 'plain',
+      legs: r.legs.map(([label]) => ({ label, style: this.lineStyle(label) })),
+      bars: this.bars(r.v), crowd: WORD[this.level(r.v)]
+    }));
+
+    const allArr = [
+      { badge: 'NSL', tone: 'accent', kind: 'train', name: 'Marina South Pier', sub: 'Platform B · southbound', base: [2, 6, 11], v: .86 },
+      { badge: 'TEL', tone: 'soft', kind: 'train', name: 'Woodlands North', sub: 'Platform A · northbound', base: [4, 9, 14], v: .38 },
+      { badge: '969', tone: 'dark', kind: 'bus', name: 'Woodlands Interchange', sub: 'Stop 59009 · double deck', base: [3, 12, 21], v: .62 },
+      { badge: '167', tone: 'dark', kind: 'bus', name: 'Bedok Interchange', sub: 'Stop 59009 · wheelchair accessible', base: [7, 16, 26], v: .31 },
+      { badge: 'NSL', tone: 'accent', kind: 'train', name: 'Jurong East', sub: 'Platform A · northbound', base: [5, 10, 15], v: .22 }
+    ];
+    const arrivals = allArr.filter(a => s.filter === 'all' || a.kind === s.filter)
+      .map(a => ({ ...a, t1: this.mins(a.base[0]), t2: this.mins(a.base[1]), t3: this.mins(a.base[2]), bars: this.bars(a.v), crowd: WORD[this.level(a.v)], style: this.lineStyle(a.kind === 'bus' ? 'BUS' : a.badge) }));
+
+    const hourLabels = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+    const fcStations = [
+      { name: 'Yishun', x: 62, y: 26, lx: 76, ly: 22, anchor: 'start', v: [.3, .4, .5, .45, .35, .3] },
+      { name: 'Bishan', x: 104, y: 100, lx: 118, ly: 96, anchor: 'start', v: [.55, .72, .9, .84, .6, .4] },
+      { name: 'City Hall', x: 152, y: 178, lx: 140, ly: 200, anchor: 'end', v: [.6, .8, .94, .88, .7, .5] },
+      { name: 'Raffles Place', x: 170, y: 262, lx: 184, ly: 266, anchor: 'start', v: [.5, .78, .96, .9, .66, .44] },
+      { name: 'Jurong East', x: 18, y: 196, lx: 26, ly: 216, anchor: 'start', v: [.4, .52, .68, .74, .6, .42] },
+      { name: 'Paya Lebar', x: 272, y: 166, lx: 264, ly: 188, anchor: 'end', v: [.45, .6, .76, .7, .52, .38] },
+      { name: 'Bugis', x: 206, y: 112, lx: 216, ly: 106, anchor: 'start', v: [.42, .56, .7, .8, .74, .56] }
+    ].map(st => { const val = st.v[s.fc], lv = this.level(val); return { ...st, fill: CROWD[lv], word: WORD[lv], bars: this.barsFor(lv), r: 11 + val * 15 }; });
+    const fcHours = hourLabels.map((label, i) => ({
+      label: label.slice(0, 2), pick: () => this.setState({ fc: i }),
+      style: { flex: 1, cursor: 'pointer', borderRadius: '999px', padding: '9px 0', font: 'var(--weight-bold) 13px/1 var(--font-numeric)', fontVariantNumeric: 'tabular-nums', border: '1px solid ' + (s.fc === i ? 'var(--accent)' : 'var(--border-hairline)'), background: s.fc === i ? 'var(--accent)' : 'var(--surface-card)', color: s.fc === i ? 'var(--text-on-accent)' : 'var(--text-muted)', transition: 'background 150ms cubic-bezier(.2,.7,.3,1)' }
+    }));
+
+    const rTypes = [
+      { id: 'crowd', label: 'Packed platform', sub: 'Two trains to board', pts: 30 },
+      { id: 'esc', label: 'Escalator or lift down', sub: 'Out of service', pts: 25 },
+      { id: 'delay', label: 'Train held', sub: 'Waiting at the platform', pts: 30 },
+      { id: 'gantry', label: 'Gantry queue', sub: 'Backed up to the street', pts: 20 },
+      { id: 'bus', label: 'Bus full', sub: 'Drove past the stop', pts: 20 },
+      { id: 'aircon', label: 'Comfort issue', sub: 'Carriage too warm', pts: 15 }
+    ].map(t => {
+      const on = s.repType === t.id;
+      const icon = { crowd: 'users', esc: 'move-vertical', delay: 'timer', gantry: 'scan-line', bus: 'bus', aircon: 'thermometer' }[t.id];
+      return {
+        ...t, icon, pick: () => this.setState({ repType: t.id, rep: 'confirm', sev: null }), tone: on ? 'accent' : 'plain',
+        iconStyle: {
+          width: 34, height: 34, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: on ? 'var(--accent)' : 'var(--accent-soft)', color: on ? 'var(--text-on-accent)' : 'var(--text-accent)'
+        },
+        ptsStyle: {
+          display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start',
+          font: 'var(--weight-bold) 11px/1 var(--font-body)', color: 'var(--text-accent)',
+          background: on ? 'var(--surface-card)' : 'var(--accent-soft)', borderRadius: 999, padding: '6px 9px'
+        }
+      };
+    });
+    const chosen = rTypes.find(t => t.id === s.repType) || rTypes[0];
+
+    const SEV = {
+      crowd: { q: 'How packed is it', opts: ['Manageable · one train wait', 'Getting busy · two to three trains', 'Crush · holding at the gantry'] },
+      esc: { q: 'What is out', opts: ['One escalator stopped · stairs beside it', 'Escalator out · long queue at the stairs', 'Lift out · no step-free way up'] },
+      delay: { q: 'How long has it been held', opts: ['Under 5 min · doors still open', '5 to 15 min · no announcement yet', 'Over 15 min · staff turning people away'] },
+      gantry: { q: 'How far does the queue reach', opts: ['A few people at the gates', 'Queue inside the concourse', 'Queue out to the street'] },
+      bus: { q: 'What happened at the stop', opts: ['Standing room only · squeezed on', 'Full · only a few could board', 'Drove past · nobody could board'] },
+      aircon: { q: 'What is uncomfortable', opts: ['Slightly warm · bearable', 'No aircon · uncomfortable', 'Unbearable · people moving carriage'] }
+    };
+    const sevSet = SEV[(s.repType || 'crowd')] || SEV.crowd;
+    const severities = sevSet.opts.map((label, i) => ({ label, on: s.sev === i, pick: () => this.setState({ sev: i }) }));
+
+    const vouchers = [
+      { title: '$1 off at Kopitiam', sub: '400 points · 6 outlets nearby', cost: 400 },
+      { title: '$5 EZ-Link top-up', sub: '1,800 points · instant', cost: 1800 },
+      { title: '$3 FairPrice voucher', sub: '1,200 points', cost: 1200 },
+      { title: 'Off-peak fare rebate', sub: '3,000 points · LTA pilot', cost: 3000 }
+    ].map((v, vi) => {
+      const can = s.points >= v.cost;
+      return {
+        ...v, cta: can ? 'Redeem' : 'Locked', variant: can ? 'primary' : 'secondary', disabled: !can, locked: !can,
+        icon: ['coffee', 'credit-card', 'shopping-basket', 'ticket'][vi] || 'gift',
+        gap: (v.cost - s.points).toLocaleString(),
+        cardStyle: {
+          background: 'var(--surface-card)', border: '1px solid var(--border-card)',
+          borderRadius: 'var(--radius-card)', padding: '14px 15px', opacity: can ? 1 : .78
+        },
+        iconStyle: {
+          flex: 'none', width: 34, height: 34, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: can ? 'var(--accent-soft)' : 'var(--sand-100)', color: can ? 'var(--text-accent)' : 'var(--text-muted)'
+        },
+        barStyle: { width: Math.round(Math.min(1, s.points / v.cost) * 100) + '%', height: '100%', background: 'var(--accent)', borderRadius: 999 },
+        redeem: () => { if (can) { this.setState({ points: s.points - v.cost }); this.flash('Redeemed · ' + v.title); } }
+      };
+    });
+
+    const calTrips = [
+      { time: '09:30', title: 'Design review', route: 'Yishun → Raffles Place · NSL', leave: '08:41', urgent: true, tags: [{ label: 'Calendar', tone: 'outline' }, { label: 'Disruption', tone: 'warn', icon: 'triangle-alert' }] },
+      { time: '13:00', title: 'Lunch with Priya', route: 'Raffles Place → Telok Ayer · DTL', leave: '12:38', urgent: false, tags: [{ label: 'Calendar', tone: 'outline' }] },
+      { time: '19:15', title: 'Badminton', route: 'Raffles Place → Toa Payoh · NSL', leave: '18:26', urgent: true, tags: [{ label: 'Calendar', tone: 'outline' }, { label: 'Rain forecast', tone: 'warn', icon: 'cloud-rain' }] }
+    ].map((c, i) => ({
+      ...c,
+      open: s.calOpen === i,
+      detail: 'Leave ' + c.leave + ' to arrive by ' + c.time + '. ' + c.route
+        + (c.urgent ? ' · watch this one, conditions may change.' : ' · running normally right now.'),
+      setRef: (el) => { (this.calEls || (this.calEls = {}))[i] = el; },
+      toggle: () => {
+        const opening = s.calOpen !== i;
+        this.setState({ calOpen: opening ? i : null });
+        if (!opening) return;
+        setTimeout(() => {
+          const el = this.calEls && this.calEls[i];
+          if (!el) return;
+          let sc = el.parentElement;
+          while (sc && !(sc.scrollHeight > sc.clientHeight + 8 && /auto|scroll/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+          if (!sc) return;
+          const top = el.offsetTop - sc.offsetTop;
+          const need = top + el.offsetHeight - (sc.scrollTop + sc.clientHeight) + 16;
+          if (need > 0) sc.scrollTo({ top: sc.scrollTop + need, behavior: 'smooth' });
+        }, 80);
+      },
+      plan: () => { this.setState({ screen: 'map' }); this.flash('Routes for ' + c.title + ' · leave ' + c.leave); },
+      watch: () => this.flash('Alerts on for ' + c.title + ' · checked 25 min before ' + c.leave)
+    }));
+
+    const ORIGIN = [1.4294, 103.8350];
+    const PLACES = [
+      { name: 'NANYANG TECHNOLOGICAL UNIVERSITY ( HALL OF RESIDENCE 13)', detail: '62 Nanyang Crescent · 637667', kind: 'Address', ll: [1.3483, 103.6831] },
+      { name: 'Tan Tock Seng Hospital', detail: '11 Jalan Tan Tock Seng · 308433', kind: 'Address', ll: [1.3215, 103.8459] },
+      { name: 'ION Orchard', detail: '2 Orchard Turn · 238801', kind: 'Address', ll: [1.3040, 103.8318] },
+      { name: '768888', detail: 'Blk 726 Yishun Street 71', kind: 'Postal', ll: [1.4304, 103.8354] },
+      { name: 'Bus stop 59009', detail: 'Yishun Avenue 2 · opposite Northpoint', kind: 'Bus stop', ll: [1.4295, 103.8350] },
+      { name: 'Bishan (NS17)', detail: 'Bishan Road · North South Line', kind: 'Station', ll: [1.3509, 103.8485] },
+      { name: 'Changi Airport Terminal 3', detail: '65 Airport Boulevard · 819663', kind: 'Address', ll: [1.3563, 103.9865] },
+      { name: 'Gardens by the Bay', detail: '18 Marina Gardens Drive · 018953', kind: 'Address', ll: [1.2816, 103.8636] }
+    ];
+    const q = s.query.trim().toLowerCase();
+    const results = (q ? PLACES.filter(p => (p.name + ' ' + p.detail).toLowerCase().indexOf(q) >= 0) : PLACES).slice(0, 6)
+      .map(p => ({ ...p, pick: () => this.setState({ dest: p, tripRoute: 0 }) }));
+
+    const dest = s.dest;
+    const bend = (k) => {
+      if (!dest) return [];
+      const [a1, a2] = ORIGIN, [b1, b2] = dest.ll, dx = b1 - a1, dy = b2 - a2;
+      return [ORIGIN, [a1 + dx * .34 - dy * k, a2 + dy * .34 + dx * k], [a1 + dx * .68 - dy * k * .6, a2 + dy * .68 + dx * k * .6], dest.ll];
+    };
+    const tripSets = {
+      fast: [
+        { mins: 44, eta: '08:26', fare: '$2.17', walk: '7 min', tag: 'Fastest', tagTone: 'soft', legs: ['NSL', 'DTL'], v: .82, note: 'Two transfers, no waiting at either.' },
+        { mins: 49, eta: '08:31', fare: '$2.05', walk: '4 min', tag: 'Fewer steps', tagTone: 'outline', legs: ['NSL', 'BUS 167'], v: .64, note: 'Slightly longer, one transfer less.' },
+        { mins: 58, eta: '08:40', fare: '$1.89', walk: '11 min', tag: 'Direct', tagTone: 'neutral', legs: ['BUS 969'], v: .51, note: 'Single bus the whole way.' }
+      ],
+      budget: [
+        { mins: 61, eta: '08:43', fare: '$1.29', walk: '12 min', tag: 'Cheapest', tagTone: 'soft', legs: ['BUS 969', 'BUS 167'], v: .56, note: 'Bus only. Transfer rebate applies within 45 min.' },
+        { mins: 55, eta: '08:37', fare: '$1.68', walk: '9 min', tag: 'Balanced', tagTone: 'outline', legs: ['BUS 969', 'NSL'], v: .68, note: 'One rail leg keeps it under the hour.' },
+        { mins: 44, eta: '08:26', fare: '$2.17', walk: '7 min', tag: 'Fastest', tagTone: 'neutral', legs: ['NSL', 'DTL'], v: .82, note: 'Quickest, but 88 cents more.' }
+      ],
+      step: [
+        { mins: 52, eta: '08:34', fare: '$2.05', walk: '5 min', tag: 'Step-free', tagTone: 'soft', legs: ['NSL direct'], v: .58, note: 'Lift at every change. No stairs, no escalator.' },
+        { mins: 57, eta: '08:39', fare: '$1.89', walk: '3 min', tag: 'Least walking', tagTone: 'outline', legs: ['BUS 969', 'NSL'], v: .47, note: 'Wheelchair-accessible bus, kerbside both ends.' },
+        { mins: 49, eta: '08:31', fare: '$2.17', walk: '8 min', tag: 'One lift out', tagTone: 'neutral', legs: ['NSL', 'DTL'], v: .7, note: 'Newton lift is out of service until Thursday.' }
+      ],
+      quiet: [
+        { mins: 56, eta: '08:38', fare: '$2.05', walk: '8 min', tag: 'Quietest', tagTone: 'soft', legs: ['BUS 856', 'TEL'], v: .27, note: 'The TEL is running light at this hour.' },
+        { mins: 51, eta: '08:33', fare: '$2.11', walk: '6 min', tag: 'Seat likely', tagTone: 'outline', legs: ['NSL', 'DTL'], v: .42, note: 'Boards two stops before the crowd builds.' },
+        { mins: 44, eta: '08:26', fare: '$2.17', walk: '7 min', tag: 'Fastest', tagTone: 'neutral', legs: ['NSL', 'DTL'], v: .82, note: 'Quickest, but busy from Bishan onwards.' }
+      ],
+      few: [
+        { mins: 53, eta: '08:35', fare: '$2.05', walk: '9 min', tag: 'No transfers', tagTone: 'soft', legs: ['NSL direct'], v: .61, note: 'Stay on one train the whole way.' },
+        { mins: 50, eta: '08:32', fare: '$2.11', walk: '6 min', tag: 'One transfer', tagTone: 'outline', legs: ['BUS 856', 'NSL'], v: .55, note: 'Single change, same platform.' },
+        { mins: 44, eta: '08:26', fare: '$2.17', walk: '7 min', tag: 'Fastest', tagTone: 'neutral', legs: ['NSL', 'DTL'], v: .82, note: 'Two changes, but the quickest overall.' }
+      ],
+      walk: [
+        { mins: 59, eta: '08:41', fare: '$1.89', walk: '2 min', tag: 'Door to door', tagTone: 'soft', legs: ['BUS 969'], v: .49, note: 'Stops 80 m from the entrance.' },
+        { mins: 54, eta: '08:36', fare: '$2.05', walk: '4 min', tag: 'Short walk', tagTone: 'outline', legs: ['BUS 856', 'NSL'], v: .58, note: 'Sheltered walkway at both ends.' },
+        { mins: 47, eta: '08:29', fare: '$2.17', walk: '10 min', tag: 'Faster', tagTone: 'neutral', legs: ['NSL', 'DTL'], v: .74, note: 'Quicker, but a longer walk out.' }
+      ],
+      bike: [
+        { mins: 41, eta: '08:23', fare: '$1.20', walk: '0 min', tag: 'Bike + rail', tagTone: 'soft', legs: ['CYCLE 1.8 km', 'NSL'], v: .38, note: 'Docking bay outside the station.' },
+        { mins: 46, eta: '08:28', fare: '$0.00', walk: '0 min', tag: 'All the way', tagTone: 'outline', legs: ['CYCLE 9.4 km'], v: .1, note: 'Park Connector the whole route.' },
+        { mins: 44, eta: '08:26', fare: '$2.17', walk: '7 min', tag: 'Rail only', tagTone: 'neutral', legs: ['NSL', 'DTL'], v: .82, note: 'No bike needed, but busier.' }
+      ]
+    };
+    const tripOptions = tripSets[s.tripMode].map((o, i) => ({
+      ...o, pick: () => this.setState({ tripRoute: i }), tone: s.tripRoute === i ? 'accent' : 'hairline',
+      start: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState({ tripRoute: i, navRoute: i, screen: 'nav', navStart: Date.now() }); },
+      legs: o.legs.map(label => ({ label, style: this.lineStyle(label) })),
+      bars: this.bars(o.v), crowd: WORD[this.level(o.v)]
+    }));
+    const bendBy = { fast: .06, budget: -.09, step: .02, quiet: -.04 }[s.tripMode];
+
+    const destShort = dest ? dest.name.split(' (')[0].replace(/\s+$/, '') : 'your destination';
+    const navOpt = tripOptions[s.navRoute != null ? s.navRoute : s.tripRoute] || tripOptions[0];
+    const navArr = this.navSteps(navOpt, destShort);
+    const navTotal = navArr.reduce((a, b) => a + b.secs, 0) || 1;
+    const navElapsed = Math.min(navTotal, s.navStart ? ((s.tick || Date.now()) - s.navStart) / 1000 * 12 : 0);
+    let acc = 0, navIdx = 0, stepRem = 0;
+    for (let i = 0; i < navArr.length; i++) {
+      if (navElapsed < acc + navArr[i].secs || i === navArr.length - 1) { navIdx = i; stepRem = acc + navArr[i].secs - navElapsed; break; }
+      acc += navArr[i].secs;
+    }
+    const arrived = navElapsed >= navTotal - 1;
+    this._navIdx = navIdx;
+    const navFrac = navElapsed / navTotal;
+    const fmtS = (x) => x >= 60 ? Math.ceil(x / 60) + ' min' : Math.max(0, Math.ceil(x)) + ' s';
+    const curStep = navArr[navIdx] || {};
+    const stepProg = curStep.secs ? Math.max(0, Math.min(1, 1 - stepRem / curStep.secs)) : 0;
+    const curStops = curStep.stops || null;
+    const passed = curStops ? Math.min(curStops.length - 1, Math.floor(stepProg * curStops.length)) : 0;
+    const stopsLeft = curStops ? curStops.length - passed : 0;
+    const liveStopLine = curStops
+      ? 'Next: ' + curStops[passed] + ' · ' + stopsLeft + ' stop' + (stopsLeft === 1 ? '' : 's') + ' to ' + curStep.alight
+      : curStep.detail;
+    const nav = {
+      navIcon: arrived ? 'circle-check' : curStep.icon,
+      navTitle: arrived ? 'You have arrived' : curStep.title,
+      navDetail: arrived ? destShort : liveStopLine,
+      navCountdown: arrived ? 'Done' : fmtS(stepRem),
+      navStepLabel: arrived ? 'Trip complete' : 'Step ' + (navIdx + 1) + ' of ' + navArr.length,
+      navEta: navOpt ? navOpt.eta : '',
+      navRemainLabel: arrived ? 'Arrived · ' + destShort : Math.max(1, Math.ceil((navTotal - navElapsed) / 60)) + ' min left · ' + destShort,
+      navCoord: this.lerpRoute(bend(bendBy), navFrac) || ORIGIN,
+      navProgressStyle: { width: Math.round(navFrac * 100) + '%', height: '100%', background: 'var(--accent)', borderRadius: 999, transition: 'width 1s linear' },
+      setStepsRef: (el) => { this.stepsEl = el; },
+      stepsPagerStyle: {
+        flex: '1 1 auto', width: '100%', minWidth: 0, maxWidth: '100%', minHeight: 0, display: (s.navSheetH != null && s.navSheetH < 240) ? 'none' : 'flex', alignItems: 'stretch', gap: 10, overflowX: 'auto', overflowY: 'hidden',
+        scrollSnapType: s.stepsDrag ? 'none' : 'x mandatory', scrollbarWidth: 'none',
+        cursor: s.stepsDrag ? 'grabbing' : 'grab', touchAction: 'pan-x', userSelect: 'none'
+      },
+      stepsDragStart: (e) => this.startStepsDrag(e),
+      onStepsScroll: (e) => {
+        const el = e.currentTarget, p = Math.round(el.scrollLeft / Math.max(1, el.clientWidth + 10));
+        this.userScrolled = Date.now();
+        if (p !== s.navPage) this.setState({ navPage: p });
+      },
+      navDots: navArr.map((st, i) => ({
+        style: {
+          width: i === s.navPage ? 18 : 6, height: 6, borderRadius: 999,
+          background: i === s.navPage ? 'var(--accent)' : (i < navIdx ? 'var(--sand-400)' : 'var(--sand-300)'),
+          transition: 'width var(--dur-base) var(--ease-out),background-color var(--dur-base) var(--ease-standard)'
+        }
+      })),
+      navList: navArr.map((st, i) => {
+        const done = i < navIdx || arrived, cur = i === navIdx && !arrived;
+        const nStops = (st.stops || []).length;
+        const ROW = 32, span = Math.max(0, (nStops - 1) * ROW);
+        const prog = cur ? stepProg : (done ? 1 : 0);
+        const stopList = (st.stops || []).map((name, j) => {
+          const sDone = done || (cur && j < passed), sNext = cur && j === passed;
+          return {
+            name,
+            rowStyle: { display: 'flex', alignItems: 'center', gap: 10, height: ROW, position: 'relative', zIndex: 1 },
+            style: {
+              font: (sNext ? 'var(--weight-bold)' : 'var(--weight-regular)') + ' 12px/1.2 var(--font-body)',
+              color: sNext ? 'var(--text-accent)' : (sDone ? 'var(--text-subtle)' : 'var(--text-body)'),
+              textWrap: 'pretty'
+            },
+            dotStyle: {
+              width: sNext ? 11 : 9, height: sNext ? 11 : 9, borderRadius: 999,
+              background: sDone ? 'var(--accent)' : 'var(--surface-card)',
+              border: sDone ? '2px solid var(--accent)' : '2px solid var(--sand-400)',
+              boxShadow: sNext ? '0 0 0 3px var(--accent-soft)' : 'none'
+            }
+          };
+        });
+        return {
+          title: st.title, detail: cur && st.stops ? liveStopLine : st.detail, dur: fmtS(st.secs), icon: st.icon,
+          stopList, hasStops: nStops > 0, showVehicle: cur && nStops > 0,
+          laneWrapStyle: { position: 'relative', marginTop: 4, paddingLeft: 0 },
+          laneStyle: { position: 'absolute', left: 11, top: ROW / 2, height: span, width: 4, background: 'var(--sand-200)', borderRadius: 999 },
+          laneFillStyle: { position: 'absolute', left: 11, top: ROW / 2, height: Math.round(span * prog), width: 4, background: 'var(--accent)', borderRadius: 999, transition: 'height 1s linear' },
+          vehicleStyle: {
+            position: 'absolute', left: 0, top: Math.round(ROW / 2 + span * prog - 13), width: 26, height: 26, borderRadius: 999,
+            background: 'var(--accent)', color: 'var(--text-on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(32,30,29,.3)', transition: 'top 1s linear', zIndex: 2
+          },
+          state: done ? 'Done' : (cur ? 'Now' : 'Next'),
+          cardStyle: {
+            flex: '0 0 100%', minWidth: 0, boxSizing: 'border-box', scrollSnapAlign: 'start',
+            background: cur ? 'var(--accent-soft)' : 'var(--surface-card)',
+            border: '1px solid ' + (cur ? 'transparent' : 'var(--border-card)'),
+            borderRadius: 'var(--radius-card)', padding: '14px 15px',
+            display: 'flex', flexDirection: 'column', gap: 7,
+            overflowY: 'auto', overscrollBehavior: 'contain',
+            opacity: done ? .62 : 1
+          },
+          iconWrapStyle: {
+            flex: 'none', width: 30, height: 30, borderRadius: 999, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            background: cur ? 'var(--accent)' : 'var(--sand-100)',
+            color: cur ? 'var(--text-on-accent)' : 'var(--text-body)'
+          },
+          chipStyle: {
+            font: 'var(--weight-bold) 10px/1 var(--font-body)', letterSpacing: '.06em', textTransform: 'uppercase',
+            color: cur ? 'var(--text-accent)' : 'var(--text-muted)',
+            background: cur ? 'var(--surface-card)' : 'var(--sand-100)',
+            borderRadius: 999, padding: '5px 9px'
+          },
+          titleStyle: {
+            font: 'var(--weight-heavy) var(--size-body)/1.3 var(--font-body)',
+            color: 'var(--text-strong)', textWrap: 'pretty'
+          }
+        };
+      })
+    };
+
+    const tabDefs = [{ id: 'map', label: 'Map' }, { id: 'plan', label: 'Plan' }, { id: 'report', label: 'Report' }, { id: 'rewards', label: 'Points' }];
+    const chipDefs = [['intro', 'Intro'], ['map', 'Map'], ['plan', 'Plan'], ['report', 'Report'], ['rewards', 'Points']];
+
+    return {
+      chips: chipDefs.map(([id, label]) => ({
+        label, go: () => this.go(id),
+        style: { cursor: 'pointer', borderRadius: '999px', padding: '8px 14px', font: 'var(--weight-semibold) 13px/1 var(--font-body)', border: '1px solid ' + (sc === id ? 'var(--accent)' : 'var(--border-hairline)'), background: sc === id ? 'var(--accent)' : 'var(--surface-card)', color: sc === id ? 'var(--text-on-accent)' : 'var(--text-muted)', transition: 'background 150ms cubic-bezier(.2,.7,.3,1)' }
+      })),
+      ...this.introVals(s, sc),
+      isReport: sc === 'report', isRewards: sc === 'rewards', isPlan: sc === 'plan',
+      showStatus: ['report', 'rewards', 'plan'].indexOf(sc) >= 0,
+      showTabs: ['map', 'plan', 'report', 'rewards'].indexOf(sc) >= 0 && !(sc === 'map' && !!s.dest),
+      isMap: sc === 'map', mapSearch: !s.dest, mapRoute: !!s.dest,
+      showResults: !s.dest && (s.searchOpen || q.length > 0),
+      openSearch: () => this.setState({ searchOpen: true }),
+      closeSearch: () => { if (this.bt) clearTimeout(this.bt); this.bt = setTimeout(() => this.setState({ searchOpen: false }), 160); },
+      query: s.query, setQuery: (val) => this.setState({ query: val }), clearQuery: () => this.setState({ query: '' }),
+      results, resultsLabel: q ? 'Results for “' + s.query.trim() + '”' : 'Recent and nearby',
+      destName: dest ? dest.name : '', destDetail: dest ? dest.detail : '',
+      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: ORIGIN, routeCoords: bend(bendBy),
+      backToSearch: () => this.setState({ dest: null }),
+      pinCoord: s.pin ? s.pin.ll : null,
+      hasPin: !!s.pin && !dest && !s.fcPin,
+      showMapAttrib: !dest && !s.pin && !s.fcPin && s.crowdOn === false,
+      showPinHint: !s.pin && !dest && !s.searchOpen && !q && !s.fcPin && s.crowdOn === false,
+      pinName: s.pin ? s.pin.name : '',
+      pinDetail: s.pin ? s.pin.detail : '',
+      dropPin: (ll) => {
+        if (this.state.dest) return;
+        let best = null, bd = 1e9;
+        PLACES.forEach(p => {
+          const d = Math.abs(p.ll[0] - ll[0]) + Math.abs(p.ll[1] - ll[1]);
+          if (d < bd) { bd = d; best = p; }
+        });
+        const near = bd < 0.012 ? best : null;
+        this.setState({
+          pin: {
+            ll,
+            name: near ? near.name : 'Dropped pin',
+            detail: (near ? near.detail + ' · ' : '') + ll[0].toFixed(4) + ', ' + ll[1].toFixed(4),
+            place: near
+          }
+        });
+      },
+      clearPin: () => this.setState({ pin: null }),
+      pinDirections: () => {
+        const p = this.state.pin;
+        if (!p) return;
+        this.setState({ dest: p.place || { name: p.name, detail: p.detail, ll: p.ll, kind: 'Pin' }, tripRoute: 0, pin: null, sheetH: 430 });
+      },
+      pinSearch: () => {
+        const p = this.state.pin;
+        if (!p) return;
+        this.setState({ query: p.place ? p.place.name : '', searchOpen: true, pin: null });
+        this.flash('Showing places near the pin');
+      },
+      setSheetRef: (el) => { this.sheetEl = el; },
+      sheetWrapStyle: {
+        position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 15, display: 'flex',
+        height: (s.sheetH || 430) + 'px',
+        transition: s.sheetDrag ? 'none' : 'height var(--dur-base) var(--ease-out)'
+      },
+      sheetStyle: {
+        flex: 1, minHeight: 0, width: '100%', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box',
+        background: 'var(--surface-card)',
+        borderRadius: 'var(--radius-sheet) var(--radius-sheet) 0 0',
+        boxShadow: 'var(--shadow-sheet)', display: 'flex', flexDirection: 'column', padding: '0 16px'
+      },
+      sheetGrabStyle: {
+        flex: 'none', padding: '10px 0 12px', cursor: s.sheetDrag ? 'grabbing' : 'grab',
+        touchAction: 'none', userSelect: 'none'
+      },
+      sheetDragStart: (e) => this.startSheetDrag(e),
+      pickedMins: (tripOptions[s.tripRoute] || tripOptions[0] || {}).mins,
+      tripModeItems: [{ id: 'fast', label: 'Fastest' }, { id: 'budget', label: 'Budget' }, { id: 'step', label: 'Step-free' }, { id: 'quiet', label: 'Less crowded' }],
+      tripModeTiles: [
+        { id: 'fast', label: 'Fastest' },
+        { id: 'budget', label: 'Cheapest' },
+        { id: 'quiet', label: 'Less crowded' },
+        { id: 'step', label: 'Step-free' },
+        { id: 'few', label: 'Fewest changes' },
+        { id: 'walk', label: 'Least walking' },
+        { id: 'bike', label: 'Bike + rail' }
+      ].map((m) => {
+        const on = s.tripMode === m.id;
+        return {
+          ...m,
+          pick: () => this.setState({ tripMode: m.id, tripRoute: 0 }),
+          tileStyle: 'flex:none;padding:10px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;'
+            + 'font:var(--weight-bold) 13px/1 var(--font-body);letter-spacing:-.005em;transition:background .15s,color .15s;'
+            + (on
+              ? 'background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);'
+              : 'background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);')
+        };
+      }),
+      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripRoute: 0 }),
+      tripModeBlurb: {
+        fast: 'Shortest total time, whatever it costs and however full it is.',
+        budget: 'Cheapest fare first. Bus legs and transfer rebates are preferred.',
+        step: 'Lifts and level boarding only. Walking distance is kept short.',
+        quiet: 'Avoids the busiest platforms and carriages, even if it adds minutes.',
+        few: 'Keeps you on one vehicle where possible. At most one change.',
+        walk: 'Minimises time on foot. Stops as close to the door as possible.',
+        bike: 'Pairs a short ride to the station with rail, or cycles the whole way.'
+      }[s.tripMode],
+      tripOptions,
+      startMapTrip: () => { this.setState({ screen: 'nav', navRoute: s.tripRoute, navStart: Date.now() }); },
+      isNav: sc === 'nav',
+      endTrip: () => { this.setState({ screen: 'map' }); this.flash('Trip ended'); },
+      goReport: () => this.setState({ navRepOpen: true, nrType: null, nrSev: null }),
+      ...nav,
+      headerTitle: { map: 'Map', report: 'Report', rewards: 'Points', plan: 'Today' }[sc] || 'Solvik',
+      headerSub: {
+        reroute: 'Yishun → Raffles Place · arrive by 08:45',
+        map: 'From Blk 726 Yishun St 71 · OneMap',
+        live: 'Network crowding · LTA DataMall, live',
+        forecast: 'Predicted from tap-ins, weather and events',
+        report: 'Bishan (NS17) · reports stay live 30 min',
+        rewards: 'Tue 8 Sep · 18 reports this month',
+        plan: 'Tue 8 Sep · 3 trips',
+        setup: 'Three things, then alerts run on their own'
+      }[sc] || '',
+      toast: s.toast,
+      tabItems: tabDefs, tab: sc, setTab: (id) => this.go(id),
+      tabPill: {
+        position: 'absolute', top: 7, bottom: 7, left: 7, width: 'calc((100% - 14px) / 4)',
+        transform: 'translateX(' + Math.max(0, tabDefs.findIndex(t => t.id === sc)) * 100 + '%)',
+        background: 'var(--accent-soft)', borderRadius: 'var(--radius-pill)',
+        transition: 'transform var(--dur-base) var(--ease-out)'
+      },
+      navTabs: tabDefs.map(t => {
+        const on = t.id === sc, hov = s.hoverTab === t.id, pressed = s.pressTab === t.id;
+        return {
+          ...t, go: () => this.go(t.id),
+          enter: () => this.setState({ hoverTab: t.id }),
+          leave: () => this.setState({ hoverTab: null, pressTab: null }),
+          down: () => this.setState({ pressTab: t.id }),
+          up: () => this.setState({ pressTab: null }),
+          icon: { map: 'map', plan: 'calendar-days', report: 'megaphone', rewards: 'award' }[t.id],
+          dot: t.id === 'map' || (t.id === 'rewards' && s.points > 2000),
+          dotStyle: {
+            position: 'absolute', top: -2, right: -4, width: 7, height: 7, borderRadius: 999,
+            background: t.id === 'map' ? 'var(--crowd-busy)' : 'var(--accent)',
+            border: '1.5px solid var(--surface-card)',
+            animation: t.id === 'map' ? 'sv-ping 1.8s var(--ease-standard) infinite' : 'none'
+          },
+          style: {
+            position: 'relative', zIndex: 1, height: 54, border: 'none', background: 'transparent',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+            color: on ? 'var(--green-900)' : (hov ? 'var(--text-strong)' : 'var(--text-muted)'), cursor: 'pointer',
+            transform: pressed ? 'scale(.92)' : (hov && !on ? 'translateY(-2px)' : 'none'),
+            transition: 'color var(--dur-base) var(--ease-standard),transform var(--dur-fast) var(--ease-out)',
+            WebkitTapHighlightColor: 'transparent'
+          },
+          iconStyle: {
+            position: 'relative', display: 'inline-flex',
+            transform: on ? 'translateY(-1px) scale(1.12)' : 'none',
+            transition: 'transform var(--dur-base) var(--ease-out)'
+          },
+          labelStyle: {
+            font: (on ? 'var(--weight-bold)' : 'var(--weight-regular)') + ' 11px/1 var(--font-body)',
+            letterSpacing: '.01em',
+            opacity: on || hov ? 1 : .82,
+            transition: 'opacity var(--dur-base) var(--ease-standard)'
+          }
+        };
+      }),
+      goLive: () => this.go('map'), goRewards: () => this.go('rewards'),
+      modeItems: [{ id: 'rush', label: 'Rush' }, { id: 'comfort', label: 'Comfort' }, { id: 'silver', label: 'Silver' }],
+      mode: s.mode, setMode: (id) => this.setState({ mode: id, route: 0 }), modeBlurb: blurb, modeName,
+      routes, activeLegs: routes[s.route] ? routes[s.route].legs : [],
+      startJourney: () => { this.setState({ screen: 'nav', navRoute: s.route, navStart: Date.now() }); this.flash('Trip started · watching it live'); },
+      ...this.forecastVals(s),
+      filterItems: [{ id: 'all', label: 'All' }, { id: 'train', label: 'Train' }, { id: 'bus', label: 'Bus' }],
+      filter: s.filter, setFilter: (id) => this.setState({ filter: id }), arrivals,
+      fcStations, fcHours, fcLabel: hourLabels[s.fc],
+      reportPick: s.rep === 'pick', reportConfirm: s.rep === 'confirm', reportDone: s.rep === 'done',
+      reportTypes: rTypes, chosenLabel: chosen.label, chosenPts: chosen.pts, severities, severityQ: sevSet.q,
+      navSheetStyle: {
+        position: 'absolute', left: 0, right: 0, bottom: 0, height: (s.navSheetH == null ? 336 : s.navSheetH),
+        background: 'var(--surface-card)', borderRadius: 'var(--radius-sheet) var(--radius-sheet) 0 0',
+        boxShadow: 'var(--shadow-sheet)', padding: '10px 16px 16px', display: 'flex', flexDirection: 'column', gap: 11,
+        boxSizing: 'border-box', overflow: 'hidden',
+        transition: s.navDragging ? 'none' : 'height 260ms cubic-bezier(.2,.7,.3,1)'
+      },
+      navGrabStyle: {
+        flex: 'none', padding: '6px 0 4px', cursor: s.navDragging ? 'grabbing' : 'grab',
+        touchAction: 'none', userSelect: 'none'
+      },
+      navDotsWrapStyle: {
+        flex: 'none', display: (s.navSheetH != null && s.navSheetH < 240) ? 'none' : 'flex',
+        justifyContent: 'center', alignItems: 'center', gap: 6
+      },
+      navSheetDrag: this.startNavDrag,
+      navSheetCycle: this.cycleNavSheet,
+      navRepOpen: !!s.navRepOpen,
+      navRepPick: !!s.navRepOpen && !s.nrType,
+      navRepForm: !!s.navRepOpen && !!s.nrType,
+      closeNavRep: () => { if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto); this.setState({ navRepOpen: false, nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null }); },
+      navRepBack: () => { if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto); this.setState({ nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null }); },
+      navRepTypes: rTypes.map((t) => ({
+        label: t.label, sub: t.sub, pts: t.pts, icon: t.icon,
+        pick: () => this.setState({ nrType: t.id, nrSev: null }),
+        style: 'display:flex;flex-direction:column;gap:6px;text-align:left;padding:12px 13px;border-radius:18px;cursor:pointer;'
+          + 'background:var(--surface-card);border:1px solid var(--border-card);font:var(--font-body)'
+      })),
+      navRepTitle: s.nrType ? (rTypes.find((t) => t.id === s.nrType) || {}).label : 'What is happening here',
+      navRepSevQ: (SEV[s.nrType] || SEV.crowd).q,
+      navRepSevs: (SEV[s.nrType] || SEV.crowd).opts.map((label, i) => ({
+        label,
+        pick: () => this.setState({ nrSev: i }),
+        style: 'width:100%;text-align:left;padding:12px 14px;border-radius:999px;cursor:pointer;font:var(--weight-bold) 13px/1.3 var(--font-body);'
+          + (s.nrSev === i
+            ? 'background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);'
+            : 'background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);')
+      })),
+      navRepNoPhoto: !s.nrPhoto, navRepHasPhoto: !!s.nrPhoto,
+      navRepPhotoName: s.nrPhotoName || '',
+      navRepThumb: s.nrPhoto ? React.createElement('img', { src: s.nrPhoto, alt: 'Report photo', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }) : null,
+      onNavRepPhoto: (e) => {
+        const f = e && e.target && e.target.files && e.target.files[0];
+        if (!f) return;
+        if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto);
+        this.setState({ nrPhoto: URL.createObjectURL(f), nrPhotoName: f.name + ' · just now' });
+      },
+      navRepCta: !s.nrPhoto ? 'Add a photo to post' : 'Post · ' + ((rTypes.find((t) => t.id === s.nrType) || { pts: 0 }).pts) + ' points',
+      navRepPost: () => {
+        if (!s.nrPhoto) return;
+        const t = rTypes.find((x) => x.id === s.nrType) || { pts: 0, label: 'Report' };
+        URL.revokeObjectURL(s.nrPhoto);
+        this.setState({ navRepOpen: false, nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null, points: s.points + t.pts });
+        this.flash(t.label + ' posted · +' + t.pts + ' points');
+      },
+      locEyebrow: s.locFix ? 'Live at your stop' : 'Finding your stop',
+      locStopName: s.locFix ? 'Bishan (NS17)' : 'Locating…',
+      locDetail: s.locFix
+        ? 'Nearest stop · 40 m away · 247 commuters nearby · reports stay live 30 min'
+        : 'Using your location to pick the stop you can report on.',
+      locRecheckLabel: s.locFix ? 'Recheck' : 'Locating',
+      locRecheck: () => {
+        this.setState({ locFix: false });
+        if (this.locT) clearTimeout(this.locT);
+        this.locT = setTimeout(() => { this.setState({ locFix: true }); this.flash('Nearest stop · Bishan (NS17), 40 m away'); }, 1100);
+      },
+      hasPhoto: !!s.photoUrl, noPhoto: !s.photoUrl,
+      photoName: s.photoName || '',
+      photoThumb: s.photoUrl ? React.createElement('img', { src: s.photoUrl, alt: 'Report photo', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }) : null,
+      reportCta: s.photoUrl ? 'Post report · ' + chosen.pts + ' points' : 'Add a photo to post',
+      onPhoto: (e) => {
+        const f = e && e.target && e.target.files && e.target.files[0];
+        if (!f) return;
+        if (s.photoUrl) URL.revokeObjectURL(s.photoUrl);
+        this.setState({ photoUrl: URL.createObjectURL(f), photoName: f.name + ' · just now' });
+        this.flash('Photo attached · faces blurred');
+      },
+      clearPhoto: () => { if (s.photoUrl) URL.revokeObjectURL(s.photoUrl); this.setState({ photoUrl: null, photoName: null }); },
+      backToPick: () => { if (s.photoUrl) URL.revokeObjectURL(s.photoUrl); this.setState({ rep: 'pick', repType: null, sev: null, photoUrl: null, photoName: null }); },
+      submitReport: () => { if (!s.photoUrl) return; this.setState({ rep: 'done', points: s.points + chosen.pts, photoUrl: null, photoName: null }); },
+      recentReports: [
+        { c: CROWD.busy, text: 'Packed platform · Bishan', ago: '2 min', votes: 14 },
+        { c: CROWD.moderate, text: 'Escalator down · Exit C', ago: '11 min', votes: 6 },
+        { c: CROWD.light, text: 'Bus 969 arriving light', ago: '14 min', votes: 3 }
+      ].map(r => ({
+        ...r,
+        dotStyle: { flex: 'none', width: 10, height: 10, borderRadius: 999, background: r.c, boxShadow: '0 0 0 4px color-mix(in oklch, ' + r.c + ' 18%, transparent)' },
+        confirm: () => { this.setState({ points: s.points + 5 }); this.flash('Confirmed · +5 points'); }
+      })),
+      crowdLegend: ['light', 'moderate', 'busy'].map(l => ({ label: WORD[l], bars: this.barsFor(l) })),
+      points: s.points.toLocaleString(), vouchers,
+      toGold: Math.max(0, 3100 - s.points).toLocaleString(),
+      tierBarStyle: {
+        width: Math.round(Math.max(0, Math.min(1, (s.points - 1000) / 2100)) * 100) + '%', height: '100%',
+        background: 'var(--crowd-light)', borderRadius: 999, transition: 'width var(--dur-slow) var(--ease-out)'
+      },
+      pointStats: [
+        { icon: 'megaphone', value: '18', label: 'Reports this month' },
+        { icon: 'badge-check', value: '94%', label: 'Verified by others' },
+        { icon: 'users', value: '2.1k', label: 'Commuters helped' }
+      ],
+      calOff: s.cal !== 'on', calOn: s.cal === 'on', calCta: s.cal === 'linking' ? 'Connecting' : 'Connect',
+      connectCal: () => { this.setState({ cal: 'linking' }); setTimeout(() => { this.setState({ cal: 'on' }); this.flash('3 trips synced from the calendar'); }, 900); },
+      disconnectCal: () => this.setState({ cal: 'off' }), calTrips,
+      ...this.addCommuteVals(s),
+      setupRows: [
+        { label: 'Starts at', value: 'Blk 726 Yishun St 71', hint: 'Nearest: Yishun (NS13) · 6 min walk' },
+        { label: 'Ends at', value: 'Marina One, Raffles Place', hint: 'Nearest: Raffles Place (NS26) · 4 min walk' },
+        { label: 'Arrive by', value: '08:45, Mon to Fri', hint: 'The network is checked from 06:30' },
+        { label: 'Also watch', value: 'Google Calendar events', hint: 'Any meeting with a location becomes a trip' }
+      ],
+      finishSetup: () => { this.setState({ screen: 'plan' }); this.flash('Alerts on for Home → Work'); },
+      silverDests: [
+        { name: 'Home', detail: 'Yishun · 38 min · seat likely', go: () => this.flash('Route to Home · board at 07:48') },
+        { name: 'Polyclinic', detail: 'Ang Mo Kio · 22 min · step-free', go: () => this.flash('Step-free route to the polyclinic') }
+      ],
+      callHelp: () => this.flash('Calling Daniel')
+    };
+  }
+}
+</script>
+</body>
+</html>
