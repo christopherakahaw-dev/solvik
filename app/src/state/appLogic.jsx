@@ -7,10 +7,12 @@ import { getNearestStop } from "../api/stop";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
 import { acceptFix, alongMAtTime, coordAt, stepAtTime, timeAtAlongM, STALE_FIX_MS } from "../lib/navProgress";
 import { metresBetween } from "../lib/geometry";
+import { analyseCommutes, commonDestinations, recordDestination } from "../lib/commuteAgent";
 
 const ONBOARDED_KEY = "solvik:onboarded";
 const PLACES_KEY = "solvik:places";
 const COMMUTES_KEY = "solvik:commutes";
+const DESTINATION_HISTORY_KEY = "solvik:destination-history";
 
 function loadStored(key, fallback) {
   if (typeof localStorage === "undefined") return fallback;
@@ -51,6 +53,7 @@ export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 export class AppLogic extends Component {
   state = {
     savedList: loadStored(COMMUTES_KEY, []),
+    destinationHistory: loadStored(DESTINATION_HISTORY_KEY, []),
     ...loadStored(PLACES_KEY, { plHome: "", plWork: "", plSchool: "" }),
     addEdit: null, placesOpen: false,
     addOpen: false, addFrom: "home", addTo: "work", addDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
@@ -450,6 +453,7 @@ export class AppLogic extends Component {
     if (s.fcSlot !== prevState.fcSlot) this.loadCrowding(s.crowd.slots[s.fcSlot] || null);
 
     if (s.savedList !== prevState.savedList) store(COMMUTES_KEY, s.savedList);
+    if (s.destinationHistory !== prevState.destinationHistory) store(DESTINATION_HISTORY_KEY, s.destinationHistory);
     if (s.plHome !== prevState.plHome || s.plWork !== prevState.plWork || s.plSchool !== prevState.plSchool) {
       store(PLACES_KEY, { plHome: s.plHome, plWork: s.plWork, plSchool: s.plSchool });
     }
@@ -971,7 +975,10 @@ export class AppLogic extends Component {
       ...p,
       // Clearing the query here is what stops the panel reopening when the
       // user comes back via "Change".
-      pick: () => this.setState({ dest: p, tripRoute: 0, query: "", liveResults: null, searchOpen: false, searchPending: false }),
+      pick: () => this.setState((st) => ({
+        dest: p, tripRoute: 0, query: "", liveResults: null, searchOpen: false, searchPending: false,
+        destinationHistory: recordDestination(st.destinationHistory, p),
+      })),
     }));
 
     const dest = s.dest;
@@ -1113,6 +1120,35 @@ export class AppLogic extends Component {
 
     const tabDefs = [{ id: "map", label: "Map" }, { id: "plan", label: "Plan" }, { id: "report", label: "Report" }, { id: "rewards", label: "Points" }];
     const chipDefs = [["intro", "Intro"], ["map", "Map"], ["plan", "Plan"], ["report", "Report"], ["rewards", "Points"]];
+    const agentPlaces = [
+      s.plHome && { id: "home", label: "Home", place: s.plHome },
+      s.plWork && { id: "work", label: "Work", place: s.plWork },
+      s.plSchool && { id: "school", label: "School", place: s.plSchool },
+      ...(s.addExtra || []),
+    ].filter(Boolean);
+    const agent = analyseCommutes({
+      commutes: s.savedList || [], places: agentPlaces, faults: (s.faults && s.faults.items) || [], now: new Date(),
+    });
+    const learned = commonDestinations(s.destinationHistory || []);
+    const agentRouteName = (commute) => {
+      if (!commute) return "No upcoming commute";
+      const from = agentPlaces.find((place) => place.id === commute.from);
+      const to = agentPlaces.find((place) => place.id === commute.to);
+      return `${(from && from.label) || commute.from} → ${(to && to.label) || commute.to}`;
+    };
+    const agentTitle = {
+      disruption: "Route disruption detected",
+      network: "Network alert before you leave",
+      clear: "Your route looks clear",
+      idle: "Learning your travel routine",
+    }[agent.level];
+    const agentMessage = agent.level === "disruption"
+      ? `${agent.fault.title}. This may affect ${agentRouteName(agent.commute)}.`
+      : agent.level === "network"
+      ? `${agent.fault.title}. Your ${agentRouteName(agent.commute)} commute is due in ${agent.commute.minutesUntil} min; check an alternative before leaving.`
+      : agent.level === "clear"
+      ? `${agentRouteName(agent.commute)} is due in ${agent.commute.minutesUntil} min. No relevant rail alert is currently reported.`
+      : "Save a commute or search for the same destination twice. FlowGuard will learn it on this device and watch for disruptions.";
 
     return {
       chips: chipDefs.map(([id, label]) => ({
@@ -1226,6 +1262,24 @@ export class AppLogic extends Component {
           return `${today} · ${n} watched commute${n === 1 ? "" : "s"}`;
         })(),
       }[sc] || "",
+      agent: {
+        level: agent.level,
+        title: agentTitle,
+        message: agentMessage,
+        route: agentRouteName(agent.commute),
+        monitored: agent.monitored,
+        learned,
+        canViewRoutes: !!(agent.commute && agentPlaces.find((place) => place.id === agent.commute.to && place.ll)),
+        viewRoutes: () => {
+          const commute = agent.commute;
+          if (!commute) return;
+          const to = agentPlaces.find((place) => place.id === commute.to);
+          if (!to) { this.flash("Add the destination address to view alternatives"); return; }
+          this.setState({ screen: "map", dest: { name: to.label, detail: to.place, ll: to.ll || null, kind: "Saved place" }, tripMode: commute.mode === "Comfort" ? "quiet" : "fast", tripRoute: 0 });
+          this.flash("Checking alternatives for " + agentRouteName(commute));
+        },
+        refresh: () => { this.loadFaults(); this.loadCrowding(); this.flash("FlowGuard agent refreshed"); },
+      },
       toast: s.toast,
       tabItems: tabDefs, tab: sc, setTab: (id) => this.go(id),
       tabPill: {

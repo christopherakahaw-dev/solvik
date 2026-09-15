@@ -2,8 +2,34 @@ import { Icon, IconButton, Button, SectionLabel, SearchField, Tag } from "../des
 import { styleText } from "../lib/styleText";
 
 export function PlanScreen({ v }) {
+  const agentTone = v.agent.level === "disruption" ? "var(--status-fault)" : v.agent.level === "network" ? "var(--status-warn)" : "var(--accent)";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
+      <section style={{ overflow: "hidden", borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: `1px solid ${agentTone}`, boxShadow: "var(--shadow-card)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 15px 11px", background: "var(--accent-soft)" }}>
+          <span style={{ width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: agentTone, color: "var(--text-on-accent)" }}><Icon name="sparkles" size={16} /></span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ font: "var(--weight-bold) 10px/1 var(--font-body)", letterSpacing: ".1em", color: "var(--text-muted)", textTransform: "uppercase" }}>FlowGuard agent · on-device</div>
+            <div style={{ font: "var(--type-body-strong)", color: "var(--text-strong)", marginTop: 4 }}>{v.agent.title}</div>
+          </div>
+          <button onClick={v.agent.refresh} aria-label="Refresh alerts" style={{ cursor: "pointer", border: "none", background: "transparent", color: "var(--text-muted)", padding: 6 }}><Icon name="refresh-cw" size={17} /></button>
+        </div>
+        <div style={{ padding: "13px 15px 14px" }}>
+          <p style={{ margin: 0, font: "var(--type-body)", color: "var(--text-body)", lineHeight: 1.45, textWrap: "pretty" }}>{v.agent.message}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 13 }}>
+            {v.agent.canViewRoutes && <Button size="sm" iconRight="arrow-right" onClick={v.agent.viewRoutes}>View alternatives</Button>}
+            <span style={{ font: "var(--type-caption)", color: "var(--text-muted)" }}>{v.agent.monitored ? `Watching ${v.agent.monitored} commute${v.agent.monitored === 1 ? "" : "s"} in the next 90 min` : "Private by design · no location history stored"}</span>
+          </div>
+          {v.agent.learned.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 11, borderTop: "1px solid var(--border-card)" }}>
+              <div style={{ font: "var(--weight-bold) 10px/1 var(--font-body)", letterSpacing: ".09em", color: "var(--text-muted)", textTransform: "uppercase" }}>Learned destinations</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {v.agent.learned.slice(0, 3).map((place) => <Tag key={place.key} tone="soft">{place.name} · {place.count}×</Tag>)}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
       {v.planHasNext && (
         <div style={{ position: "relative", overflow: "hidden", background: "var(--surface-dark)", color: "var(--text-on-dark)", borderRadius: "var(--radius-card)", padding: 20, boxShadow: "var(--shadow-card)", animation: "sv-rise 420ms cubic-bezier(.16,1,.3,1) both" }}>
           <div style={{ position: "absolute", right: -46, top: -58, width: 180, height: 180, borderRadius: 999, background: "rgba(255,255,255,.05)" }} />
