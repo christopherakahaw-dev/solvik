@@ -1,10 +1,57 @@
 import { Icon, IconButton, Button, SectionLabel, SearchField, Tag } from "../design-system";
 import { styleText } from "../lib/styleText";
+import { useAuth } from "../auth/AuthContext";
 
 export function PlanScreen({ v }) {
+  const { user, logout } = useAuth();
   const agentTone = v.agent.level === "disruption" ? "var(--status-fault)" : v.agent.level === "network" ? "var(--status-warn)" : "var(--accent)";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
+
+      {/* ── Account card ── */}
+      {user && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 13,
+            padding: "14px 15px",
+            borderRadius: "var(--radius-card)",
+            background: "var(--surface-card)",
+            border: "1px solid var(--border-card)",
+            boxShadow: "var(--shadow-card)",
+          }}
+        >
+          <span
+            style={{
+              flex: "none",
+              width: 42,
+              height: 42,
+              borderRadius: 999,
+              background: "var(--accent)",
+              color: "var(--text-on-accent)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              font: "var(--weight-heavy) 18px/1 var(--font-display)",
+            }}
+          >
+            {(user.name || user.email).charAt(0).toUpperCase()}
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)" }}>
+              {user.name || "My account"}
+            </span>
+            <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 2 }}>
+              {user.email}
+            </span>
+          </span>
+          <Button variant="ghost" size="sm" iconLeft="log-out" onClick={logout}>
+            Sign out
+          </Button>
+        </div>
+      )}
+
       <section style={{ overflow: "hidden", borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: `1px solid ${agentTone}`, boxShadow: "var(--shadow-card)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 15px 11px", background: "var(--accent-soft)" }}>
           <span style={{ width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: agentTone, color: "var(--text-on-accent)" }}><Icon name="sparkles" size={16} /></span>

@@ -51,10 +51,22 @@ export const CROWD = { light: "var(--crowd-light)", moderate: "var(--crowd-moder
 export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 
 export class AppLogic extends Component {
+  // ── Helper: pull seeded preferences from the `user` prop (set by App.jsx). ──
+  // Falls back to localStorage when the server has nothing saved yet so the
+  // first-run experience still works before a user account is created.
+  _seedFromProps() {
+    const prefs = (this.props.user && this.props.user.preferences) || {};
+    return {
+      savedList:          prefs.savedList          ?? loadStored(COMMUTES_KEY, []),
+      destinationHistory: prefs.destinationHistory ?? loadStored(DESTINATION_HISTORY_KEY, []),
+      plHome:             prefs.plHome             ?? loadStored(PLACES_KEY, { plHome: "", plWork: "", plSchool: "" }).plHome,
+      plWork:             prefs.plWork             ?? loadStored(PLACES_KEY, { plHome: "", plWork: "", plSchool: "" }).plWork,
+      plSchool:           prefs.plSchool           ?? loadStored(PLACES_KEY, { plHome: "", plWork: "", plSchool: "" }).plSchool,
+    };
+  }
+
   state = {
-    savedList: loadStored(COMMUTES_KEY, []),
-    destinationHistory: loadStored(DESTINATION_HISTORY_KEY, []),
-    ...loadStored(PLACES_KEY, { plHome: "", plWork: "", plSchool: "" }),
+    ...this._seedFromProps(),
     addEdit: null, placesOpen: false,
     addOpen: false, addFrom: "home", addTo: "work", addDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
     addMode: "Comfort", addMins: 462, fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
@@ -458,6 +470,16 @@ export class AppLogic extends Component {
       store(PLACES_KEY, { plHome: s.plHome, plWork: s.plWork, plSchool: s.plSchool });
     }
 
+    // Mirror the same changes to the server so they survive on every device.
+    const prefChanged =
+      s.savedList !== prevState.savedList ||
+      s.destinationHistory !== prevState.destinationHistory ||
+      s.plHome !== prevState.plHome ||
+      s.plWork !== prevState.plWork ||
+      s.plSchool !== prevState.plSchool;
+    if (prefChanged) this.schedulePrefSync();
+
+
     // The map and turn-by-turn both show where you are, so both watch.
     const tracks = s.screen === "map" || s.screen === "nav";
     const tracked = prevState.screen === "map" || prevState.screen === "nav";
@@ -482,8 +504,33 @@ export class AppLogic extends Component {
     if (this._addSearchT) clearTimeout(this._addSearchT);
     if (this._settleT) clearTimeout(this._settleT);
     if (this._snapBackT) clearTimeout(this._snapBackT);
+    if (this._prefSyncT) clearTimeout(this._prefSyncT);
     this.stopTracking();
   }
+
+  // Debounced server-side preference sync. Fires 1 s after the last change to
+  // avoid hammering the API on every keystroke in a search field.
+  schedulePrefSync = () => {
+    if (this._prefSyncT) clearTimeout(this._prefSyncT);
+    this._prefSyncT = setTimeout(() => {
+      const s = this.state;
+      const preferences = {
+        plHome: s.plHome,
+        plWork: s.plWork,
+        plSchool: s.plSchool,
+        savedList: s.savedList,
+        destinationHistory: s.destinationHistory,
+      };
+      fetch("/api/auth?action=update-profile", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences }),
+      }).catch(() => {
+        // Silently ignore — the data is already safe in localStorage.
+      });
+    }, 1000);
+  };
 
   // Turn-by-turn follows the real position rather than a simulated clock.
   startTracking = () => {

@@ -26,3 +26,9 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# SQLite database (contains user data — never commit this)
+data/
+*.db
+*.db-shm
+*.db-wal

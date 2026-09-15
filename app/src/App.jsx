@@ -7,9 +7,54 @@ import { ReportScreen } from "./screens/ReportScreen";
 import { RewardsScreen } from "./screens/RewardsScreen";
 import { PlanScreen, PlacesSheet, AddCommuteSheet } from "./screens/PlanScreen";
 import { TabBar } from "./screens/TabBar";
+import { AuthScreen } from "./screens/AuthScreen";
+import { useAuth } from "./auth/AuthContext";
 import "./app.css";
 
-export class App extends AppLogic {
+// ── Loading splash shown for ~200 ms while we check the session cookie ────────
+function LoadingSplash() {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background: "var(--sand-50)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        gap: 14,
+      }}
+    >
+      <span
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: "var(--radius-xs)",
+          background: "var(--accent)",
+          color: "var(--text-on-accent)",
+          font: "var(--weight-heavy) 18px/36px var(--font-display)",
+          textAlign: "center",
+          display: "block",
+        }}
+      >
+        F
+      </span>
+      <span
+        style={{
+          font: "var(--weight-heavy) 20px/1 var(--font-display)",
+          letterSpacing: "-.03em",
+          color: "var(--text-strong)",
+        }}
+      >
+        FlowGuard
+      </span>
+    </div>
+  );
+}
+
+// ── Main authenticated app shell (unchanged internals) ────────────────────────
+class AuthenticatedApp extends AppLogic {
   render() {
     const v = this.renderVals();
     return (
@@ -54,3 +99,14 @@ export class App extends AppLogic {
     );
   }
 }
+
+// ── Root — decides which shell to show ───────────────────────────────────────
+export function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <LoadingSplash />;
+  if (!user)   return <AuthScreen />;
+
+  return <AuthenticatedApp user={user} />;
+}
+

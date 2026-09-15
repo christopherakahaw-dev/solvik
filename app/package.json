@@ -12,10 +12,14 @@
     "diagnose": "node scripts/diagnose.mjs"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "lucide": "^1.46.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "uuid": "^14.0.2"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
