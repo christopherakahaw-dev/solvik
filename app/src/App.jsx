@@ -20,15 +20,6 @@ export class App extends AppLogic {
 
         {v.showStatus && (
           <>
-            <div style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px 0", background: "var(--surface-card)" }}>
-              <div style={{ font: "var(--weight-bold) 13px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", color: "var(--text-strong)" }}>
-                {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
-              </div>
-              <div style={{ display: "flex", gap: 5 }}>
-                <div style={{ width: 16, height: 9, border: "1.5px solid var(--sand-500)", borderRadius: 2 }} />
-                <div style={{ width: 16, height: 9, border: "1.5px solid var(--sand-500)", borderRadius: 2, background: "linear-gradient(90deg,var(--sand-500) 62%,transparent 62%)" }} />
-              </div>
-            </div>
             <AppHeader title={v.headerTitle} subtitle={v.headerSub} />
           </>
         )}

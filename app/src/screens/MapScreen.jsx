@@ -22,16 +22,6 @@ export function MapScreen({ v }) {
       />
 
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "16px 14px 0", display: "flex", flexDirection: "column", gap: 10, maxHeight: "100%", pointerEvents: "none" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 8px 8px", pointerEvents: "auto" }}>
-          <div style={{ font: "var(--weight-bold) 13px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", color: "var(--text-strong)" }}>
-            {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
-          </div>
-          <div style={{ display: "flex", gap: 5 }}>
-            <div style={{ width: 16, height: 9, border: "1.5px solid var(--sand-700)", borderRadius: 2 }} />
-            <div style={{ width: 16, height: 9, border: "1.5px solid var(--sand-700)", borderRadius: 2, background: "linear-gradient(90deg,var(--sand-700) 62%,transparent 62%)" }} />
-          </div>
-        </div>
-
         {v.mapRoute && (
           <div style={{ pointerEvents: "auto", display: "flex", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))", borderRadius: "var(--radius-pill,999px)", width: 44 }}>
             <IconButton icon="arrow-left" label="Back to search" tone="plain" size="md" onClick={v.backToSearch} />
