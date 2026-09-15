@@ -42,6 +42,9 @@ a:hover { color: var(--text-link-hover); }
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.45); opacity: .55; }
 }
+@keyframes sv-spin {
+  to { transform: rotate(360deg); }
+}
 @keyframes solvik-sheet-in {
   from { transform: translateY(14px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }

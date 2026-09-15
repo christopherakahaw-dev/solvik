@@ -16,6 +16,7 @@ export function OneMapCanvas({
   zoom,
   route,
   marker,
+  markerAccuracy,
   dest,
   pin,
   zones,
@@ -25,6 +26,7 @@ export function OneMapCanvas({
   interactive = true,
   style,
   fitRoute = true,
+  recenterToken = 0,
   zoomControls = true,
   zoomInset = 12,
   zoomTop = "50%",
@@ -97,6 +99,19 @@ export function OneMapCanvas({
       if (fitRoute) map.fitBounds(line.getBounds(), { padding: [34, 34] });
     }
     if (isLL(marker)) {
+      // GPS accuracy ring, drawn under the position dot.
+      if (isFinite(markerAccuracy) && markerAccuracy > 0) {
+        const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#437858";
+        const halo = L.circle(marker, {
+          radius: Math.min(markerAccuracy, 2000),
+          color: accent,
+          weight: 1,
+          opacity: 0.45,
+          fillColor: accent,
+          fillOpacity: 0.1,
+        }).addTo(map);
+        layersRef.current.push(halo);
+      }
       const m = L.circleMarker(marker, { radius: 8, color: "#fff", weight: 3, fillColor: "#201e1d", fillOpacity: 1 }).addTo(map);
       layersRef.current.push(m);
     }
@@ -152,16 +167,25 @@ export function OneMapCanvas({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(safeRoute), JSON.stringify(marker), JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeZones)]);
+  }, [JSON.stringify(safeRoute), JSON.stringify(marker), markerAccuracy, JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeZones)]);
 
+  const lastTokenRef = useRef(recenterToken);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isLL(center)) return;
+    // A bumped token is an explicit "take me there" (the locate button), so it
+    // overrides both the route framing and the unchanged-centre short-circuit.
+    const forced = recenterToken !== lastTokenRef.current;
+    lastTokenRef.current = recenterToken;
+    if (forced) {
+      map.setView(center, Math.max(safeZoom, 16), { animate: true });
+      return;
+    }
     if (safeRoute.length && fitRoute) return;
     if (Math.abs(map.getZoom() - safeZoom) > 0.01) map.setView(center, safeZoom, { animate: false });
     else map.panTo(center, { animate: true, duration: 0.8 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(center), safeZoom, fitRoute]);
+  }, [JSON.stringify(center), safeZoom, fitRoute, recenterToken]);
 
   const zoomBy = (delta) => {
     const m = mapRef.current;

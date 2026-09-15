@@ -10,12 +10,14 @@ export function MapScreen({ v }) {
         zoom={12}
         route={v.routeCoords}
         marker={v.originCoord}
+        markerAccuracy={v.userAccuracy}
         dest={v.destCoord}
         pin={v.pinCoord}
         zones={v.mapZones}
         onZoneClick={v.fcPickZone}
         onMapClick={v.dropPin}
         zoomControls={false}
+        recenterToken={v.recenterToken}
         height="100%"
       />
 
@@ -38,7 +40,14 @@ export function MapScreen({ v }) {
 
         {v.mapSearch && (
           <div style={{ pointerEvents: "auto", display: "flex", alignItems: "flex-start", gap: 10 }}>
-            <div onFocusCapture={v.openSearch} onBlurCapture={v.closeSearch} style={{ flex: 1, minWidth: 0, borderRadius: "var(--radius-pill,999px)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+            <div
+              onFocusCapture={v.openSearch}
+              onBlurCapture={v.closeSearch}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") v.dismissSearch();
+              }}
+              style={{ flex: 1, minWidth: 0, borderRadius: "var(--radius-pill,999px)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}
+            >
               <SearchField value={v.query} placeholder="Search address, stop or area" icon="search" onChange={v.setQuery} onClear={v.clearQuery} />
             </div>
             <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
@@ -57,6 +66,17 @@ export function MapScreen({ v }) {
           <div style={{ pointerEvents: "auto", overflowY: "auto", maxHeight: 560, marginTop: -5, borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
             <Card tone="plain">
               <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>{v.resultsLabel}</div>
+              {v.searchPending && (
+                <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "16px 0", font: "var(--type-body)", color: "var(--text-muted)" }}>
+                  <Icon name="loader-2" size={16} style={{ animation: "sv-spin 900ms linear infinite" }} />
+                  Searching…
+                </div>
+              )}
+              {!v.searchPending && v.searchEmpty && (
+                <div style={{ padding: "16px 0", font: "var(--type-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
+                  No match for “{v.query.trim()}”. Try a postal code, MRT stop or building name.
+                </div>
+              )}
               {v.results.map((p, i) => (
                 <button key={i} onClick={p.pick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid var(--border-card)", padding: "14px 0", cursor: "pointer" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -66,7 +86,7 @@ export function MapScreen({ v }) {
                   <Tag tone="neutral">{p.kind}</Tag>
                 </button>
               ))}
-              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 14 }}>Results from OneMap · Singapore Land Authority</div>
+              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 14 }}>{v.searchFooter}</div>
             </Card>
           </div>
         )}
@@ -282,6 +302,38 @@ export function MapScreen({ v }) {
           </div>
         </div>
       )}
+
+      <button
+        onClick={v.locateMe}
+        aria-label="Show my location"
+        title="Show my location"
+        style={{
+          position: "absolute",
+          right: 14,
+          bottom: v.locateBottom,
+          zIndex: 18,
+          width: 46,
+          height: 46,
+          borderRadius: 999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          border: "none",
+          background: "var(--surface-card)",
+          color: v.hasFix ? "var(--text-accent)" : "var(--text-strong)",
+          boxShadow: "0 4px 14px rgba(32,30,29,.18)",
+          transition: "bottom var(--dur-base) var(--ease-out),color var(--dur-fast) var(--ease-standard)",
+          WebkitTapHighlightColor: "transparent",
+        }}
+      >
+        <Icon
+          name={v.locating ? "loader-2" : "locate-fixed"}
+          size={20}
+          strokeWidth={2.1}
+          style={v.locating ? { animation: "sv-spin 900ms linear infinite" } : undefined}
+        />
+      </button>
 
       {v.showPinHint && (
         <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 120, display: "flex", alignItems: "center", gap: 7, background: "var(--surface-card)", borderRadius: 999, padding: "8px 14px", boxShadow: "var(--shadow-nav)", font: "var(--type-caption)", color: "var(--text-body)", whiteSpace: "nowrap" }}>

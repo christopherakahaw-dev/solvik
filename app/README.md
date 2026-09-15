@@ -38,6 +38,10 @@ Copy `.env.example` to `.env` and fill in:
   set `LTA_ACCOUNT_KEY`. This currently powers the live train service alerts
   shown in the map's Alerts sheet.
 
+The locate button uses the browser's own geolocation, which needs no keys but
+does require a secure context — it works on `localhost` and on the deployed
+HTTPS URL, but not over a plain-HTTP LAN address.
+
 Restart `npm run dev` after editing `.env`. Every live call is wrapped to
 fall back to the illustrative data if a key is missing, the request fails,
 or the API rate-limits — so the app never breaks because of a live-data
@@ -50,6 +54,8 @@ outage, it just quietly falls back.
 | Place search (map search, add-commute, places sheet) | Live OneMap search when reachable, else the built-in place list |
 | Route line drawn on the map | Live OneMap public-transport routing when reachable, else a synthetic curve |
 | Train service alerts (map Alerts sheet) | Live LTA DataMall `TrainServiceAlerts` when reachable, else illustrative faults |
+| Your position + trip origin (locate button) | Live browser geolocation; falls back to the demo Yishun origin if denied or unavailable |
+| Report tab's nearest stop | Live LTA DataMall `BusStops` via `/api/nearest-stop`, else the illustrative Bishan stop |
 | Trip time/fare/crowding estimates, area crowding zones, points, reports | Illustrative — LTA DataMall doesn't expose a general geographic crowding feed or full point-to-point trip-planning-with-fares API, so these stay as realistic placeholder data. Swap in your own backend here if you have one. |
 
 ## Project layout

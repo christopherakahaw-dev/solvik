@@ -2,8 +2,13 @@ import { Component } from "react";
 import { searchPlaces, getPublicTransportRoute } from "../api/onemap";
 import { getTrainServiceAlerts } from "../api/lta";
 import { decodePolyline } from "../lib/polyline";
+import { getPosition, messageForError } from "../lib/geolocation";
 
 const ONBOARDED_KEY = "solvik:onboarded";
+
+// Used until the browser gives us a real fix: Blk 726 Yishun St 71, the
+// starting point the prototype was designed around.
+const ORIGIN_FALLBACK = [1.4294, 103.835];
 
 // Ported from the Onward.dc.html prototype's embedded view-model script,
 // almost verbatim. Every screen's render() calls `this.renderVals()` and
@@ -28,6 +33,31 @@ export class AppLogic extends Component {
     mode: "comfort", route: 0, fc: 2,
     filter: "all", rep: "pick", repType: null, sev: 1, cal: "off", points: 2480, toast: null, tick: 0,
     query: "", dest: null, searchOpen: false, tripMode: "fast", tripRoute: 0,
+    userLoc: null, userAccuracy: null, locating: false, recenterToken: 0,
+  };
+
+  currentOrigin() {
+    return this.state.userLoc || ORIGIN_FALLBACK;
+  }
+
+  // Centre the map on the real position and adopt it as the trip origin.
+  locateMe = () => {
+    if (this.state.locating) return;
+    this.setState({ locating: true });
+    getPosition()
+      .then((fix) => {
+        this.setState((st) => ({
+          userLoc: fix.coords,
+          userAccuracy: fix.accuracy,
+          locating: false,
+          recenterToken: st.recenterToken + 1,
+          fcPin: null,
+        }));
+      })
+      .catch((err) => {
+        this.setState({ locating: false });
+        this.flash(messageForError(err && err.code));
+      });
   };
 
   addCommuteVals(s) {
@@ -344,17 +374,18 @@ export class AppLogic extends Component {
     }
     if (this.state.query !== prevState.query) this.scheduleLiveSearch();
     if (this.state.dest !== prevState.dest && this.state.dest) this.scheduleLiveRoute();
+    // A new fix moves the trip origin, so the drawn route has to follow it.
+    if (this.state.userLoc !== prevState.userLoc && this.state.dest) this.scheduleLiveRoute();
   }
   componentDidMount() {
     this.t0 = Date.now();
     this.iv = setInterval(() => this.setState({ tick: Date.now() }), 1000);
-    this.locT = setTimeout(() => this.setState({ locFix: true }), 1400);
     this.loadLiveFaults();
+    this.findNearestStop();
   }
   componentWillUnmount() {
     clearInterval(this.iv);
     if (this.tt) clearTimeout(this.tt);
-    if (this.locT) clearTimeout(this.locT);
     if (this._searchT) clearTimeout(this._searchT);
   }
 
@@ -363,14 +394,18 @@ export class AppLogic extends Component {
   scheduleLiveSearch = () => {
     if (this._searchT) clearTimeout(this._searchT);
     const query = this.state.query;
-    if (!query || !query.trim()) {
-      this.setState({ liveResults: null });
+    if (!query || query.trim().length < 2) {
+      this.setState({ liveResults: null, searchPending: false, searchOffline: false });
       return;
     }
+    this.setState({ searchPending: true });
     this._searchT = setTimeout(async () => {
       try {
         const items = await searchPlaces(query);
+        if (this.state.query !== query) return;
         this.setState({
+          searchPending: false,
+          searchOffline: false,
           liveResults: {
             query,
             items: (items || []).map((r) => ({
@@ -382,7 +417,10 @@ export class AppLogic extends Component {
           },
         });
       } catch {
-        this.setState({ liveResults: null });
+        // Live search is unreachable — fall back to the built-in place list,
+        // labelled as such so it never reads as live data.
+        if (this.state.query !== query) return;
+        this.setState({ liveResults: null, searchPending: false, searchOffline: true });
       }
     }, 350);
   };
@@ -392,8 +430,7 @@ export class AppLogic extends Component {
   scheduleLiveRoute = () => {
     const dest = this.state.dest;
     if (!dest || !dest.ll) return;
-    const ORIGIN = [1.4294, 103.835];
-    getPublicTransportRoute(ORIGIN, dest.ll)
+    getPublicTransportRoute(this.currentOrigin(), dest.ll)
       .then((data) => {
         const itin = data && data.plan && data.plan.itineraries && data.plan.itineraries[0];
         if (!itin) return;
@@ -423,6 +460,22 @@ export class AppLogic extends Component {
         this.setState({ liveFaults });
       })
       .catch(() => {});
+  };
+
+  // Resolves the stop a report is filed against from the real position. Any
+  // failure (permission, no key, no fix) leaves the illustrative stop in
+  // place rather than stranding the banner on "Locating…".
+  findNearestStop = () => {
+    getPosition()
+      .then((fix) => {
+        this.setState((st) => ({ userLoc: st.userLoc || fix.coords, userAccuracy: st.userAccuracy || fix.accuracy }));
+        return fetch(`/api/nearest-stop?lat=${fix.coords[0]}&lng=${fix.coords[1]}`).then((r) => r.json());
+      })
+      .then((data) => {
+        if (!data || data.error || !data.name) throw new Error("no stop");
+        this.setState({ locFix: true, stop: data });
+      })
+      .catch(() => this.setState({ locFix: true }));
   };
 
   navSnaps = [152, 336, 620];
@@ -762,7 +815,7 @@ export class AppLogic extends Component {
       watch: () => this.flash("Alerts on for " + c.title + " · checked 25 min before " + c.leave),
     }));
 
-    const ORIGIN = [1.4294, 103.835];
+    const ORIGIN = this.currentOrigin();
     const PLACES = [
       { name: "NANYANG TECHNOLOGICAL UNIVERSITY ( HALL OF RESIDENCE 13)", detail: "62 Nanyang Crescent · 637667", kind: "Address", ll: [1.3483, 103.6831] },
       { name: "Tan Tock Seng Hospital", detail: "11 Jalan Tan Tock Seng · 308433", kind: "Address", ll: [1.3215, 103.8459] },
@@ -773,11 +826,18 @@ export class AppLogic extends Component {
       { name: "Changi Airport Terminal 3", detail: "65 Airport Boulevard · 819663", kind: "Address", ll: [1.3563, 103.9865] },
       { name: "Gardens by the Bay", detail: "18 Marina Gardens Drive · 018953", kind: "Address", ll: [1.2816, 103.8636] },
     ];
-    const localMatches = PLACES.filter((p) => (p.name + " " + p.detail).toLowerCase().indexOf((s.query || "").trim().toLowerCase()) >= 0);
-    const livePlaces = s.liveResults && s.liveResults.query === s.query ? s.liveResults.items : null;
     const q = s.query.trim().toLowerCase();
-    const resultSource = livePlaces || (q ? localMatches : PLACES);
-    const results = resultSource.slice(0, 6).map((p) => ({ ...p, pick: () => this.setState({ dest: p, tripRoute: 0 }) }));
+    const localMatches = PLACES.filter((p) => (p.name + " " + p.detail).toLowerCase().indexOf(q) >= 0);
+    const livePlaces = s.liveResults && s.liveResults.query === s.query ? s.liveResults.items : null;
+    // Live results when we have them; the built-in list only after a live
+    // lookup actually failed — never as a placeholder while one is in flight.
+    const resultSource = livePlaces || (s.searchOffline ? localMatches : []);
+    const results = resultSource.slice(0, 6).map((p) => ({
+      ...p,
+      // Clearing the query here is what stops the panel reopening when the
+      // user comes back via "Change".
+      pick: () => this.setState({ dest: p, tripRoute: 0, query: "", liveResults: null, searchOpen: false, searchPending: false, searchOffline: false }),
+    }));
 
     const dest = s.dest;
     const bend = (k) => {
@@ -919,13 +979,30 @@ export class AppLogic extends Component {
       showStatus: ["report", "rewards", "plan"].indexOf(sc) >= 0,
       showTabs: ["map", "plan", "report", "rewards"].indexOf(sc) >= 0 && !(sc === "map" && !!s.dest),
       isMap: sc === "map", mapSearch: !s.dest, mapRoute: !!s.dest,
-      showResults: !s.dest && (s.searchOpen || q.length > 0),
+      // The panel stays shut until there is a real query to answer — focusing
+      // the field no longer surfaces the built-in place list.
+      showResults: !s.dest && q.length >= 2,
       openSearch: () => this.setState({ searchOpen: true }),
       closeSearch: () => { if (this.bt) clearTimeout(this.bt); this.bt = setTimeout(() => this.setState({ searchOpen: false }), 160); },
-      query: s.query, setQuery: (val) => this.setState({ query: val }), clearQuery: () => this.setState({ query: "" }),
-      results, resultsLabel: q ? "Results for “" + s.query.trim() + "”" : "Recent and nearby",
+      dismissSearch: () => this.setState({ query: "", searchOpen: false, liveResults: null, searchPending: false, searchOffline: false }),
+      query: s.query,
+      setQuery: (val) => this.setState({ query: val }),
+      clearQuery: () => this.setState({ query: "", liveResults: null, searchPending: false, searchOffline: false }),
+      results,
+      resultsLabel: "Results for “" + s.query.trim() + "”",
+      searchPending: !!s.searchPending,
+      searchEmpty: !s.searchPending && results.length === 0,
+      searchOffline: !!s.searchOffline,
+      searchFooter: s.searchOffline ? "Offline · showing saved places" : "Results from OneMap · Singapore Land Authority",
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
       destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: ORIGIN, routeCoords: bend(bendBy),
+      userAccuracy: s.userLoc ? s.userAccuracy : null,
+      recenterToken: s.recenterToken || 0,
+      locating: !!s.locating,
+      hasFix: !!s.userLoc,
+      locateMe: this.locateMe,
+      // Sits clear of whichever bottom overlay is currently showing.
+      locateBottom: dest ? (s.sheetH || 430) + 12 : s.fcPin ? 250 : s.pin ? 210 : (s.crowdOn !== false && !s.searchOpen && !q) ? 170 : 96,
       backToSearch: () => this.setState({ dest: null }),
       pinCoord: s.pin ? s.pin.ll : null,
       hasPin: !!s.pin && !dest && !s.fcPin,
@@ -1087,13 +1164,16 @@ export class AppLogic extends Component {
         this.flash(t.label + " posted · +" + t.pts + " points");
       },
       locEyebrow: s.locFix ? "Live at your stop" : "Finding your stop",
-      locStopName: s.locFix ? "Bishan (NS17)" : "Locating…",
-      locDetail: s.locFix ? "Nearest stop · 40 m away · 247 commuters nearby · reports stay live 30 min" : "Using your location to pick the stop you can report on.",
+      locStopName: s.locFix ? (s.stop ? s.stop.name : "Bishan (NS17)") : "Locating…",
+      locDetail: s.locFix
+        ? s.stop
+          ? "Nearest stop · " + s.stop.code + " · " + Math.round(s.stop.distanceM) + " m away · reports stay live 30 min"
+          : "Nearest stop · 40 m away · 247 commuters nearby · reports stay live 30 min"
+        : "Using your location to pick the stop you can report on.",
       locRecheckLabel: s.locFix ? "Recheck" : "Locating",
       locRecheck: () => {
-        this.setState({ locFix: false });
-        if (this.locT) clearTimeout(this.locT);
-        this.locT = setTimeout(() => { this.setState({ locFix: true }); this.flash("Nearest stop · Bishan (NS17), 40 m away"); }, 1100);
+        this.setState({ locFix: false, stop: null });
+        this.findNearestStop();
       },
       hasPhoto: !!s.photoUrl, noPhoto: !s.photoUrl,
       photoName: s.photoName || "",
