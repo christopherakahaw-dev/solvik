@@ -149,9 +149,13 @@ export default async function handler(req, res) {
     const settled = await Promise.allSettled(
       spec.query.map((params) => oneMapRoute({ start: from, end: to, routeType: "pt", date, time, numItineraries: 3, ...params }))
     );
-    const unexpectedFailure = settled.find((result) => result.status === "rejected" && result.reason?.status !== 404);
-    if (unexpectedFailure) throw unexpectedFailure.reason;
-    const responses = settled.filter((result) => result.status === "fulfilled").map((result) => result.value);
+    const responses = settled.filter((r) => r.status === "fulfilled").map((r) => r.value);
+    // Only surface a failure if nothing succeeded — one mode of a two-query
+    // search (transit + bus) coming back empty is not itself an error.
+    if (!responses.length) {
+      const rejection = settled.find((r) => r.status === "rejected");
+      if (rejection) throw rejection.reason;
+    }
     const itineraries = responses.flatMap((data) => (data.plan && data.plan.itineraries) || []);
     if (!itineraries.length) {
       res.status(200).json({ mode, options: [] });
@@ -176,7 +180,9 @@ export default async function handler(req, res) {
     res.status(200).json({ mode, options: tagsFor(ranked, spec.tag) });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
-    if (err && err.status === 404) {
+    // OneMap says "no trip possible" with its own error id 404 and HTTP 200;
+    // that genuinely means no route. Anything else is a fault worth showing.
+    if (err && err.otpErrorId === 404) {
       res.status(200).json({ mode, options: [] });
       return;
     }

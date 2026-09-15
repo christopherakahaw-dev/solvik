@@ -78,20 +78,25 @@ export function stepsOf(itin, destName) {
 }
 
 export function normalizeItinerary(itin, destName) {
-  const legs = (itin.legs || []).filter((l) => String(l.mode).toUpperCase() !== "WALK");
-  if (!legs.length) return null;
+  const allLegs = itin.legs || [];
+  if (!allLegs.length) return null;
+  const legs = allLegs.filter((l) => String(l.mode).toUpperCase() !== "WALK");
+  // A walk-only itinerary is OneMap's correct answer for a short trip, not a
+  // failure — keep it as a walking option instead of discarding it.
+  const walkOnly = legs.length === 0;
   const fare = fareOf(itin);
   const durationSecs = itin.duration || Math.round(((itin.endTime || 0) - (itin.startTime || 0)) / 1000);
   return {
     mins: Math.max(1, Math.round(durationSecs / 60)),
     eta: clockFrom(itin.endTime),
-    fare: fare == null ? null : `$${fare.toFixed(2)}`,
-    fareValue: fare,
+    fare: walkOnly ? "$0.00" : fare == null ? null : `$${fare.toFixed(2)}`,
+    fareValue: walkOnly ? 0 : fare,
     walk: `${Math.round((itin.walkTime || 0) / 60)} min`,
     walkSecs: itin.walkTime || 0,
     walkDistance: itin.walkDistance || 0,
     transfers: itin.transfers != null ? itin.transfers : Math.max(0, legs.length - 1),
-    legs: legs.map(legLabel),
+    walkOnly,
+    legs: walkOnly ? [`WALK ${((itin.walkDistance || 0) / 1000).toFixed(1)} km`] : legs.map(legLabel),
     transitLegs: legs.map((leg) => ({
       label: legLabel(leg),
       mode: String(leg.mode || "").toUpperCase(),

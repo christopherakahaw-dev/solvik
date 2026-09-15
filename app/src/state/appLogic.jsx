@@ -1062,7 +1062,8 @@ export class AppLogic extends Component {
       tripOptions,
       tripsPending: !!trips.pending,
       tripsError: trips.error || null,
-      tripsEmpty: !trips.pending && !trips.error && tripOptions.length === 0,
+      // Only after a request has actually resolved — the initial state is not "empty".
+      tripsEmpty: !!trips.key && !trips.pending && !trips.error && tripOptions.length === 0,
       retryTrips: () => { this.setState({ trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions); },
       isNav: sc === "nav",
       endTrip: () => { this.setState({ screen: "map" }); this.flash("Trip ended"); },

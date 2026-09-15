@@ -96,6 +96,20 @@ works — this was built with Vercel in mind (`vercel deploy`, zero extra
 config). Set the environment variables from `.env.example` in your host's
 project settings before deploying.
 
+## Diagnosing live-data problems
+
+If routing or crowding misbehaves, run the diagnostic against your real `.env`:
+
+```bash
+npm run diagnose
+npm run diagnose -- --from 1.4294,103.8350 --to 1.3009,103.8559
+```
+
+It reports which credential path was used, whether the token is valid and when
+it expires, the exact request sent to OneMap, the HTTP status, and how many
+itineraries survived parsing — with the token itself never printed, so the
+output is safe to paste into an issue.
+
 ## Tests
 
 ```bash

@@ -42,9 +42,24 @@ export default async function handler(req, res) {
     const upstream = await fetch(url.toString(), {
       headers: { AccountKey: key, accept: "application/json" },
     });
-    const data = await upstream.json();
+    // Read as text first: an HTML or empty error body must not die in the JSON
+    // parser and hide the real status.
+    const text = await upstream.text();
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
     if (!upstream.ok) {
-      res.status(upstream.status).json({ error: `LTA DataMall request failed (${upstream.status})`, detail: data });
+      res.status(upstream.status).json({
+        error: `LTA DataMall request failed (${upstream.status})`,
+        detail: data || text.slice(0, 200),
+      });
+      return;
+    }
+    if (data == null) {
+      res.status(502).json({ error: "LTA DataMall returned a non-JSON response", detail: text.slice(0, 200) });
       return;
     }
     res.setHeader("Cache-Control", "s-maxage=15, stale-while-revalidate=30");
