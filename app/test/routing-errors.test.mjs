@@ -129,3 +129,29 @@ test("when every spelling returns walking only, the walk plan is still returned"
   assert.equal(hasTransit(data), false);
   assert.equal(data.plan.itineraries.length, 1, "a genuinely short trip still gets its walking option");
 });
+
+test("when every spelling fails, the error names what each one was told", async () => {
+  const replies = {
+    TRANSIT: "Mode must be lowercase.",
+    transit: "No service on this date.",
+  };
+  globalThis.fetch = async (url) => {
+    const mode = new URL(url).searchParams.get("mode");
+    return new Response(JSON.stringify({ error: replies[mode] }), { status: 400, headers: { "content-type": "application/json" } });
+  };
+  await assert.rejects(() => oneMapRoute({ start: "1,103", end: "1.1,103.1", date: "09-15-2026", time: "08:00:00" }), (err) => {
+    // Both attempts must be visible — reporting only the last one hid the
+    // answer for the correctly-spelled request.
+    assert.match(err.message, /Mode must be lowercase/);
+    assert.match(err.message, /No service on this date/);
+    assert.equal(err.attempts.length, 2);
+    return true;
+  });
+});
+
+test("an impossible date is rejected before a round trip", () => {
+  assert.throws(
+    () => buildRouteUrl({ start: "1,103", end: "1.1,103.1", date: "02-30-2026", time: "08:00:00", mode: "transit" }),
+    /impossible date/
+  );
+});

@@ -64,16 +64,13 @@ const DATE_FORMATS = {
   "YYYY-MM-DD": (p) => `${p.y}-${pad(p.m)}-${pad(p.d)}`,
 };
 
-// OneMap's docs and its deployed OTP build have disagreed about the casing of
-// `mode` and the spelling of `date`. A request with an unparsed mode comes back
-// 200 with walking-only itineraries rather than an error, which is impossible
-// to tell from "no transit exists" — so try the plausible spellings once and
-// remember whichever actually returns transit.
+// OneMap rejects anything but MM-DD-YYYY for `date` (it says so in a 400), but
+// its docs and deployed build disagree on the casing of `mode`, and a mode it
+// cannot parse comes back 200 with walking-only itineraries rather than an
+// error. So only the casing is probed, and whichever returns transit is kept.
 export const REQUEST_VARIANTS = [
-  { id: "MODE_UPPER+MM-DD-YYYY", modeCase: "upper", dateFormat: "MM-DD-YYYY" },
-  { id: "mode_lower+MM-DD-YYYY", modeCase: "lower", dateFormat: "MM-DD-YYYY" },
-  { id: "MODE_UPPER+YYYY-MM-DD", modeCase: "upper", dateFormat: "YYYY-MM-DD" },
-  { id: "mode_lower+YYYY-MM-DD", modeCase: "lower", dateFormat: "YYYY-MM-DD" },
+  { id: "mode=TRANSIT", modeCase: "upper", dateFormat: "MM-DD-YYYY" },
+  { id: "mode=transit", modeCase: "lower", dateFormat: "MM-DD-YYYY" },
 ];
 
 export function buildRouteUrl({ start, end, routeType = "pt", mode = "transit", date, time, maxWalkDistance = 1000, numItineraries = 3, variant = REQUEST_VARIANTS[0] }) {
@@ -88,6 +85,12 @@ export function buildRouteUrl({ start, end, routeType = "pt", mode = "transit", 
     }
     const parts = parseDateInput(date);
     if (!parts) throw new Error(`OneMap routing got an unrecognised date: ${date}`);
+    // OneMap requires a real calendar date; catch 02-30 style input here rather
+    // than trading a round trip for the same complaint.
+    const probe = new Date(Date.UTC(parts.y, parts.m - 1, parts.d));
+    if (probe.getUTCMonth() !== parts.m - 1 || probe.getUTCDate() !== parts.d) {
+      throw new Error(`OneMap routing got an impossible date: ${date}`);
+    }
 
     url.searchParams.set("date", DATE_FORMATS[variant.dateFormat](parts));
     url.searchParams.set("time", time);
@@ -146,7 +149,11 @@ export async function oneMapRoute(params) {
     : REQUEST_VARIANTS;
 
   let walkOnlyFallback = null;
-  let lastError = null;
+  const failures = [];
+
+  const note = (variant, err) => {
+    failures.push({ variant: variant.id, message: String(err && err.message ? err.message : err), status: err && err.status, otpErrorId: err && err.otpErrorId });
+  };
 
   for (const variant of variants) {
     const url = buildRouteUrl({ ...params, variant });
@@ -155,11 +162,11 @@ export async function oneMapRoute(params) {
       const { res, body } = await callOnce(url, scheme);
 
       if (res.status === 401 || res.status === 403) {
-        lastError = upstreamError("OneMap routing", res, body);
+        note(variant, upstreamError("OneMap routing", res, body));
         continue; // try the next auth scheme
       }
       if (!res.ok) {
-        lastError = upstreamError("OneMap routing", res, body);
+        note(variant, upstreamError("OneMap routing", res, body));
         break; // a real upstream fault: another auth scheme will not help
       }
 
@@ -167,7 +174,7 @@ export async function oneMapRoute(params) {
       if (otp) {
         const e = new Error(otp.msg);
         e.otpErrorId = otp.id;
-        lastError = e;
+        note(variant, e);
         break; // try the next request variant
       }
 
@@ -184,5 +191,22 @@ export async function oneMapRoute(params) {
   }
 
   if (walkOnlyFallback) return walkOnlyFallback;
-  throw lastError || new Error("OneMap routing returned no usable response");
+  throw aggregateFailure(failures);
+}
+
+// Every spelling failed, so the message has to say what each one was told —
+// reporting only the last attempt hides the answer for the others.
+export function aggregateFailure(failures) {
+  if (!failures.length) return new Error("OneMap routing returned no usable response");
+
+  const distinct = [...new Set(failures.map((f) => f.message))];
+  const err = new Error(
+    distinct.length === 1
+      ? distinct[0]
+      : `OneMap routing failed. ${failures.map((f) => `${f.variant}: ${f.message}`).join(" · ")}`
+  );
+  err.status = failures[0].status;
+  err.otpErrorId = failures[0].otpErrorId;
+  err.attempts = failures;
+  return err;
 }
