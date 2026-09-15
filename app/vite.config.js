@@ -1,0 +1,52 @@
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+
+// Runs the api/*.js serverless functions inside the Vite dev server, so
+// `npm run dev` gives a working full-stack app locally without needing the
+// Vercel CLI. In production these files deploy as real serverless functions.
+function apiDevMiddleware() {
+  return {
+    name: 'local-api-functions',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url || !req.url.startsWith('/api/')) return next();
+
+        const url = new URL(req.url, 'http://localhost');
+        const fnName = url.pathname.replace('/api/', '').split('/')[0];
+        const modPath = `/api/${fnName}.js`;
+
+        let mod;
+        try {
+          mod = await server.ssrLoadModule(modPath);
+        } catch (err) {
+          res.statusCode = 404;
+          res.end(`No API function at ${modPath}: ${err.message}`);
+          return;
+        }
+
+        req.query = Object.fromEntries(url.searchParams);
+        res.status = (code) => {
+          res.statusCode = code;
+          return res;
+        };
+        res.json = (body) => {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(body));
+        };
+
+        try {
+          await mod.default(req, res);
+        } catch (err) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Local API function crashed', detail: String(err) }));
+        }
+      });
+    },
+  };
+}
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react(), apiDevMiddleware()],
+})

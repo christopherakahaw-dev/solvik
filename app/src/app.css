@@ -1,0 +1,28 @@
+.solvik-app-shell {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  height: 100dvh;
+  margin: 0 auto;
+  background: var(--surface-page);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* On real phone widths the app runs full-bleed edge to edge. On wider
+   viewports (desktop browsers testing the mobile build) it's presented as a
+   floating phone-sized card, matching the design's phone-frame proportions. */
+@media (min-width: 460px) {
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  .solvik-app-shell {
+    height: min(880px, 92dvh);
+    border-radius: 40px;
+    box-shadow: var(--shadow-sheet, 0 24px 60px rgba(32, 30, 29, 0.18));
+  }
+}

@@ -1,0 +1,21 @@
+:root{
+--font-core:"Archivo","Helvetica Neue",Helvetica,Arial,sans-serif;
+--font-display:var(--font-core);--font-body:var(--font-core);--font-numeric:var(--font-core);
+--weight-regular:400;--weight-medium:500;--weight-semibold:600;--weight-bold:700;--weight-heavy:800;
+
+--size-display:38px;--size-title:30px;--size-heading:22px;--size-subheading:19px;--size-body:17px;--size-body-sm:15px;--size-caption:13px;--size-micro:12px;--size-clock:30px;--size-count:36px;
+
+--leading-tight:1.04;--leading-snug:1.18;--leading-normal:1.35;--leading-relaxed:1.5;
+
+--tracking-display:-.022em;--tracking-title:-.018em;--tracking-heading:-.012em;--tracking-body:-.004em;--tracking-micro:.1em;--tracking-label:.13em;
+
+/* Role shorthands */
+--type-display:var(--weight-heavy) var(--size-display)/var(--leading-tight) var(--font-display);
+--type-title:var(--weight-bold) var(--size-title)/var(--leading-snug) var(--font-display);
+--type-heading:var(--weight-bold) var(--size-heading)/var(--leading-snug) var(--font-display);
+--type-body:var(--weight-regular) var(--size-body)/var(--leading-normal) var(--font-body);
+--type-body-strong:var(--weight-bold) var(--size-body)/var(--leading-normal) var(--font-body);
+--type-caption:var(--weight-medium) var(--size-caption)/var(--leading-normal) var(--font-body);
+--type-label:var(--weight-bold) var(--size-micro)/1.2 var(--font-body);
+--type-clock:var(--weight-bold) var(--size-clock)/1 var(--font-numeric);
+}
