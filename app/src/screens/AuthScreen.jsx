@@ -83,7 +83,7 @@ function Divider({ label }) {
 // ─── Login panel ─────────────────────────────────────────────────────────────
 
 function LoginPanel({ onSwitch }) {
-  const { login } = useAuth();
+  const { login, loginAsGuest } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
@@ -159,6 +159,23 @@ function LoginPanel({ onSwitch }) {
       <Button variant="secondary" size="md" fullWidth onClick={onSwitch} type="button">
         Create an account
       </Button>
+
+      <Divider label="or" />
+
+      <Button variant="ghost" size="md" fullWidth onClick={loginAsGuest} type="button" disabled={loading} iconLeft="user">
+        Continue as Guest
+      </Button>
+      <p
+        style={{
+          margin: 0,
+          font: "var(--type-caption)",
+          color: "var(--text-subtle)",
+          textAlign: "center",
+          textWrap: "pretty",
+        }}
+      >
+        Skip the account for now. Routing still works; saved places stay on this device.
+      </p>
     </form>
   );
 }

@@ -43,7 +43,7 @@ export function PlanScreen({ v }) {
               {user.name || "My account"}
             </span>
             <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 2 }}>
-              {user.email}
+              {user.isGuest ? "Browsing as guest" : user.email}
             </span>
           </span>
           <Button variant="ghost" size="sm" iconLeft="log-out" onClick={logout}>
