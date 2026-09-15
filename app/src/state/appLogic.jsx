@@ -394,7 +394,7 @@ export class AppLogic extends Component {
       const idx = this._navIdx || 0;
       if (idx !== this._scrolledTo && (!this.userScrolled || Date.now() - this.userScrolled > 6000)) {
         this._scrolledTo = idx;
-        this.stepsEl.scrollTo({ left: idx * (this.stepsEl.clientWidth + 10), behavior: "smooth" });
+        this.scrollToStep(idx);
         if (idx !== this.state.navPage) this.setState({ navPage: idx });
       }
     }
@@ -434,6 +434,8 @@ export class AppLogic extends Component {
     if (this.tt) clearTimeout(this.tt);
     if (this._searchT) clearTimeout(this._searchT);
     if (this._addSearchT) clearTimeout(this._addSearchT);
+    if (this._settleT) clearTimeout(this._settleT);
+    if (this._snapBackT) clearTimeout(this._snapBackT);
     this.stopTracking();
   }
 
@@ -751,23 +753,54 @@ export class AppLogic extends Component {
   bars(v) { return this.barsFor(this.level(v)); }
   snaps(H) { return [190, Math.round(H * 0.55), Math.round(H - 104)]; }
 
+  // Distance between two step cards. Measured rather than assumed, so a gap or
+  // width change can't put paging out of step with the layout.
+  stepPitch(el) {
+    const [first, second] = el.children;
+    if (first && second) return Math.max(1, second.offsetLeft - first.offsetLeft);
+    return Math.max(1, el.clientWidth + 10);
+  }
+
+  scrollToStep(idx, smooth = true) {
+    const el = this.stepsEl;
+    if (!el) return;
+    this._programmaticScroll = true;
+    el.scrollTo({ left: idx * this.stepPitch(el), behavior: smooth ? "smooth" : "auto" });
+  }
+
+  // Touch and pen are left to the browser: native scroll-snap handles a swipe
+  // far better than re-implementing momentum, and driving scrollLeft by hand at
+  // the same time made the two fight. Only a mouse, which has no native drag
+  // scrolling, is handled here.
   startStepsDrag(e) {
+    if (e.pointerType && e.pointerType !== "mouse") return;
     const el = this.stepsEl;
     if (!el || e.button === 2) return;
+
     const startX = e.clientX, startLeft = el.scrollLeft;
     this.setState({ stepsDrag: true });
+    try {
+      el.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Capture is an optimisation; dragging still works without it.
+    }
+
     const move = (ev) => {
-      const d = startX - ev.clientX;
-      el.scrollLeft = startLeft + d;
+      el.scrollLeft = startLeft + (startX - ev.clientX);
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      const w = Math.max(1, el.clientWidth + 10), page = Math.round(el.scrollLeft / w);
+      const page = Math.round(el.scrollLeft / this.stepPitch(el));
       this.userScrolled = Date.now();
-      this.setState({ stepsDrag: false, navPage: page });
-      el.scrollTo({ left: page * w, behavior: "smooth" });
+      this.setState({ navPage: page });
+      this.scrollToStep(page);
+      // Snap stays off until the programmatic scroll lands — re-enabling it
+      // mid-flight cancels that scroll and leaves the pager between cards.
+      if (this._snapBackT) clearTimeout(this._snapBackT);
+      this._snapBackT = setTimeout(() => this.setState({ stepsDrag: false }), 420);
     };
+
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     e.preventDefault();
@@ -933,13 +966,18 @@ export class AppLogic extends Component {
       stepsPagerStyle: {
         flex: "1 1 auto", width: "100%", minWidth: 0, maxWidth: "100%", minHeight: 0, display: s.navSheetH != null && s.navSheetH < 240 ? "none" : "flex", alignItems: "stretch", gap: 10, overflowX: "auto", overflowY: "hidden",
         scrollSnapType: s.stepsDrag ? "none" : "x mandatory", scrollbarWidth: "none",
-        cursor: s.stepsDrag ? "grabbing" : "grab", touchAction: "pan-x", userSelect: "none",
+        cursor: s.stepsDrag ? "grabbing" : "grab", userSelect: "none",
       },
       stepsDragStart: (e) => this.startStepsDrag(e),
       onStepsScroll: (e) => {
-        const el = e.currentTarget, p = Math.round(el.scrollLeft / Math.max(1, el.clientWidth + 10));
-        this.userScrolled = Date.now();
-        if (p !== s.navPage) this.setState({ navPage: p });
+        const el = e.currentTarget;
+        if (!this._programmaticScroll) this.userScrolled = Date.now();
+        if (this._settleT) clearTimeout(this._settleT);
+        this._settleT = setTimeout(() => {
+          this._programmaticScroll = false;
+          const p = Math.round(el.scrollLeft / this.stepPitch(el));
+          if (p !== this.state.navPage) this.setState({ navPage: p });
+        }, 120);
       },
       navDots: navArr.map((st, idx) => ({
         style: { width: idx === s.navPage ? 18 : 6, height: 6, borderRadius: 999, background: idx === s.navPage ? "var(--accent)" : idx < navIdx ? "var(--sand-400)" : "var(--sand-300)", transition: "width var(--dur-base) var(--ease-out),background-color var(--dur-base) var(--ease-standard)" },
@@ -966,7 +1004,7 @@ export class AppLogic extends Component {
           laneFillStyle: { position: "absolute", left: 11, top: ROW / 2, height: Math.round(span * prog), width: 4, background: "var(--accent)", borderRadius: 999, transition: "height 1s linear" },
           vehicleStyle: { position: "absolute", left: 0, top: Math.round(ROW / 2 + span * prog - 13), width: 26, height: 26, borderRadius: 999, background: "var(--accent)", color: "var(--text-on-accent)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(32,30,29,.3)", transition: "top 1s linear", zIndex: 2 },
           state: done ? "Done" : cur ? "Now" : "Next",
-          cardStyle: { flex: "0 0 100%", minWidth: 0, boxSizing: "border-box", scrollSnapAlign: "start", background: cur ? "var(--accent-soft)" : "var(--surface-card)", border: "1px solid " + (cur ? "transparent" : "var(--border-card)"), borderRadius: "var(--radius-card)", padding: "14px 15px", display: "flex", flexDirection: "column", gap: 7, overflowY: "auto", overscrollBehavior: "contain", opacity: done ? 0.62 : 1 },
+          cardStyle: { flex: "0 0 100%", minWidth: 0, boxSizing: "border-box", scrollSnapAlign: "start", background: cur ? "var(--accent-soft)" : "var(--surface-card)", border: "1px solid " + (cur ? "transparent" : "var(--border-card)"), borderRadius: "var(--radius-card)", padding: "14px 15px", display: "flex", flexDirection: "column", gap: 7, overflowY: "auto", overscrollBehaviorY: "contain", opacity: done ? 0.62 : 1 },
           iconWrapStyle: { flex: "none", width: 30, height: 30, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: cur ? "var(--accent)" : "var(--sand-100)", color: cur ? "var(--text-on-accent)" : "var(--text-body)" },
           chipStyle: { font: "var(--weight-bold) 10px/1 var(--font-body)", letterSpacing: ".06em", textTransform: "uppercase", color: cur ? "var(--text-accent)" : "var(--text-muted)", background: cur ? "var(--surface-card)" : "var(--sand-100)", borderRadius: 999, padding: "5px 9px" },
           titleStyle: { font: "var(--weight-heavy) var(--size-body)/1.3 var(--font-body)", color: "var(--text-strong)", textWrap: "pretty" },
