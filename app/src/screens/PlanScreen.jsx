@@ -1,4 +1,4 @@
-import { Icon, IconButton, Button, PromptCard, TripCard, SectionLabel, SearchField, Tag } from "../design-system";
+import { Icon, IconButton, Button, SectionLabel, SearchField, Tag } from "../design-system";
 import { styleText } from "../lib/styleText";
 
 export function PlanScreen({ v }) {
@@ -35,41 +35,6 @@ export function PlanScreen({ v }) {
         </div>
       )}
 
-      {v.calOff && <PromptCard icon="calendar" title="Connect Google Calendar" description="Pull meetings in, get leave-by nudges" actionLabel={v.calCta} onAction={v.connectCal} />}
-      {v.calOn && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ background: "var(--surface-card)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-card)", padding: "var(--pad-card-tight)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)" }} />
-              <div style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>Google Calendar connected</div>
-              <div style={{ marginLeft: "auto" }}>
-                <Button variant="ghost" size="sm" onClick={v.disconnectCal}>
-                  Disconnect
-                </Button>
-              </div>
-            </div>
-          </div>
-          {v.calTrips.map((c, i) => (
-            <div key={i} ref={c.setRef}>
-              <TripCard time={c.time} leaveAt={c.leave} title={c.title} route={c.route} tags={c.tags} highlighted={c.urgent} onClick={c.toggle} />
-              {c.open && (
-                <div style={{ margin: "8px 4px 0", padding: "14px 15px", borderRadius: "var(--radius-card)", background: "var(--accent-soft)", animation: "sv-rise 240ms cubic-bezier(.16,1,.3,1) both" }}>
-                  <div style={{ font: "var(--type-body)", color: "var(--text-body)", textWrap: "pretty" }}>{c.detail}</div>
-                  <div style={{ display: "flex", gap: 9, marginTop: 13, flexWrap: "wrap" }}>
-                    <Button size="md" iconRight="arrow-right" onClick={c.plan}>
-                      See routes
-                    </Button>
-                    <Button variant="secondary" size="md" iconLeft="bell" onClick={c.watch}>
-                      Alert me
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
           <SectionLabel>Your places</SectionLabel>
@@ -102,6 +67,11 @@ export function PlanScreen({ v }) {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          {!v.saved.length && (
+            <div style={{ padding: "16px 15px", borderRadius: 20, background: "var(--surface-card)", border: "1px solid var(--border-card)", font: "var(--type-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
+              No commutes yet. Add one and Solvik will watch it before you leave.
+            </div>
+          )}
           {v.saved.map((s, i) => (
             <button key={i} onClick={s.edit} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", padding: "14px 15px", borderRadius: 20, cursor: "pointer", background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
               <span style={{ flex: "none", font: "var(--weight-heavy) 19px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", letterSpacing: "-.02em", color: "var(--text-strong)" }}>{s.clock}</span>
@@ -182,6 +152,12 @@ export function AddCommuteSheet({ v }) {
                   <SearchField value={v.addQuery} placeholder="Search address, stop or area" icon="search" onChange={v.setAddQuery} />
                 </div>
                 <div style={{ flex: 1, minHeight: 0, overflowY: "auto", marginTop: 6 }}>
+                  {v.addSearchPending && (
+                    <div style={{ padding: "18px 4px", font: "var(--type-body)", color: "var(--text-muted)" }}>Searching…</div>
+                  )}
+                  {!v.addSearchPending && v.addSearchError && (
+                    <div style={{ padding: "18px 4px", font: "var(--type-body)", color: "var(--status-fault)", textWrap: "pretty" }}>{v.addSearchError}</div>
+                  )}
                   {v.addResults.map((r, i) => (
                     <button key={i} onClick={r.pick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid var(--border-card)", padding: "14px 2px", cursor: "pointer" }}>
                       <div style={{ flex: "none", width: 32, height: 32, borderRadius: 999, background: "var(--accent-soft)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>

@@ -1,10 +1,34 @@
 import { Component } from "react";
-import { searchPlaces, getPublicTransportRoute } from "../api/onemap";
+import { searchPlaces } from "../api/onemap";
 import { getTrainServiceAlerts } from "../api/lta";
-import { decodePolyline } from "../lib/polyline";
-import { getPosition, messageForError } from "../lib/geolocation";
+import { getTripOptions } from "../api/trips";
+import { getCrowding } from "../api/crowding";
+import { getNearestStop } from "../api/stop";
+import { getPosition, watchPosition, clearWatch, messageForError } from "../lib/geolocation";
+import { fractionAlong } from "../lib/geometry";
 
 const ONBOARDED_KEY = "solvik:onboarded";
+const PLACES_KEY = "solvik:places";
+const COMMUTES_KEY = "solvik:commutes";
+
+function loadStored(key, fallback) {
+  if (typeof localStorage === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function store(key, value) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage can be unavailable (private mode); the session still works.
+  }
+}
 
 // Used until the browser gives us a real fix: Blk 726 Yishun St 71, the
 // starting point the prototype was designed around.
@@ -20,20 +44,23 @@ export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 
 export class AppLogic extends Component {
   state = {
-    savedList: [
-      { from: "home", to: "work", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], mins: 462, mode: "Comfort" },
-      { from: "work", to: "home", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], mins: 1100, mode: "Comfort" },
-    ],
-    addEdit: null, placesOpen: false, plHome: "Yishun", plWork: "Raffles Place", plSchool: "",
+    savedList: loadStored(COMMUTES_KEY, []),
+    ...loadStored(PLACES_KEY, { plHome: "", plWork: "", plSchool: "" }),
+    addEdit: null, placesOpen: false,
     addOpen: false, addFrom: "home", addTo: "work", addDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-    addMode: "Comfort", addMins: 462, commutes: [], fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
+    addMode: "Comfort", addMins: 462, fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
     hoverTab: null, pressTab: null, sheetH: 430, sheetDrag: false, navRoute: null, navStart: null,
     navPage: 0, stepsDrag: false, pin: null,
     screen: typeof localStorage !== "undefined" && localStorage.getItem(ONBOARDED_KEY) ? "map" : "intro",
-    mode: "comfort", route: 0, fc: 2,
-    filter: "all", rep: "pick", repType: null, sev: 1, cal: "off", points: 2480, toast: null, tick: 0,
+    rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
     query: "", dest: null, searchOpen: false, tripMode: "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, locating: false, recenterToken: 0,
+    // Remote data, each held with its own pending/error so screens can say
+    // exactly what is missing instead of showing invented values.
+    trips: { key: null, options: [], pending: false, error: null },
+    crowd: { stations: [], slots: [], at: null, pending: false, error: null },
+    faults: { items: [], pending: false, error: null },
+    stop: { data: null, pending: false, error: null },
   };
 
   currentOrigin() {
@@ -61,33 +88,21 @@ export class AppLogic extends Component {
   };
 
   addCommuteVals(s) {
+    // Only places the user actually told us about, plus anything they've
+    // searched for in this sheet. Nothing invented.
     const PLACES = [
-      { id: "home", label: "Home", place: s.plHome || "Yishun", mins: 47 },
-      { id: "work", label: "Work", place: s.plWork || "Raffles Place", mins: 44 },
-      { id: "bishan", label: "Bishan", place: "Bishan", mins: 26 },
-      { id: "ntu", label: "NTU", place: "Jurong West", mins: 62 },
-      { id: "clinic", label: "Polyclinic", place: "Ang Mo Kio", mins: 22 },
-      { id: "changi", label: "Airport", place: "Changi T3", mins: 58 },
-    ].concat(s.addExtra || []);
-    const DIRECTORY = [
-      { id: "d-ttsh", label: "Tan Tock Seng Hospital", place: "Novena", detail: "11 Jalan Tan Tock Seng · 308433", kind: "Address", mins: 38 },
-      { id: "d-jem", label: "Jem", place: "Jurong East", detail: "50 Jurong Gateway Rd · 608549", kind: "Mall", mins: 54 },
-      { id: "d-amk-hub", label: "AMK Hub", place: "Ang Mo Kio", detail: "53 Ang Mo Kio Ave 3 · 569933", kind: "Mall", mins: 21 },
-      { id: "d-nus", label: "National University of Singapore", place: "Kent Ridge", detail: "21 Lower Kent Ridge Rd · 119077", kind: "Campus", mins: 57 },
-      { id: "d-woodlands", label: "Woodlands Interchange", place: "Woodlands", detail: "30 Woodlands Ave 2 · 738343", kind: "Bus stop", mins: 19 },
-      { id: "d-sgh", label: "Singapore General Hospital", place: "Outram", detail: "1 Hospital Cres · 169608", kind: "Address", mins: 49 },
-      { id: "d-tampines", label: "Tampines MRT", place: "Tampines", detail: "20 Tampines Central 1 · 529538", kind: "MRT", mins: 52 },
-      { id: "d-marina", label: "Marina Bay Financial Centre", place: "Marina Bay", detail: "8 Marina Blvd · 018981", kind: "Office", mins: 46 },
-      { id: "d-sengkang", label: "Sengkang Riverside", place: "Sengkang", detail: "Anchorvale St · 544644", kind: "Area", mins: 31 },
-      { id: "d-changi-biz", label: "Changi Business Park", place: "Expo", detail: "1 Changi Business Park Ave 1 · 486036", kind: "Office", mins: 51 },
-    ];
+      s.plHome && { id: "home", label: "Home", place: s.plHome },
+      s.plWork && { id: "work", label: "Work", place: s.plWork },
+      s.plSchool && { id: "school", label: "School", place: s.plSchool },
+    ].filter(Boolean).concat(s.addExtra || []);
+    const addSearch = s.addSearchResults || { items: [], pending: false, error: null, query: "" };
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const from = s.addFrom || "home", to = s.addTo || "work";
     const days = s.addDays || ["Mon", "Tue", "Wed", "Thu", "Fri"];
     const mode = s.addMode || "Comfort";
     const mins = s.addMins == null ? 462 : s.addMins;
-    const fromP = PLACES.find((p) => p.id === from) || PLACES[0];
-    const toP = PLACES.find((p) => p.id === to) || PLACES[1];
+    const fromP = PLACES.find((p) => p.id === from) || PLACES[0] || null;
+    const toP = PLACES.find((p) => p.id === to) || PLACES[1] || null;
     const clock = (m) => String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
     const weekday = ["Mon", "Tue", "Wed", "Thu", "Fri"];
     const dayLabel =
@@ -102,10 +117,10 @@ export class AppLogic extends Component {
       (on
         ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);"
         : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);");
-    const aq = (s.addQuery || "").trim().toLowerCase();
-    const aResults = (aq ? DIRECTORY.filter((p) => (p.label + " " + p.place + " " + p.detail).toLowerCase().indexOf(aq) >= 0) : DIRECTORY).slice(0, 7);
-    const invalid = from === to || days.length === 0;
-    const name = fromP.label + " → " + toP.label;
+    const aq = (s.addQuery || "").trim();
+    const aResults = addSearch.query === aq ? addSearch.items : [];
+    const invalid = !fromP || !toP || from === to || days.length === 0;
+    const name = invalid ? "" : fromP.label + " → " + toP.label;
     return {
       addOpen: !!s.addOpen,
       closeAdd: () => this.setState({ addOpen: false, addEdit: null }),
@@ -118,17 +133,26 @@ export class AppLogic extends Component {
       addSearchClose: () => this.setState({ addSearchFor: null, addQuery: "" }),
       addQuery: s.addQuery || "",
       setAddQuery: (v) => this.setState({ addQuery: typeof v === "string" ? v : v && v.target ? v.target.value : "" }),
-      addNoResults: !!aq && aResults.length === 0,
+      addNoResults: !!aq && !addSearch.pending && !addSearch.error && aResults.length === 0,
       addResults: aResults.map((p) => ({
-        label: p.label, detail: p.detail, kind: p.kind,
+        label: p.name,
+        detail: p.detail,
+        kind: p.kind,
         pick: () => {
-          const extra = (s.addExtra || []).filter((x) => x.id !== p.id).concat([{ id: p.id, label: p.label, place: p.place, mins: p.mins }]).slice(-4);
+          const entry = { id: p.id, label: p.name, place: p.detail, ll: p.ll };
+          const extra = (s.addExtra || []).filter((x) => x.id !== p.id).concat([entry]).slice(-4);
           const key = s.addSearchFor === "to" ? "addTo" : "addFrom";
           this.setState({ addExtra: extra, [key]: p.id, addSearchFor: null, addQuery: "" });
         },
       })),
+      addSearchPending: !!addSearch.pending,
+      addSearchError: addSearch.error || null,
       addTime: clock(mins),
-      addArrive: invalid ? "Pick two different places and at least one day." : "Arrive about " + clock(mins + toP.mins) + " · " + toP.mins + " min door to door",
+      addArrive: !PLACES.length
+        ? "Add your home and work addresses first, or search for a place."
+        : invalid
+        ? "Pick two different places and at least one day."
+        : "Solvik checks this trip 25 min before you leave.",
       addTimeUp: () => this.setState({ addMins: mins + 5 }),
       addTimeDown: () => this.setState({ addMins: mins - 5 }),
       addDaysLabel: dayLabel,
@@ -163,8 +187,8 @@ export class AppLogic extends Component {
         this.flash("Commute removed");
       },
       saved: (s.savedList || []).map((c, i) => {
-        const f = PLACES.find((p) => p.id === c.from) || PLACES[0];
-        const t = PLACES.find((p) => p.id === c.to) || PLACES[1];
+        const f = PLACES.find((p) => p.id === c.from) || { label: c.from, place: c.from };
+        const t = PLACES.find((p) => p.id === c.to) || { label: c.to, place: c.to };
         const ds = c.days || [];
         const dl =
           ds.length === 0 ? "no days"
@@ -183,14 +207,15 @@ export class AppLogic extends Component {
       }),
       ...(() => {
         const list = s.savedList || [];
-        const nowMins = 7 * 60 + 21;
+        const now = new Date();
+        const nowMins = now.getHours() * 60 + now.getMinutes();
         const next = list.slice().sort((a, b) => {
           const da = (a.mins - nowMins + 1440) % 1440, db = (b.mins - nowMins + 1440) % 1440;
           return da - db;
         })[0];
         if (!next) return { planHasNext: false, planNextName: "", planNextLeave: "", planNextIn: "", planNextRoute: "", planNextNote: "", planNextCrowd: "", startNext: () => {}, watchNext: () => {} };
-        const f = PLACES.find((p) => p.id === next.from) || PLACES[0];
-        const t = PLACES.find((p) => p.id === next.to) || PLACES[1];
+        const f = PLACES.find((p) => p.id === next.from) || { label: next.from, place: next.from };
+        const t = PLACES.find((p) => p.id === next.to) || { label: next.to, place: next.to };
         const inMins = (next.mins - nowMins + 1440) % 1440;
         return {
           planHasNext: true,
@@ -198,8 +223,13 @@ export class AppLogic extends Component {
           planNextLeave: clock(next.mins),
           planNextIn: inMins < 60 ? "leave in " + inMins + " min" : "leave in " + Math.floor(inMins / 60) + " h " + (inMins % 60) + " min",
           planNextRoute: f.place + " → " + t.place,
-          planNextNote: "Arrive about " + clock(next.mins + t.mins) + " · " + t.mins + " min door to door · " + next.mode.toLowerCase() + " routes",
-          planNextCrowd: inMins < 40 ? "Filling now" : "Light now",
+          planNextNote: next.mode.toLowerCase() + " routes · checked 25 min before you leave",
+          planNextCrowd: (() => {
+            const stations = (s.crowd && s.crowd.stations) || [];
+            if (!stations.length) return "";
+            const busy = stations.filter((st) => st.level === "busy").length;
+            return busy ? busy + " busy now" : "Network light";
+          })(),
           startNext: () => { this.setState({ screen: "map" }); this.flash("Routes for " + f.label + " → " + t.label + " · leave " + clock(next.mins)); },
           watchNext: () => this.flash("Alert set · 25 min before " + clock(next.mins)),
         };
@@ -232,128 +262,110 @@ export class AppLogic extends Component {
   }
 
   forecastVals(s) {
-    const SLOTS = [
-      { label: "Now", clock: "07:21", peak: 0.92 },
-      { label: "08:00", clock: "08:00", peak: 1 },
-      { label: "09:00", clock: "09:00", peak: 0.74 },
-      { label: "12:00", clock: "12:00", peak: 0.4 },
-      { label: "17:30", clock: "17:30", peak: 0.86 },
-      { label: "19:00", clock: "19:00", peak: 0.58 },
-    ];
-    const i = Math.min(s.fcSlot || 0, SLOTS.length - 1);
-    const slot = SLOTS[i];
-    const AREAS = [
-      { id: "city", name: "City Hall / Raffles Place", ll: [1.293, 103.852], radius: 1500, base: 1, detail: "NSL + EWL interchange · platform queueing" },
-      { id: "bishan", name: "Bishan", ll: [1.3509, 103.8485], radius: 1250, base: 0.95, detail: "Signal fault · bus bridging in place" },
-      { id: "jurong", name: "Jurong East", ll: [1.333, 103.742], radius: 1500, base: 0.72, detail: "Westbound boarding at the terminus" },
-      { id: "woodlands", name: "Woodlands", ll: [1.437, 103.7865], radius: 1500, base: 0.62, detail: "TEL + NSL transfers, heavy northbound" },
-      { id: "yishun", name: "Yishun", ll: [1.4295, 103.835], radius: 1200, base: 0.55, detail: "Your home cluster · southbound platform" },
-      { id: "changi", name: "Changi", ll: [1.3563, 103.9865], radius: 1600, base: 0.3, detail: "Airport line running light" },
-    ];
-    const level = (v) => (v >= 0.72 ? "busy" : v >= 0.45 ? "moderate" : "light");
-    const word = { busy: "Busy", moderate: "Filling", light: "Light" };
-    const scored = AREAS.map((a) => {
-      const v = Math.max(0.12, Math.min(0.99, a.base * slot.peak));
-      const lv = level(v);
-      const prev = i > 0 ? a.base * SLOTS[i - 1].peak : a.base * 0.82;
-      return { ...a, v, lv, rising: v > prev + 0.01 };
-    }).sort((a, b) => b.v - a.v);
-    const busiest = scored[0];
+    const crowd = s.crowd || { stations: [], slots: [] };
+    const stations = crowd.stations || [];
+    const level = (st) => st.level || "light";
     const tone = (lv) => "var(--crowd-" + lv + ")";
-    const FAULTS = [
-      { line: "NSL", tag: "Fault", sev: "fault", time: "07:04", title: "Signal fault between Ang Mo Kio and Newton", detail: "Trains run at reduced speed, adding about 12 min. Free bus bridging at exits A and C." },
-      { line: "EWL", tag: "Delay", sev: "warn", time: "06:48", title: "Westbound delays after a door fault at Bugis", detail: "The faulty train was withdrawn at Lavender. Expect 5–7 min longer waits until 09:00." },
-      { line: "BUS 969", tag: "Diversion", sev: "warn", time: "05:30", title: "Diverted around Woodlands Ave 2 roadworks", detail: "Three stops skipped in both directions. Nearest alternative: stop 46201 on Ave 6." },
-      { line: "TEL", tag: "Lift", sev: "info", time: "Mon", title: "Newton lift out of service until Thursday", detail: "Step-free route is via Little India. Staff assistance available at the passenger service centre." },
-    ];
-    const sevTone = { fault: "var(--status-fault)", warn: "var(--status-warn)", info: "var(--sand-500)" };
-    const fcRead = s.fcRead || [];
-    const unread = FAULTS.map((f, idx) => idx).filter((idx) => fcRead.indexOf(idx) < 0 && FAULTS[idx].sev !== "info");
-    const pinned = s.crowdOn !== false ? scored.find((a) => a.id === s.fcPin) || null : null;
+    const word = { busy: "Busy", moderate: "Filling", light: "Light" };
+
+    const pinned = s.crowdOn !== false ? stations.find((st) => st.code === s.fcPin) || null : null;
     const watched = s.fcWatch || [];
     const crowdOn = s.crowdOn !== false;
-    const zones = scored.map((a) => ({ id: a.id, ll: a.ll, radius: a.radius, level: a.lv, label: a.name.split(" / ")[0], pct: Math.round(a.v * 100) + "%", selected: a.id === s.fcPin }));
+
+    const zones = stations.map((st) => ({
+      id: st.code,
+      ll: [st.lat, st.lng],
+      // Station-scale circles, not the prototype's district blobs.
+      radius: 320,
+      level: level(st),
+      label: st.name,
+      pct: st.pct != null ? st.pct + "%" : "",
+      selected: st.code === s.fcPin,
+    }));
+
+    const faults = s.faults || { items: [], error: null };
+    const sevTone = { fault: "var(--status-fault)", warn: "var(--status-warn)", info: "var(--sand-500)" };
+    const fcRead = s.fcRead || [];
+    const unread = faults.items.map((f, i) => i).filter((i) => fcRead.indexOf(i) < 0);
+
+    const slots = crowd.slots || [];
+    const slotIndex = Math.min(s.fcSlot || 0, Math.max(0, slots.length - 1));
+    const slotLabel = (iso) => {
+      const d = new Date(iso);
+      return isNaN(d) ? String(iso) : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    };
+
     return {
-      fcMapCenter: [1.3521, 103.83],
-      fcClock: slot.clock,
       crowdOn,
+      crowdPending: !!crowd.pending,
+      crowdError: crowd.error || null,
+      crowdEmpty: !crowd.pending && !crowd.error && stations.length === 0,
       mapZones: crowdOn && !s.dest ? zones : [],
       showCrowdBar: crowdOn && !s.dest && !s.searchOpen && !(s.query || "").trim() && !s.fcPin && !s.pin,
       toggleCrowd: () => this.setState({ crowdOn: !crowdOn, fcPin: null }),
       crowdToggleLabel: crowdOn ? "Crowding layer on" : "Crowding layer off",
       crowdToggleStyle: "position:relative;flex:none;width:46px;height:46px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;box-shadow:0 4px 14px rgba(32,30,29,.18);" +
         (crowdOn ? "background:var(--accent);color:var(--text-on-accent,#fff);" : "background:var(--surface-card);color:var(--text-body);"),
-      fcZones: zones,
       fcPickZone: (id) => this.setState({ fcPin: id, fcAlerts: false, pin: null, searchOpen: false }),
       fcRoutesHere: () => {
         if (!pinned) return;
-        this.setState({ dest: { name: pinned.name, detail: word[pinned.lv] + " now · " + pinned.detail, ll: pinned.ll }, fcPin: null, tripRoute: 0 });
+        this.setState({
+          dest: { name: pinned.name, detail: word[level(pinned)] + " now · platform crowding from LTA", ll: [pinned.lat, pinned.lng] },
+          fcPin: null,
+          tripRoute: 0,
+        });
       },
       fcClearPin: () => this.setState({ fcPin: null }),
-      fcNoPin: !pinned,
-      fcWatchLabel: pinned && watched.indexOf(pinned.id) >= 0 ? "Watching" : "Alert me",
+      fcWatchLabel: pinned && watched.indexOf(pinned.code) >= 0 ? "Watching" : "Alert me",
       fcWatchPinned: () => {
         if (!pinned) return;
-        const on = watched.indexOf(pinned.id) >= 0;
-        this.setState({ fcWatch: on ? watched.filter((x) => x !== pinned.id) : watched.concat([pinned.id]) });
-        this.flash(on ? "Stopped watching " + pinned.name.split(" / ")[0] : "Alerts on for " + pinned.name.split(" / ")[0]);
+        const on = watched.indexOf(pinned.code) >= 0;
+        this.setState({ fcWatch: on ? watched.filter((x) => x !== pinned.code) : watched.concat([pinned.code]) });
+        this.flash(on ? "Stopped watching " + pinned.name : "Alerts on for " + pinned.name);
       },
       fcPinned: pinned && {
         name: pinned.name,
-        detail: pinned.detail,
-        pct: Math.round(pinned.v * 100) + "%",
-        word: word[pinned.lv] + (pinned.rising ? " · rising" : " · easing"),
-        dotStyle: "flex:none;margin-top:4px;width:12px;height:12px;border-radius:999px;background:" + tone(pinned.lv),
-        pctStyle: "font:var(--weight-heavy) 24px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:" + tone(pinned.lv),
-        hours: SLOTS.map((sl, n) => {
-          const v = Math.max(0.12, Math.min(0.99, pinned.base * sl.peak));
-          const lv = level(v);
-          const on = n === i;
-          return {
-            label: sl.label,
-            pick: () => this.setState({ fcSlot: n }),
-            barStyle: "display:block;width:100%;border-radius:6px 6px 3px 3px;height:" + Math.round(16 + v * 42) + "px;background:" + tone(lv) + ";opacity:" + (on ? 1 : 0.42) + (on ? ";box-shadow:0 0 0 1.5px var(--text-strong)" : ""),
-            labelStyle: "display:block;font:" + (on ? "var(--weight-bold)" : "var(--weight-regular,400)") + " 10.5px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:" + (on ? "var(--text-strong)" : "var(--text-muted)"),
-          };
-        }),
+        detail: pinned.code + " · platform crowding, LTA DataMall",
+        pct: pinned.pct != null ? pinned.pct + "%" : "",
+        word: word[level(pinned)],
+        dotStyle: "flex:none;margin-top:4px;width:12px;height:12px;border-radius:999px;background:" + tone(level(pinned)),
+        pctStyle: "font:var(--weight-heavy) 24px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:" + tone(level(pinned)),
+        hours: [],
       },
-      fcHeadline: (i === 0 ? "Live · " : slot.clock + " · ") + word[busiest.lv].toLowerCase() + " around " + busiest.name.split(" / ")[0],
       fcLegend: ["busy", "moderate", "light"].map((lv) => ({
         label: { busy: "Busy — expect to stand", moderate: "Filling up", light: "Light — seats likely" }[lv],
         short: { busy: "Busy", moderate: "Filling", light: "Light" }[lv],
         swatch: "width:9px;height:9px;border-radius:999px;flex:none;background:" + tone(lv) + ";opacity:.9",
       })),
-      fcSlots: SLOTS.map((sl, n) => {
-        const on = n === i;
-        const lv = level(Math.min(0.99, 1 * sl.peak));
+      // Scrubber slots are the forecast intervals LTA actually publishes.
+      fcSlots: slots.map((iso, n) => {
+        const on = n === slotIndex;
         return {
-          label: sl.label,
+          label: n === 0 ? "Now" : slotLabel(iso),
           pick: () => this.setState({ fcSlot: n }),
           style: "flex:none;display:flex;flex-direction:column;align-items:center;gap:7px;padding:9px 13px;border-radius:14px;cursor:pointer;transition:background .16s,border-color .16s;" +
             (on ? "background:var(--accent);border:1.5px solid var(--accent);" : "background:var(--sand-100);border:1.5px solid var(--border-card);"),
           timeStyle: "font:var(--weight-bold) 12.5px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:" + (on ? "#fff" : "var(--text-body)"),
-          barStyle: "display:block;width:30px;height:4px;border-radius:999px;background:" + (on ? "#fff" : tone(lv)) + ";opacity:" + (on ? 0.9 : 0.8),
+          barStyle: "display:block;width:30px;height:4px;border-radius:999px;background:" + (on ? "#fff" : "var(--sand-400)") + ";opacity:" + (on ? 0.9 : 0.8),
         };
       }),
-      fcAreas: scored.slice(0, 4).map((a) => ({
-        name: a.name, detail: a.detail, pct: Math.round(a.v * 100) + "%", trend: a.rising ? "rising" : "easing",
-        dotStyle: "flex:none;width:12px;height:12px;border-radius:999px;background:" + tone(a.lv) + (a.lv === "busy" ? ";box-shadow:0 0 0 4px color-mix(in oklch, var(--crowd-busy) 18%, transparent)" : ""),
-        pctStyle: "font:var(--weight-heavy) 17px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:" + tone(a.lv),
-      })),
-      fcFaults: (s.liveFaults || FAULTS).map((f, fi) => ({
+      fcFaults: faults.items.map((f, fi) => ({
         ...f,
         readLabel: fcRead.indexOf(fi) >= 0 ? "Read · tap to mark unread" : "Tap to mark as read",
         readDotStyle: fcRead.indexOf(fi) >= 0 ? "display:none" : "width:7px;height:7px;border-radius:999px;background:var(--status-fault)",
         toggleRead: () => this.setState({ fcRead: fcRead.indexOf(fi) >= 0 ? fcRead.filter((x) => x !== fi) : fcRead.concat([fi]) }),
-        cardStyle: "width:100%;text-align:left;display:block;cursor:pointer;padding:13px 14px;border-radius:16px;background:var(--surface-card);opacity:" + (fcRead.indexOf(fi) >= 0 ? ".6" : "1") + ";border:1px solid " + (fcRead.indexOf(fi) >= 0 ? "var(--border-card)" : f.sev === "info" ? "var(--border-card)" : sevTone[f.sev]),
-        badgeStyle: "flex:none;padding:3px 8px;border-radius:999px;font:var(--weight-heavy) 11px/1.3 var(--font-body);letter-spacing:.02em;color:#fff;background:" + sevTone[f.sev],
+        cardStyle: "width:100%;text-align:left;display:block;cursor:pointer;padding:13px 14px;border-radius:16px;background:var(--surface-card);opacity:" + (fcRead.indexOf(fi) >= 0 ? ".6" : "1") + ";border:1px solid " + (fcRead.indexOf(fi) >= 0 ? "var(--border-card)" : sevTone[f.sev] || "var(--border-card)"),
+        badgeStyle: "flex:none;padding:3px 8px;border-radius:999px;font:var(--weight-heavy) 11px/1.3 var(--font-body);letter-spacing:.02em;color:#fff;background:" + (sevTone[f.sev] || "var(--sand-500)"),
         tagStyle: "font:var(--weight-semibold) 11px/1 var(--font-body);letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)",
       })),
+      faultsPending: !!faults.pending,
+      faultsError: faults.error || null,
+      faultsClear: !faults.pending && !faults.error && faults.items.length === 0,
       fcFaultCount: unread.length ? unread.length + " unread" : "All read",
       fcFaultN: unread.length,
       fcHasFaults: unread.length > 0,
       fcHasUnread: unread.length > 0,
-      fcMarkAllRead: () => { this.setState({ fcRead: FAULTS.map((f, idx) => idx) }); this.flash("All alerts marked read"); },
+      fcMarkAllRead: () => { this.setState({ fcRead: faults.items.map((f, i) => i) }); this.flash("All alerts marked read"); },
       fcAlertsOpen: !!s.fcAlerts,
       fcToggleAlerts: () => this.setState({ fcAlerts: !s.fcAlerts }),
       fcBellStyle: "position:relative;flex:none;margin-left:auto;width:46px;height:46px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;color:" +
@@ -373,21 +385,53 @@ export class AppLogic extends Component {
       }
     }
     if (this.state.query !== prevState.query) this.scheduleLiveSearch();
-    if (this.state.dest !== prevState.dest && this.state.dest) this.scheduleLiveRoute();
-    // A new fix moves the trip origin, so the drawn route has to follow it.
-    if (this.state.userLoc !== prevState.userLoc && this.state.dest) this.scheduleLiveRoute();
+    if (this.state.addQuery !== prevState.addQuery) this.scheduleAddSearch();
+
+    // Anything that changes what a journey looks like re-asks OneMap.
+    const s = this.state;
+    if (s.dest && (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.userLoc !== prevState.userLoc)) {
+      this.loadTripOptions();
+    }
+    // Scrubbing to another forecast slot re-asks LTA.
+    if (s.fcSlot !== prevState.fcSlot) this.loadCrowding(s.crowd.slots[s.fcSlot] || null);
+
+    if (s.savedList !== prevState.savedList) store(COMMUTES_KEY, s.savedList);
+    if (s.plHome !== prevState.plHome || s.plWork !== prevState.plWork || s.plSchool !== prevState.plSchool) {
+      store(PLACES_KEY, { plHome: s.plHome, plWork: s.plWork, plSchool: s.plSchool });
+    }
+
+    if (s.screen === "nav" && prevState.screen !== "nav") this.startTracking();
+    if (s.screen !== "nav" && prevState.screen === "nav") this.stopTracking();
   }
   componentDidMount() {
     this.t0 = Date.now();
     this.iv = setInterval(() => this.setState({ tick: Date.now() }), 1000);
-    this.loadLiveFaults();
+    this.loadFaults();
+    this.loadCrowding();
     this.findNearestStop();
   }
   componentWillUnmount() {
     clearInterval(this.iv);
     if (this.tt) clearTimeout(this.tt);
     if (this._searchT) clearTimeout(this._searchT);
+    if (this._addSearchT) clearTimeout(this._addSearchT);
+    this.stopTracking();
   }
+
+  // Turn-by-turn follows the real position rather than a simulated clock.
+  startTracking = () => {
+    this.stopTracking();
+    this.watchId = watchPosition(
+      (fix) => this.setState({ userLoc: fix.coords, userAccuracy: fix.accuracy }),
+      (err) => this.flash(messageForError(err && err.code))
+    );
+  };
+  stopTracking = () => {
+    if (this.watchId != null) {
+      clearWatch(this.watchId);
+      this.watchId = null;
+    }
+  };
 
   // Live OneMap place search, debounced. Falls back to the illustrative
   // PLACES list in renderVals() whenever this fails or a key isn't set.
@@ -395,7 +439,7 @@ export class AppLogic extends Component {
     if (this._searchT) clearTimeout(this._searchT);
     const query = this.state.query;
     if (!query || query.trim().length < 2) {
-      this.setState({ liveResults: null, searchPending: false, searchOffline: false });
+      this.setState({ liveResults: null, searchPending: false, searchError: null });
       return;
     }
     this.setState({ searchPending: true });
@@ -405,7 +449,7 @@ export class AppLogic extends Component {
         if (this.state.query !== query) return;
         this.setState({
           searchPending: false,
-          searchOffline: false,
+          searchError: null,
           liveResults: {
             query,
             items: (items || []).map((r) => ({
@@ -420,62 +464,112 @@ export class AppLogic extends Component {
         // Live search is unreachable — fall back to the built-in place list,
         // labelled as such so it never reads as live data.
         if (this.state.query !== query) return;
-        this.setState({ liveResults: null, searchPending: false, searchOffline: true });
+        this.setState({ liveResults: null, searchPending: false, searchError: "Can't reach OneMap — check your connection" });
       }
     }, 350);
   };
 
-  // Live OneMap public-transport routing for the picked destination. Falls
-  // back to the synthetic curved line in renderVals() when it fails.
-  scheduleLiveRoute = () => {
-    const dest = this.state.dest;
-    if (!dest || !dest.ll) return;
-    getPublicTransportRoute(this.currentOrigin(), dest.ll)
-      .then((data) => {
-        const itin = data && data.plan && data.plan.itineraries && data.plan.itineraries[0];
-        if (!itin) return;
-        const coords = [];
-        (itin.legs || []).forEach((leg) => {
-          if (leg.legGeometry && leg.legGeometry.points) coords.push(...decodePolyline(leg.legGeometry.points));
+  // Debounced OneMap search inside the add-commute sheet.
+  scheduleAddSearch = () => {
+    if (this._addSearchT) clearTimeout(this._addSearchT);
+    const query = (this.state.addQuery || "").trim();
+    if (query.length < 2) {
+      this.setState({ addSearchResults: { items: [], pending: false, error: null, query } });
+      return;
+    }
+    this.setState({ addSearchResults: { items: [], pending: true, error: null, query } });
+    this._addSearchT = setTimeout(() => {
+      searchPlaces(query)
+        .then((items) => {
+          if ((this.state.addQuery || "").trim() !== query) return;
+          this.setState({
+            addSearchResults: {
+              query,
+              pending: false,
+              error: null,
+              items: (items || []).map((r, i) => ({
+                id: `om-${r.postal || i}-${r.lat}`,
+                name: r.name || r.address,
+                detail: r.postal ? `${r.address} · ${r.postal}` : r.address,
+                kind: "Address",
+                ll: [r.lat, r.lng],
+              })),
+            },
+          });
+        })
+        .catch((err) => {
+          if ((this.state.addQuery || "").trim() !== query) return;
+          this.setState({ addSearchResults: { items: [], pending: false, error: String(err.message || err), query } });
         });
-        if (coords.length > 1 && this.state.dest && this.state.dest.name === dest.name) {
-          this.setState({ liveRoute: { destKey: dest.name, coords } });
-        }
-      })
-      .catch(() => {});
+    }, 350);
   };
 
-  // Live LTA DataMall train service alerts, replacing the illustrative
-  // FAULTS list in forecastVals() when available.
-  loadLiveFaults = () => {
+  // Real journey options for the picked destination and mode. No fallback:
+  // a failure surfaces in the sheet rather than being papered over.
+  loadTripOptions = () => {
+    const { dest, tripMode } = this.state;
+    if (!dest || !dest.ll) return;
+    const key = `${dest.name}|${tripMode}|${this.currentOrigin().join(",")}`;
+    if (this.state.trips.key === key && this.state.trips.options.length) return;
+
+    this.setState({ trips: { key, options: [], pending: true, error: null } });
+    getTripOptions(this.currentOrigin(), dest.ll, tripMode, dest.name)
+      .then((options) => {
+        if (this.state.dest !== dest || this.state.tripMode !== tripMode) return;
+        this.setState({ trips: { key, options, pending: false, error: null }, tripRoute: 0 });
+      })
+      .catch((err) => {
+        if (this.state.dest !== dest) return;
+        this.setState({ trips: { key, options: [], pending: false, error: String(err.message || err) } });
+      });
+  };
+
+  // Live platform crowding, optionally for a forecast slot.
+  loadCrowding = (at) => {
+    this.setState((st) => ({ crowd: { ...st.crowd, pending: true, error: null } }));
+    getCrowding(at)
+      .then((data) => this.setState({ crowd: { ...data, pending: false, error: null } }))
+      .catch((err) =>
+        this.setState((st) => ({ crowd: { ...st.crowd, stations: [], pending: false, error: String(err.message || err) } }))
+      );
+  };
+
+  // Live LTA DataMall train service alerts.
+  loadFaults = () => {
+    this.setState((st) => ({ faults: { ...st.faults, pending: true, error: null } }));
     getTrainServiceAlerts()
       .then((data) => {
-        const alerts = data && data.Status === 2 && Array.isArray(data.AffectedSegments) ? data.AffectedSegments : null;
-        if (!alerts || !alerts.length) return;
-        const liveFaults = alerts.slice(0, 6).map((seg) => ({
-          line: seg.Line, tag: "Delay", sev: "warn", time: "Now",
-          title: (seg.Line || "Line") + " — " + (seg.Direction || "") + " running slower",
-          detail: "Between " + (seg.StartStation || "?") + " and " + (seg.EndStation || "?") + ". " + (seg.Stations || ""),
+        const segments = data && Array.isArray(data.AffectedSegments) ? data.AffectedSegments : [];
+        const items = segments.map((seg) => ({
+          line: seg.Line || "Rail",
+          tag: "Delay",
+          sev: "warn",
+          time: "Now",
+          title: `${seg.Line || "Line"} — ${seg.Direction || "service"} affected`,
+          detail: [
+            seg.StartStation && seg.EndStation ? `Between ${seg.StartStation} and ${seg.EndStation}.` : "",
+            seg.Stations ? `Stations: ${seg.Stations}` : "",
+          ].filter(Boolean).join(" "),
         }));
-        this.setState({ liveFaults });
+        this.setState({ faults: { items, pending: false, error: null } });
       })
-      .catch(() => {});
+      .catch((err) =>
+        this.setState({ faults: { items: [], pending: false, error: String(err.message || err) } })
+      );
   };
 
-  // Resolves the stop a report is filed against from the real position. Any
-  // failure (permission, no key, no fix) leaves the illustrative stop in
-  // place rather than stranding the banner on "Locating…".
+  // Resolves the stop a report is filed against from the real position.
   findNearestStop = () => {
+    this.setState((st) => ({ stop: { ...st.stop, pending: true, error: null } }));
     getPosition()
       .then((fix) => {
         this.setState((st) => ({ userLoc: st.userLoc || fix.coords, userAccuracy: st.userAccuracy || fix.accuracy }));
-        return fetch(`/api/nearest-stop?lat=${fix.coords[0]}&lng=${fix.coords[1]}`).then((r) => r.json());
+        return getNearestStop(fix.coords[0], fix.coords[1]);
       })
-      .then((data) => {
-        if (!data || data.error || !data.name) throw new Error("no stop");
-        this.setState({ locFix: true, stop: data });
-      })
-      .catch(() => this.setState({ locFix: true }));
+      .then((data) => this.setState({ stop: { data, pending: false, error: null } }))
+      .catch((err) =>
+        this.setState({ stop: { data: null, pending: false, error: messageForError(err && err.code) || String(err.message || err) } })
+      );
   };
 
   navSnaps = [152, 336, 620];
@@ -609,41 +703,9 @@ export class AppLogic extends Component {
     return { display: "inline-flex", alignItems: "center", borderRadius: "999px", padding: "5px 10px", font: "var(--weight-bold) 12px/1 var(--font-body)", letterSpacing: ".01em", background: bg, color: fg, whiteSpace: "nowrap" };
   }
   level(v) { return v < 0.45 ? "light" : v < 0.75 ? "moderate" : "busy"; }
-  levels(v) { const l = this.level(v); return l === "light" ? ["light", "light", "moderate"] : l === "moderate" ? ["moderate", "moderate", "light"] : ["busy", "busy", "moderate"]; }
   barsFor(l) { return [{ style: { width: "11px", height: "11px", borderRadius: "999px", background: CROWD[l], display: "block" } }]; }
   bars(v) { return this.barsFor(this.level(v)); }
   snaps(H) { return [190, Math.round(H * 0.55), Math.round(H - 104)]; }
-
-  navSteps(o, destShort) {
-    if (!o) return [];
-    const legs = o.legs.map((l) => (typeof l === "string" ? l : l.label));
-    const inter = ["Newton", "Botanic Gardens", "Bishan", "Outram Park"];
-    const total = o.mins * 60, fixed = 5 * 60 + 4 * 60 + (legs.length - 1) * 3 * 60;
-    const ride = Math.max(150, Math.round((total - fixed) / Math.max(1, legs.length)));
-    const steps = [{ icon: "footprints", title: "Walk to Yishun (NS13)", detail: "350 m · Exit B, follow the covered walkway", secs: 300 }];
-    legs.forEach((lg, idx) => {
-      const bus = /BUS/i.test(lg);
-      if (idx > 0) steps.push({ icon: "arrow-left-right", title: "Transfer at " + inter[(idx - 1) % 4], detail: "3 min walk · follow signs to " + lg, secs: 180 });
-      const SEQ = {
-        NS: ["Khatib", "Yio Chu Kang", "Ang Mo Kio", "Bishan", "Braddell", "Toa Payoh", "Novena", "Newton"],
-        DT: ["Little India", "Rochor", "Bugis", "Promenade", "Bayfront", "Downtown", "Telok Ayer", "Chinatown"],
-        TE: ["Springleaf", "Lentor", "Mayflower", "Bright Hill", "Upper Thomson", "Caldecott", "Stevens", "Napier"],
-        EW: ["Clementi", "Dover", "Buona Vista", "Commonwealth", "Queenstown", "Redhill", "Tiong Bahru", "Outram Park"],
-        BU: ["Yishun Ave 2", "Khatib Stn", "Yio Chu Kang Stn", "AMK Hub", "Bishan Stn", "Marymount", "Thomson Plaza"],
-      };
-      const seq = SEQ[bus ? "BU" : lg.slice(0, 2).toUpperCase()] || SEQ.NS;
-      const nStops = bus ? 6 : 4 + idx * 2;
-      const stops = seq.slice(0, nStops);
-      steps.push({
-        icon: bus ? "bus" : "train-front",
-        title: "Board " + lg + " toward " + (bus ? "Thomson Plaza" : idx % 2 ? "Jurong East" : "Marina South Pier"),
-        detail: nStops + " stops · alight at " + stops[stops.length - 1] + (bus ? "" : " · Platform " + (idx % 2 ? "A" : "B")),
-        stops, alight: stops[stops.length - 1], secs: ride,
-      });
-    });
-    steps.push({ icon: "flag", title: "Walk to " + destShort, detail: "300 m · arrive at the main entrance", secs: 240 });
-    return steps;
-  }
 
   startStepsDrag(e) {
     const el = this.stepsEl;
@@ -699,46 +761,8 @@ export class AppLogic extends Component {
     window.addEventListener("pointerup", up);
   }
 
-  mins(base) {
-    const el = this.state.tick && this.t0 ? (this.state.tick - this.t0) / 60000 : 0;
-    let t = base - el;
-    while (t <= 0) t += 14;
-    return t < 1 ? 1 : Math.round(t);
-  }
-
   renderVals() {
     const s = this.state, sc = s.screen;
-    const modeName = { rush: "Rush", comfort: "Comfort", silver: "Silver" }[s.mode];
-    const blurb = {
-      rush: "Fastest arrival. Crowding is ignored — expect to stand from Bishan.",
-      comfort: "Routes around the two busiest platforms. About 6 min slower, far better odds of a seat.",
-      silver: "Fewest transfers, step-free throughout, longer walking buffers.",
-    }[s.mode];
-
-    const routeSets = {
-      rush: [
-        { mins: 41, eta: "08:22", tag: "Fastest", tagTone: "soft", legs: [["NSL", "accent"], ["BUS 969", "dark"], ["NSL", "accent"], ["NEL", "soft"]], v: 0.88, note: "Uses the affected stretch with bus bridging. Quickest, but standing." },
-        { mins: 46, eta: "08:27", tag: "Backup", tagTone: "outline", legs: [["NSL", "accent"], ["DTL", "soft"], ["EWL", "soft"]], v: 0.74, note: "One extra transfer. Skips the bridging queue at Ang Mo Kio." },
-        { mins: 52, eta: "08:33", tag: "Surface", tagTone: "neutral", legs: [["BUS 855", "dark"], ["NEL", "soft"]], v: 0.52, note: "Road congestion on the CTE is moderate and clearing." },
-      ],
-      comfort: [
-        { mins: 48, eta: "08:29", tag: "Best seat odds", tagTone: "soft", legs: [["NSL", "accent"], ["DTL", "soft"], ["EWL", "soft"]], v: 0.41, note: "Boards the DTL two stops before the crowd builds." },
-        { mins: 44, eta: "08:25", tag: "Balanced", tagTone: "outline", legs: [["NSL", "accent"], ["BUS 969", "dark"], ["NSL", "accent"]], v: 0.69, note: "Quicker, but the bridging bus is standing-room from Bishan." },
-        { mins: 55, eta: "08:36", tag: "Quietest", tagTone: "soft", legs: [["BUS 856", "dark"], ["TEL", "soft"]], v: 0.28, note: "The TEL is running light. Longest ride, emptiest carriage." },
-      ],
-      silver: [
-        { mins: 51, eta: "08:32", tag: "Step-free", tagTone: "soft", legs: [["NSL direct", "accent"]], v: 0.44, note: "No transfers. Lift at both ends, 9 min platform buffer." },
-        { mins: 58, eta: "08:39", tag: "Seated", tagTone: "soft", legs: [["BUS 856", "dark"], ["NSL", "accent"]], v: 0.3, note: "Bus first, boarding at the terminus. A seat is near certain." },
-        { mins: 47, eta: "08:28", tag: "One transfer", tagTone: "outline", legs: [["NSL", "accent"], ["DTL", "soft"]], v: 0.58, note: "Shorter, but Newton has 42 steps when the lift is busy." },
-      ],
-    };
-    const routes = routeSets[s.mode].map((r, i) => ({
-      ...r, pick: () => this.setState({ route: i }), tone: s.route === i ? "outlined" : "plain",
-      legs: r.legs.map(([label]) => ({ label, style: this.lineStyle(label) })),
-      bars: this.bars(r.v), crowd: WORD[this.level(r.v)],
-    }));
-
-    const hourLabels = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00"];
 
     const rTypes = [
       { id: "crowd", label: "Packed platform", sub: "Two trains to board", pts: 30 },
@@ -787,130 +811,65 @@ export class AppLogic extends Component {
       };
     });
 
-    const calTrips = [
-      { time: "09:30", title: "Design review", route: "Yishun → Raffles Place · NSL", leave: "08:41", urgent: true, tags: [{ label: "Calendar", tone: "outline" }, { label: "Disruption", tone: "warn", icon: "triangle-alert" }] },
-      { time: "13:00", title: "Lunch with Priya", route: "Raffles Place → Telok Ayer · DTL", leave: "12:38", urgent: false, tags: [{ label: "Calendar", tone: "outline" }] },
-      { time: "19:15", title: "Badminton", route: "Raffles Place → Toa Payoh · NSL", leave: "18:26", urgent: true, tags: [{ label: "Calendar", tone: "outline" }, { label: "Rain forecast", tone: "warn", icon: "cloud-rain" }] },
-    ].map((c, i) => ({
-      ...c,
-      open: s.calOpen === i,
-      detail: "Leave " + c.leave + " to arrive by " + c.time + ". " + c.route + (c.urgent ? " · watch this one, conditions may change." : " · running normally right now."),
-      setRef: (el) => { (this.calEls || (this.calEls = {}))[i] = el; },
-      toggle: () => {
-        const opening = s.calOpen !== i;
-        this.setState({ calOpen: opening ? i : null });
-        if (!opening) return;
-        setTimeout(() => {
-          const el = this.calEls && this.calEls[i];
-          if (!el) return;
-          let scEl = el.parentElement;
-          while (scEl && !(scEl.scrollHeight > scEl.clientHeight + 8 && /auto|scroll/.test(getComputedStyle(scEl).overflowY))) scEl = scEl.parentElement;
-          if (!scEl) return;
-          const top = el.offsetTop - scEl.offsetTop;
-          const need = top + el.offsetHeight - (scEl.scrollTop + scEl.clientHeight) + 16;
-          if (need > 0) scEl.scrollTo({ top: scEl.scrollTop + need, behavior: "smooth" });
-        }, 80);
-      },
-      plan: () => { this.setState({ screen: "map" }); this.flash("Routes for " + c.title + " · leave " + c.leave); },
-      watch: () => this.flash("Alerts on for " + c.title + " · checked 25 min before " + c.leave),
-    }));
-
     const ORIGIN = this.currentOrigin();
-    const PLACES = [
-      { name: "NANYANG TECHNOLOGICAL UNIVERSITY ( HALL OF RESIDENCE 13)", detail: "62 Nanyang Crescent · 637667", kind: "Address", ll: [1.3483, 103.6831] },
-      { name: "Tan Tock Seng Hospital", detail: "11 Jalan Tan Tock Seng · 308433", kind: "Address", ll: [1.3215, 103.8459] },
-      { name: "ION Orchard", detail: "2 Orchard Turn · 238801", kind: "Address", ll: [1.304, 103.8318] },
-      { name: "768888", detail: "Blk 726 Yishun Street 71", kind: "Postal", ll: [1.4304, 103.8354] },
-      { name: "Bus stop 59009", detail: "Yishun Avenue 2 · opposite Northpoint", kind: "Bus stop", ll: [1.4295, 103.835] },
-      { name: "Bishan (NS17)", detail: "Bishan Road · North South Line", kind: "Station", ll: [1.3509, 103.8485] },
-      { name: "Changi Airport Terminal 3", detail: "65 Airport Boulevard · 819663", kind: "Address", ll: [1.3563, 103.9865] },
-      { name: "Gardens by the Bay", detail: "18 Marina Gardens Drive · 018953", kind: "Address", ll: [1.2816, 103.8636] },
-    ];
     const q = s.query.trim().toLowerCase();
-    const localMatches = PLACES.filter((p) => (p.name + " " + p.detail).toLowerCase().indexOf(q) >= 0);
-    const livePlaces = s.liveResults && s.liveResults.query === s.query ? s.liveResults.items : null;
-    // Live results when we have them; the built-in list only after a live
-    // lookup actually failed — never as a placeholder while one is in flight.
-    const resultSource = livePlaces || (s.searchOffline ? localMatches : []);
+    // Only ever live OneMap results.
+    const resultSource = s.liveResults && s.liveResults.query === s.query ? s.liveResults.items : [];
     const results = resultSource.slice(0, 6).map((p) => ({
       ...p,
       // Clearing the query here is what stops the panel reopening when the
       // user comes back via "Change".
-      pick: () => this.setState({ dest: p, tripRoute: 0, query: "", liveResults: null, searchOpen: false, searchPending: false, searchOffline: false }),
+      pick: () => this.setState({ dest: p, tripRoute: 0, query: "", liveResults: null, searchOpen: false, searchPending: false }),
     }));
 
     const dest = s.dest;
-    const bend = (k) => {
-      if (!dest) return [];
-      if (s.liveRoute && s.liveRoute.destKey === dest.name) return s.liveRoute.coords;
-      const [a1, a2] = ORIGIN, [b1, b2] = dest.ll, dx = b1 - a1, dy = b2 - a2;
-      return [ORIGIN, [a1 + dx * 0.34 - dy * k, a2 + dy * 0.34 + dx * k], [a1 + dx * 0.68 - dy * k * 0.6, a2 + dy * 0.68 + dx * k * 0.6], dest.ll];
-    };
-    const tripSets = {
-      fast: [
-        { mins: 44, eta: "08:26", fare: "$2.17", walk: "7 min", tag: "Fastest", tagTone: "soft", legs: ["NSL", "DTL"], v: 0.82, note: "Two transfers, no waiting at either." },
-        { mins: 49, eta: "08:31", fare: "$2.05", walk: "4 min", tag: "Fewer steps", tagTone: "outline", legs: ["NSL", "BUS 167"], v: 0.64, note: "Slightly longer, one transfer less." },
-        { mins: 58, eta: "08:40", fare: "$1.89", walk: "11 min", tag: "Direct", tagTone: "neutral", legs: ["BUS 969"], v: 0.51, note: "Single bus the whole way." },
-      ],
-      budget: [
-        { mins: 61, eta: "08:43", fare: "$1.29", walk: "12 min", tag: "Cheapest", tagTone: "soft", legs: ["BUS 969", "BUS 167"], v: 0.56, note: "Bus only. Transfer rebate applies within 45 min." },
-        { mins: 55, eta: "08:37", fare: "$1.68", walk: "9 min", tag: "Balanced", tagTone: "outline", legs: ["BUS 969", "NSL"], v: 0.68, note: "One rail leg keeps it under the hour." },
-        { mins: 44, eta: "08:26", fare: "$2.17", walk: "7 min", tag: "Fastest", tagTone: "neutral", legs: ["NSL", "DTL"], v: 0.82, note: "Quickest, but 88 cents more." },
-      ],
-      step: [
-        { mins: 52, eta: "08:34", fare: "$2.05", walk: "5 min", tag: "Step-free", tagTone: "soft", legs: ["NSL direct"], v: 0.58, note: "Lift at every change. No stairs, no escalator." },
-        { mins: 57, eta: "08:39", fare: "$1.89", walk: "3 min", tag: "Least walking", tagTone: "outline", legs: ["BUS 969", "NSL"], v: 0.47, note: "Wheelchair-accessible bus, kerbside both ends." },
-        { mins: 49, eta: "08:31", fare: "$2.17", walk: "8 min", tag: "One lift out", tagTone: "neutral", legs: ["NSL", "DTL"], v: 0.7, note: "Newton lift is out of service until Thursday." },
-      ],
-      quiet: [
-        { mins: 56, eta: "08:38", fare: "$2.05", walk: "8 min", tag: "Quietest", tagTone: "soft", legs: ["BUS 856", "TEL"], v: 0.27, note: "The TEL is running light at this hour." },
-        { mins: 51, eta: "08:33", fare: "$2.11", walk: "6 min", tag: "Seat likely", tagTone: "outline", legs: ["NSL", "DTL"], v: 0.42, note: "Boards two stops before the crowd builds." },
-        { mins: 44, eta: "08:26", fare: "$2.17", walk: "7 min", tag: "Fastest", tagTone: "neutral", legs: ["NSL", "DTL"], v: 0.82, note: "Quickest, but busy from Bishan onwards." },
-      ],
-      few: [
-        { mins: 53, eta: "08:35", fare: "$2.05", walk: "9 min", tag: "No transfers", tagTone: "soft", legs: ["NSL direct"], v: 0.61, note: "Stay on one train the whole way." },
-        { mins: 50, eta: "08:32", fare: "$2.11", walk: "6 min", tag: "One transfer", tagTone: "outline", legs: ["BUS 856", "NSL"], v: 0.55, note: "Single change, same platform." },
-        { mins: 44, eta: "08:26", fare: "$2.17", walk: "7 min", tag: "Fastest", tagTone: "neutral", legs: ["NSL", "DTL"], v: 0.82, note: "Two changes, but the quickest overall." },
-      ],
-      walk: [
-        { mins: 59, eta: "08:41", fare: "$1.89", walk: "2 min", tag: "Door to door", tagTone: "soft", legs: ["BUS 969"], v: 0.49, note: "Stops 80 m from the entrance." },
-        { mins: 54, eta: "08:36", fare: "$2.05", walk: "4 min", tag: "Short walk", tagTone: "outline", legs: ["BUS 856", "NSL"], v: 0.58, note: "Sheltered walkway at both ends." },
-        { mins: 47, eta: "08:29", fare: "$2.17", walk: "10 min", tag: "Faster", tagTone: "neutral", legs: ["NSL", "DTL"], v: 0.74, note: "Quicker, but a longer walk out." },
-      ],
-      bike: [
-        { mins: 41, eta: "08:23", fare: "$1.20", walk: "0 min", tag: "Bike + rail", tagTone: "soft", legs: ["CYCLE 1.8 km", "NSL"], v: 0.38, note: "Docking bay outside the station." },
-        { mins: 46, eta: "08:28", fare: "$0.00", walk: "0 min", tag: "All the way", tagTone: "outline", legs: ["CYCLE 9.4 km"], v: 0.1, note: "Park Connector the whole route." },
-        { mins: 44, eta: "08:26", fare: "$2.17", walk: "7 min", tag: "Rail only", tagTone: "neutral", legs: ["NSL", "DTL"], v: 0.82, note: "No bike needed, but busier." },
-      ],
-    };
-    const tripOptions = tripSets[s.tripMode].map((o, i) => ({
-      ...o, pick: () => this.setState({ tripRoute: i }), tone: s.tripRoute === i ? "accent" : "hairline",
+    const trips = s.trips || { options: [], pending: false, error: null };
+    // Cards come straight from OneMap itineraries, enriched with LTA crowding.
+    const tripOptions = (trips.options || []).map((o, i) => ({
+      ...o,
+      pick: () => this.setState({ tripRoute: i }),
+      tone: s.tripRoute === i ? "accent" : "hairline",
       start: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState({ tripRoute: i, navRoute: i, screen: "nav", navStart: Date.now() }); },
-      legs: o.legs.map((label) => ({ label, style: this.lineStyle(label) })),
-      bars: this.bars(o.v), crowd: WORD[this.level(o.v)],
+      legs: (o.legs || []).map((label) => ({ label, style: this.lineStyle(label) })),
+      bars: o.crowdLevel ? this.barsFor(o.crowdLevel) : [],
+      crowd: o.crowdLevel ? WORD[o.crowdLevel] : "Crowding unknown",
+      fare: o.fare || "Fare unknown",
     }));
-    const bendBy = { fast: 0.06, budget: -0.09, step: 0.02, quiet: -0.04 }[s.tripMode] ?? 0.03;
 
     const destShort = dest ? dest.name.split(" (")[0].replace(/\s+$/, "") : "your destination";
     const navOpt = tripOptions[s.navRoute != null ? s.navRoute : s.tripRoute] || tripOptions[0];
-    const navArr = this.navSteps(navOpt, destShort);
-    const navTotal = navArr.reduce((a, b) => a + b.secs, 0) || 1;
-    const navElapsed = Math.min(navTotal, s.navStart ? (((s.tick || Date.now()) - s.navStart) / 1000) * 12 : 0);
+    const navArr = (navOpt && navOpt.steps) || [];
+    const navGeometry = (navOpt && navOpt.geometry) || [];
+    const navTotal = navArr.reduce((a, b) => a + (b.secs || 0), 0) || 1;
+
+    // Progress is measured against the real clock, and against the real
+    // position when the device is sharing one.
+    const elapsedSecs = s.navStart ? ((s.tick || Date.now()) - s.navStart) / 1000 : 0;
+    const alongRoute = s.userLoc && navGeometry.length > 1 ? fractionAlong(navGeometry, s.userLoc) : null;
+    const navFrac = Math.max(0, Math.min(1, alongRoute != null ? alongRoute : elapsedSecs / navTotal));
+    const navElapsed = navFrac * navTotal;
+
     let acc = 0, navIdx = 0, stepRem = 0;
     for (let idx = 0; idx < navArr.length; idx++) {
-      if (navElapsed < acc + navArr[idx].secs || idx === navArr.length - 1) { navIdx = idx; stepRem = acc + navArr[idx].secs - navElapsed; break; }
-      acc += navArr[idx].secs;
+      if (navElapsed < acc + (navArr[idx].secs || 0) || idx === navArr.length - 1) {
+        navIdx = idx;
+        stepRem = acc + (navArr[idx].secs || 0) - navElapsed;
+        break;
+      }
+      acc += navArr[idx].secs || 0;
     }
-    const arrived = navElapsed >= navTotal - 1;
+    const arrived = navArr.length > 0 && navElapsed >= navTotal - 1;
     this._navIdx = navIdx;
-    const navFrac = navElapsed / navTotal;
     const fmtS = (x) => (x >= 60 ? Math.ceil(x / 60) + " min" : Math.max(0, Math.ceil(x)) + " s");
     const curStep = navArr[navIdx] || {};
     const stepProg = curStep.secs ? Math.max(0, Math.min(1, 1 - stepRem / curStep.secs)) : 0;
-    const curStops = curStep.stops || null;
+    const curStops = curStep.stops && curStep.stops.length ? curStep.stops : null;
     const passed = curStops ? Math.min(curStops.length - 1, Math.floor(stepProg * curStops.length)) : 0;
     const stopsLeft = curStops ? curStops.length - passed : 0;
-    const liveStopLine = curStops ? "Next: " + curStops[passed] + " · " + stopsLeft + " stop" + (stopsLeft === 1 ? "" : "s") + " to " + curStep.alight : curStep.detail;
+    const liveStopLine = curStops
+      ? "Next: " + curStops[passed] + " · " + stopsLeft + " stop" + (stopsLeft === 1 ? "" : "s") + " to " + curStep.alight
+      : curStep.detail;
+
     const nav = {
       navIcon: arrived ? "circle-check" : curStep.icon,
       navTitle: arrived ? "You have arrived" : curStep.title,
@@ -919,7 +878,7 @@ export class AppLogic extends Component {
       navStepLabel: arrived ? "Trip complete" : "Step " + (navIdx + 1) + " of " + navArr.length,
       navEta: navOpt ? navOpt.eta : "",
       navRemainLabel: arrived ? "Arrived · " + destShort : Math.max(1, Math.ceil((navTotal - navElapsed) / 60)) + " min left · " + destShort,
-      navCoord: this.lerpRoute(bend(bendBy), navFrac) || ORIGIN,
+      navCoord: s.userLoc || this.lerpRoute(navGeometry, navFrac) || ORIGIN,
       navProgressStyle: { width: Math.round(navFrac * 100) + "%", height: "100%", background: "var(--accent)", borderRadius: 999, transition: "width 1s linear" },
       setStepsRef: (el) => { this.stepsEl = el; },
       stepsPagerStyle: {
@@ -984,18 +943,19 @@ export class AppLogic extends Component {
       showResults: !s.dest && q.length >= 2,
       openSearch: () => this.setState({ searchOpen: true }),
       closeSearch: () => { if (this.bt) clearTimeout(this.bt); this.bt = setTimeout(() => this.setState({ searchOpen: false }), 160); },
-      dismissSearch: () => this.setState({ query: "", searchOpen: false, liveResults: null, searchPending: false, searchOffline: false }),
+      dismissSearch: () => this.setState({ query: "", searchOpen: false, liveResults: null, searchPending: false }),
       query: s.query,
       setQuery: (val) => this.setState({ query: val }),
-      clearQuery: () => this.setState({ query: "", liveResults: null, searchPending: false, searchOffline: false }),
+      clearQuery: () => this.setState({ query: "", liveResults: null, searchPending: false }),
       results,
       resultsLabel: "Results for “" + s.query.trim() + "”",
       searchPending: !!s.searchPending,
-      searchEmpty: !s.searchPending && results.length === 0,
-      searchOffline: !!s.searchOffline,
-      searchFooter: s.searchOffline ? "Offline · showing saved places" : "Results from OneMap · Singapore Land Authority",
+      searchEmpty: !s.searchPending && !s.searchError && results.length === 0,
+      searchError: s.searchError || null,
+      searchFooter: "Results from OneMap · Singapore Land Authority",
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
-      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: ORIGIN, routeCoords: bend(bendBy),
+      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: ORIGIN,
+      routeCoords: (tripOptions[s.tripRoute] || tripOptions[0] || {}).geometry || [],
       userAccuracy: s.userLoc ? s.userAccuracy : null,
       recenterToken: s.recenterToken || 0,
       locating: !!s.locating,
@@ -1012,24 +972,20 @@ export class AppLogic extends Component {
       pinDetail: s.pin ? s.pin.detail : "",
       dropPin: (ll) => {
         if (this.state.dest) return;
-        let best = null, bd = 1e9;
-        PLACES.forEach((p) => {
-          const d = Math.abs(p.ll[0] - ll[0]) + Math.abs(p.ll[1] - ll[1]);
-          if (d < bd) { bd = d; best = p; }
+        this.setState({
+          pin: { ll, name: "Dropped pin", detail: ll[0].toFixed(5) + ", " + ll[1].toFixed(5) },
         });
-        const near = bd < 0.012 ? best : null;
-        this.setState({ pin: { ll, name: near ? near.name : "Dropped pin", detail: (near ? near.detail + " · " : "") + ll[0].toFixed(4) + ", " + ll[1].toFixed(4), place: near } });
       },
       clearPin: () => this.setState({ pin: null }),
       pinDirections: () => {
         const p = this.state.pin;
         if (!p) return;
-        this.setState({ dest: p.place || { name: p.name, detail: p.detail, ll: p.ll, kind: "Pin" }, tripRoute: 0, pin: null, sheetH: 430 });
+        this.setState({ dest: { name: p.name, detail: p.detail, ll: p.ll, kind: "Pin" }, tripRoute: 0, pin: null, sheetH: 430 });
       },
       pinSearch: () => {
         const p = this.state.pin;
         if (!p) return;
-        this.setState({ query: p.place ? p.place.name : "", searchOpen: true, pin: null });
+        this.setState({ query: "", searchOpen: true, pin: null });
         this.flash("Showing places near the pin");
       },
       setSheetRef: (el) => { this.sheetEl = el; },
@@ -1037,8 +993,6 @@ export class AppLogic extends Component {
       sheetStyle: { flex: 1, minHeight: 0, width: "100%", minWidth: 0, maxWidth: "100%", boxSizing: "border-box", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", display: "flex", flexDirection: "column", padding: "0 16px" },
       sheetGrabStyle: { flex: "none", padding: "10px 0 12px", cursor: s.sheetDrag ? "grabbing" : "grab", touchAction: "none", userSelect: "none" },
       sheetDragStart: (e) => this.startSheetDrag(e),
-      pickedMins: (tripOptions[s.tripRoute] || tripOptions[0] || {}).mins,
-      tripModeItems: [{ id: "fast", label: "Fastest" }, { id: "budget", label: "Budget" }, { id: "step", label: "Step-free" }, { id: "quiet", label: "Less crowded" }],
       tripModeTiles: [
         { id: "fast", label: "Fastest" },
         { id: "budget", label: "Cheapest" },
@@ -1057,26 +1011,33 @@ export class AppLogic extends Component {
       }),
       tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripRoute: 0 }),
       tripModeBlurb: {
-        fast: "Shortest total time, whatever it costs and however full it is.",
-        budget: "Cheapest fare first. Bus legs and transfer rebates are preferred.",
-        step: "Lifts and level boarding only. Walking distance is kept short.",
-        quiet: "Avoids the busiest platforms and carriages, even if it adds minutes.",
-        few: "Keeps you on one vehicle where possible. At most one change.",
-        walk: "Minimises time on foot. Stops as close to the door as possible.",
-        bike: "Pairs a short ride to the station with rail, or cycles the whole way.",
+        fast: "Ranked by total journey time from OneMap.",
+        budget: "Ranked by the fare OneMap returns, bus-only options included.",
+        quiet: "Ranked by live platform crowding and bus loading from LTA.",
+        step: "Prefers wheelchair-accessible buses and shorter walks. Lift outages are not guaranteed to be reflected.",
+        few: "Ranked by number of transfers.",
+        walk: "Ranked by time on foot, with a shorter maximum walking distance.",
+        bike: "A cycling route end to end, from OneMap's cycling network.",
       }[s.tripMode],
       tripOptions,
-      startMapTrip: () => { this.setState({ screen: "nav", navRoute: s.tripRoute, navStart: Date.now() }); },
+      tripsPending: !!trips.pending,
+      tripsError: trips.error || null,
+      tripsEmpty: !trips.pending && !trips.error && tripOptions.length === 0,
+      retryTrips: () => { this.setState({ trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions); },
       isNav: sc === "nav",
       endTrip: () => { this.setState({ screen: "map" }); this.flash("Trip ended"); },
       goReport: () => this.setState({ navRepOpen: true, nrType: null, nrSev: null }),
       ...nav,
       headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today" }[sc] || "Solvik",
       headerSub: {
-        map: "From Blk 726 Yishun St 71 · OneMap",
-        report: "Bishan (NS17) · reports stay live 30 min",
-        rewards: "Tue 8 Sep · 18 reports this month",
-        plan: "Tue 8 Sep · 3 trips",
+        map: "OneMap · Singapore Land Authority",
+        report: s.stop.data ? `${s.stop.data.name} · reports stay live 30 min` : "Reports stay live 30 min",
+        rewards: "Sample rewards data",
+        plan: (() => {
+          const n = (s.savedList || []).length;
+          const today = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+          return `${today} · ${n} watched commute${n === 1 ? "" : "s"}`;
+        })(),
       }[sc] || "",
       toast: s.toast,
       tabItems: tabDefs, tab: sc, setTab: (id) => this.go(id),
@@ -1108,15 +1069,8 @@ export class AppLogic extends Component {
           labelStyle: { font: (on ? "var(--weight-bold)" : "var(--weight-regular)") + " 11px/1 var(--font-body)", letterSpacing: ".01em", opacity: on || hov ? 1 : 0.82, transition: "opacity var(--dur-base) var(--ease-standard)" },
         };
       }),
-      goLive: () => this.go("map"), goRewards: () => this.go("rewards"),
-      modeItems: [{ id: "rush", label: "Rush" }, { id: "comfort", label: "Comfort" }, { id: "silver", label: "Silver" }],
-      mode: s.mode, setMode: (id) => this.setState({ mode: id, route: 0 }), modeBlurb: blurb, modeName,
-      routes, activeLegs: routes[s.route] ? routes[s.route].legs : [],
-      startJourney: () => { this.setState({ screen: "nav", navRoute: s.route, navStart: Date.now() }); this.flash("Trip started · watching it live"); },
+      goRewards: () => this.go("rewards"),
       ...this.forecastVals(s),
-      filterItems: [{ id: "all", label: "All" }, { id: "train", label: "Train" }, { id: "bus", label: "Bus" }],
-      filter: s.filter, setFilter: (id) => this.setState({ filter: id }),
-      hourLabels, fcLabel: hourLabels[s.fc],
       reportPick: s.rep === "pick", reportConfirm: s.rep === "confirm", reportDone: s.rep === "done",
       reportTypes: rTypes, chosenLabel: chosen.label, chosenPts: chosen.pts, severities, severityQ: sevSet.q,
       navSheetStyle: {
@@ -1163,18 +1117,14 @@ export class AppLogic extends Component {
         this.setState({ navRepOpen: false, nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null, points: s.points + t.pts });
         this.flash(t.label + " posted · +" + t.pts + " points");
       },
-      locEyebrow: s.locFix ? "Live at your stop" : "Finding your stop",
-      locStopName: s.locFix ? (s.stop ? s.stop.name : "Bishan (NS17)") : "Locating…",
-      locDetail: s.locFix
-        ? s.stop
-          ? "Nearest stop · " + s.stop.code + " · " + Math.round(s.stop.distanceM) + " m away · reports stay live 30 min"
-          : "Nearest stop · 40 m away · 247 commuters nearby · reports stay live 30 min"
-        : "Using your location to pick the stop you can report on.",
-      locRecheckLabel: s.locFix ? "Recheck" : "Locating",
-      locRecheck: () => {
-        this.setState({ locFix: false, stop: null });
-        this.findNearestStop();
-      },
+      locEyebrow: s.stop.data ? "Live at your stop" : s.stop.error ? "No stop found" : "Finding your stop",
+      locStopName: s.stop.data ? s.stop.data.name : s.stop.error ? "Location unavailable" : "Locating…",
+      locDetail: s.stop.data
+        ? `Stop ${s.stop.data.code} · ${Math.round(s.stop.data.distanceM)} m away · reports stay live 30 min`
+        : s.stop.error || "Using your location to pick the stop you can report on.",
+      locRecheckLabel: s.stop.pending ? "Locating" : "Recheck",
+      locRecheck: () => this.findNearestStop(),
+      reportStopReady: !!s.stop.data,
       hasPhoto: !!s.photoUrl, noPhoto: !s.photoUrl,
       photoName: s.photoName || "",
       photoThumb: s.photoUrl ? <img src={s.photoUrl} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
@@ -1198,7 +1148,6 @@ export class AppLogic extends Component {
         dotStyle: { flex: "none", width: 10, height: 10, borderRadius: 999, background: r.c, boxShadow: "0 0 0 4px color-mix(in oklch, " + r.c + " 18%, transparent)" },
         confirm: () => { this.setState({ points: s.points + 5 }); this.flash("Confirmed · +5 points"); },
       })),
-      crowdLegend: ["light", "moderate", "busy"].map((l) => ({ label: WORD[l], bars: this.barsFor(l) })),
       points: s.points.toLocaleString(), vouchers,
       toGold: Math.max(0, 3100 - s.points).toLocaleString(),
       tierBarStyle: { width: Math.round(Math.max(0, Math.min(1, (s.points - 1000) / 2100)) * 100) + "%", height: "100%", background: "var(--crowd-light)", borderRadius: 999, transition: "width var(--dur-slow) var(--ease-out)" },
@@ -1207,11 +1156,7 @@ export class AppLogic extends Component {
         { icon: "badge-check", value: "94%", label: "Verified by others" },
         { icon: "users", value: "2.1k", label: "Commuters helped" },
       ],
-      calOff: s.cal !== "on", calOn: s.cal === "on", calCta: s.cal === "linking" ? "Connecting" : "Connect",
-      connectCal: () => { this.setState({ cal: "linking" }); setTimeout(() => { this.setState({ cal: "on" }); this.flash("3 trips synced from the calendar"); }, 900); },
-      disconnectCal: () => this.setState({ cal: "off" }), calTrips,
       ...this.addCommuteVals(s),
-      callHelp: () => this.flash("Calling Daniel"),
     };
   }
 }

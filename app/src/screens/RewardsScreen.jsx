@@ -36,6 +36,15 @@ export function RewardsScreen({ v }) {
         </div>
       </div>
 
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 2px" }}>
+        <span style={{ font: "var(--weight-bold) 10px/1 var(--font-body)", letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text-muted)", background: "var(--sand-200)", borderRadius: 999, padding: "5px 9px" }}>
+          Sample data
+        </span>
+        <span style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
+          Points and rewards need an account service — not part of LTA or OneMap.
+        </span>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
         {v.pointStats.map((ps, i) => (
           <div key={i} style={{ background: "var(--surface-card)", border: "1px solid var(--border-card)", borderRadius: "var(--radius-card)", padding: "13px 12px", display: "flex", flexDirection: "column", gap: 7 }}>

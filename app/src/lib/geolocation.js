@@ -38,6 +38,33 @@ export function getPosition() {
   });
 }
 
+// Continuous tracking, used by turn-by-turn so steps advance from the real
+// position. Returns a watch id for clearWatch().
+export function watchPosition(onFix, onError) {
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    onError && onError({ code: "unsupported" });
+    return null;
+  }
+  return navigator.geolocation.watchPosition(
+    (pos) => {
+      lastFix = {
+        coords: [pos.coords.latitude, pos.coords.longitude],
+        accuracy: pos.coords.accuracy,
+        at: Date.now(),
+      };
+      onFix(lastFix);
+    },
+    (err) => onError && onError(normalizeError(err)),
+    { ...OPTIONS, maximumAge: 5000 }
+  );
+}
+
+export function clearWatch(id) {
+  if (id != null && typeof navigator !== "undefined" && navigator.geolocation) {
+    navigator.geolocation.clearWatch(id);
+  }
+}
+
 export function messageForError(code) {
   if (code === "denied") return "Location permission denied — allow it in your browser settings";
   if (code === "unsupported") return "Location isn't available on this device";

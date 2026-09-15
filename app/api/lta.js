@@ -3,6 +3,10 @@
 // path is validated against that allowlist before being forwarded.
 const ALLOWED_ENDPOINTS = new Set([
   "v3/BusArrival",
+  "BusArrivalv2",
+  "PCDRealTime",
+  "PCDForecast",
+  "FacilitiesMaintenance",
   "BusServices",
   "BusRoutes",
   "BusStops",

@@ -72,7 +72,12 @@ export function MapScreen({ v }) {
                   Searching…
                 </div>
               )}
-              {!v.searchPending && v.searchEmpty && (
+              {!v.searchPending && v.searchError && (
+                <div style={{ padding: "16px 0", font: "var(--type-body)", color: "var(--status-fault)", textWrap: "pretty" }}>
+                  {v.searchError}
+                </div>
+              )}
+              {!v.searchPending && !v.searchError && v.searchEmpty && (
                 <div style={{ padding: "16px 0", font: "var(--type-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
                   No match for “{v.query.trim()}”. Try a postal code, MRT stop or building name.
                 </div>
@@ -125,6 +130,23 @@ export function MapScreen({ v }) {
                 ))}
               </div>
               <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>{v.tripModeBlurb}</div>
+              {v.tripsPending && (
+                <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "18px 0", font: "var(--type-body)", color: "var(--text-muted)" }}>
+                  <Icon name="loader-2" size={16} style={{ animation: "sv-spin 900ms linear infinite" }} />
+                  Planning your trip…
+                </div>
+              )}
+              {!v.tripsPending && v.tripsError && (
+                <div style={{ padding: "18px 0", display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ font: "var(--type-body)", color: "var(--status-fault)", textWrap: "pretty" }}>{v.tripsError}</div>
+                  <div><Button variant="secondary" size="sm" onClick={v.retryTrips}>Try again</Button></div>
+                </div>
+              )}
+              {!v.tripsPending && !v.tripsError && v.tripsEmpty && (
+                <div style={{ padding: "18px 0", font: "var(--type-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
+                  No public transport route found for this trip.
+                </div>
+              )}
               {v.tripOptions.map((o, i) => (
                 <Card key={i} tone={o.tone} padding="tight" interactive onClick={o.pick}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
@@ -240,6 +262,15 @@ export function MapScreen({ v }) {
               </div>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 4 }}>
+              {v.faultsPending && (
+                <div style={{ padding: "14px 0", font: "var(--type-body)", color: "var(--text-muted)" }}>Checking LTA for disruptions…</div>
+              )}
+              {!v.faultsPending && v.faultsError && (
+                <div style={{ padding: "14px 0", font: "var(--type-body)", color: "var(--status-fault)", textWrap: "pretty" }}>{v.faultsError}</div>
+              )}
+              {!v.faultsPending && !v.faultsError && v.faultsClear && (
+                <div style={{ padding: "14px 0", font: "var(--type-body)", color: "var(--text-muted)" }}>Normal service on all lines.</div>
+              )}
               {v.fcFaults.map((f, i) => (
                 <button key={i} onClick={f.toggleRead} style={styleText(f.cardStyle)}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -290,7 +321,9 @@ export function MapScreen({ v }) {
                 <span style={{ font: "var(--weight-semibold) 10.5px/1 var(--font-body)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{g.short}</span>
               </span>
             ))}
-            <span style={{ marginLeft: "auto", font: "var(--weight-semibold) 10.5px/1 var(--font-body)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Tap an area for its outlook</span>
+            <span style={{ marginLeft: "auto", font: "var(--weight-semibold) 10.5px/1 var(--font-body)", color: v.crowdError ? "var(--status-fault)" : "var(--text-muted)", whiteSpace: "nowrap" }}>
+              {v.crowdError ? "Crowding unavailable" : v.crowdPending ? "Loading crowding…" : v.crowdEmpty ? "No crowding data" : "Tap a station for its level"}
+            </span>
           </div>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginTop: 10, paddingBottom: 2 }}>
             {v.fcSlots.map((h, i) => (

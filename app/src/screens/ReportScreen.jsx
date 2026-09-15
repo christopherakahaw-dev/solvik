@@ -40,7 +40,12 @@ export function ReportScreen({ v }) {
           </div>
 
           <Card tone="plain">
-            <SectionLabel>Nearby · last 30 min</SectionLabel>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <SectionLabel>Nearby · last 30 min</SectionLabel>
+              <span style={{ marginLeft: "auto", font: "var(--weight-bold) 10px/1 var(--font-body)", letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text-muted)", background: "var(--sand-200)", borderRadius: 999, padding: "5px 9px" }}>
+                Sample data
+              </span>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 10 }}>
               {v.recentReports.map((r, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 0", borderTop: "1px solid var(--border-card)" }}>
