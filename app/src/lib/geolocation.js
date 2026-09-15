@@ -18,7 +18,9 @@ export function getLastPosition() {
   return lastFix;
 }
 
-export function getPosition() {
+// `options` overrides the defaults — pass { maximumAge: 0 } when the user has
+// explicitly asked where they are now and a cached fix would be misleading.
+export function getPosition(options) {
   if (typeof navigator === "undefined" || !navigator.geolocation) {
     return Promise.reject({ code: "unsupported" });
   }
@@ -33,7 +35,7 @@ export function getPosition() {
         resolve(lastFix);
       },
       (err) => reject(normalizeError(err)),
-      OPTIONS
+      { ...OPTIONS, ...(options || {}) }
     );
   });
 }
@@ -55,7 +57,8 @@ export function watchPosition(onFix, onError) {
       onFix(lastFix);
     },
     (err) => onError && onError(normalizeError(err)),
-    { ...OPTIONS, maximumAge: 5000 }
+    // Under way, a cached fix is worse than a slightly later fresh one.
+    { ...OPTIONS, maximumAge: 2000, timeout: 20000 }
   );
 }
 

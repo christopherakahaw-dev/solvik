@@ -5,12 +5,24 @@ import { styleText } from "../lib/styleText";
 export function NavScreen({ v }) {
   return (
     <div style={{ position: "absolute", inset: 0 }}>
-      <OneMapCanvas center={v.navCoord} zoom={15} route={v.routeCoords} marker={v.navCoord} dest={v.destCoord} fitRoute={false} zoomControls={false} height="100%" />
+      <OneMapCanvas center={v.navCoord} zoom={15} route={v.routeCoords} marker={v.navMarker} markerAccuracy={v.navAccuracy} dest={v.destCoord} fitRoute={false} zoomControls={false} height="100%" />
 
       <div style={{ position: "absolute", left: 14, right: 14, top: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <IconButton icon="x" label="End trip" tone="plain" size="md" onClick={v.endTrip} />
           <div style={{ font: "var(--weight-bold) 12px/1 var(--font-body)", color: "var(--text-strong)", background: "var(--surface-card)", borderRadius: 999, padding: "9px 15px", boxShadow: "var(--shadow-nav)", whiteSpace: "nowrap", flex: "none" }}>{v.navStepLabel}</div>
+          {v.navTrackNote && (
+            <div
+              style={{
+                font: "var(--weight-medium) 11px/1.2 var(--font-body)",
+                color: v.navTrackTone === "warn" ? "var(--crowd-busy)" : "var(--text-muted)",
+                background: "var(--surface-card)", borderRadius: 999, padding: "8px 12px",
+                boxShadow: "var(--shadow-nav)", minWidth: 0, textWrap: "pretty",
+              }}
+            >
+              {v.navTrackNote}
+            </div>
+          )}
         </div>
         <div style={{ background: "var(--accent)", color: "var(--text-on-accent)", borderRadius: "var(--radius-card)", padding: "15px 16px", boxShadow: "var(--shadow-nav)", display: "flex", alignItems: "flex-start", gap: 13 }}>
           <div style={{ flex: "none", width: 42, height: 42, borderRadius: 999, background: "rgba(255,255,255,.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>

@@ -4,8 +4,9 @@ import { getTrainServiceAlerts } from "../api/lta";
 import { getTripOptions } from "../api/trips";
 import { getCrowding } from "../api/crowding";
 import { getNearestStop } from "../api/stop";
-import { getPosition, watchPosition, clearWatch, messageForError } from "../lib/geolocation";
-import { fractionAlong } from "../lib/geometry";
+import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
+import { acceptFix, alongMAtTime, coordAt, stepAtTime, timeAtAlongM, STALE_FIX_MS } from "../lib/navProgress";
+import { metresBetween } from "../lib/geometry";
 
 const ONBOARDED_KEY = "solvik:onboarded";
 const PLACES_KEY = "solvik:places";
@@ -34,6 +35,11 @@ function store(key, value) {
 // starting point the prototype was designed around.
 const ORIGIN_FALLBACK = [1.4294, 103.835];
 
+// How far the traveller has to move before the journey is worth re-planning,
+// and before the map follows them rather than holding still.
+const REPLAN_DRIFT_M = 150;
+const MAP_FOLLOW_M = 120;
+
 // Ported from the Onward.dc.html prototype's embedded view-model script,
 // almost verbatim. Every screen's render() calls `this.renderVals()` and
 // reads off the same keys the prototype's `{{ }}` template bindings used, so
@@ -54,7 +60,9 @@ export class AppLogic extends Component {
     screen: typeof localStorage !== "undefined" && localStorage.getItem(ONBOARDED_KEY) ? "map" : "intro",
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
     query: "", dest: null, searchOpen: false, tripMode: "fast", tripRoute: 0,
-    userLoc: null, userAccuracy: null, locating: false, recenterToken: 0,
+    userLoc: null, userAccuracy: null, userFixAt: null, locating: false, recenterToken: 0,
+    // Turn-by-turn progress, advanced only by fixes good enough to trust.
+    navProgress: null, navFixStatus: null,
     // Remote data, each held with its own pending/error so screens can say
     // exactly what is missing instead of showing invented values.
     trips: { key: null, options: [], pending: false, error: null },
@@ -67,21 +75,47 @@ export class AppLogic extends Component {
     return this.state.userLoc || ORIGIN_FALLBACK;
   }
 
-  // Centre the map on the real position and adopt it as the trip origin.
+  // Centre the map on the real position and adopt it as the trip origin. Every
+  // press recentres, not just the first: the watch is already delivering fixes,
+  // so a recent one is used straight away, and only a cold start waits on a new
+  // one — asking the device for a brand-new fix on every press can take many
+  // seconds indoors, or time out entirely.
   locateMe = () => {
-    this.requestCurrentLocation(true);
+    const last = getLastPosition();
+    if (last && Date.now() - last.at < 15000) {
+      this.applyFix(last, (st) => ({ locating: false, recenterToken: st.recenterToken + 1, fcPin: null }));
+      return;
+    }
+    this.requestCurrentLocation(true, true).catch(() => {});
   };
 
-  requestCurrentLocation = (recenter = false) => {
-    if (this.state.userLoc) return Promise.resolve(this.state.userLoc);
+  // Everything that arrives from the geolocation API lands here, so a fix
+  // updates the position and the trip progress in one state change.
+  applyFix = (fix, extra) => {
+    this.setState((st) => {
+      const next = {
+        userLoc: fix.coords,
+        userAccuracy: fix.accuracy,
+        userFixAt: fix.at || Date.now(),
+        ...(typeof extra === "function" ? extra(st) : extra || {}),
+      };
+      if (st.screen === "nav" && st.navTrip) {
+        const { progress, status } = acceptFix(st.navProgress, fix, st.navTrip, st.navStart);
+        next.navProgress = progress;
+        next.navFixStatus = status;
+      }
+      return next;
+    });
+  };
+
+  requestCurrentLocation = (recenter = false, force = false) => {
+    if (!force && this.state.userLoc) return Promise.resolve(this.state.userLoc);
     if (this._locationPromise) return this._locationPromise;
 
     this.setState({ locating: true });
-    this._locationPromise = getPosition()
+    this._locationPromise = getPosition(force ? { maximumAge: 5000 } : undefined)
       .then((fix) => {
-        this.setState((st) => ({
-          userLoc: fix.coords,
-          userAccuracy: fix.accuracy,
+        this.applyFix(fix, (st) => ({
           locating: false,
           recenterToken: recenter ? st.recenterToken + 1 : st.recenterToken,
           fcPin: recenter ? null : st.fcPin,
@@ -401,12 +435,14 @@ export class AppLogic extends Component {
     if (this.state.query !== prevState.query) this.scheduleLiveSearch();
     if (this.state.addQuery !== prevState.addQuery) this.scheduleAddSearch();
 
-    // Anything that changes what a journey looks like re-asks OneMap.
+    // Anything that changes what a journey looks like re-asks OneMap. Position
+    // counts only once it has actually moved: with the watch running, every
+    // small jitter would otherwise re-plan the trip and reshuffle the cards.
     const s = this.state;
     if (
       s.dest &&
       s.screen !== "nav" &&
-      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.userLoc !== prevState.userLoc)
+      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || this.originDrifted())
     ) {
       this.loadTripOptions();
     }
@@ -418,13 +454,19 @@ export class AppLogic extends Component {
       store(PLACES_KEY, { plHome: s.plHome, plWork: s.plWork, plSchool: s.plSchool });
     }
 
-    if (s.screen === "nav" && prevState.screen !== "nav") this.startTracking();
-    if (s.screen !== "nav" && prevState.screen === "nav") this.stopTracking();
+    // The map and turn-by-turn both show where you are, so both watch.
+    const tracks = s.screen === "map" || s.screen === "nav";
+    const tracked = prevState.screen === "map" || prevState.screen === "nav";
+    if (tracks && !tracked) this.startTracking();
+    if (!tracks && tracked) this.stopTracking();
   }
   componentDidMount() {
     this.t0 = Date.now();
     this.iv = setInterval(() => this.setState({ tick: Date.now() }), 1000);
-    if (this.state.screen === "map") this.requestCurrentLocation().catch(() => {});
+    if (this.state.screen === "map") {
+      this.requestCurrentLocation().catch(() => {});
+      this.startTracking();
+    }
     this.loadFaults();
     this.loadCrowding();
     this.findNearestStop();
@@ -442,12 +484,29 @@ export class AppLogic extends Component {
   // Turn-by-turn follows the real position rather than a simulated clock.
   startTracking = () => {
     this.stopTracking();
+    // Seed from the fix the map already has, so the first step is right before
+    // the watch produces anything. Anything older than a minute is stale enough
+    // to be worth waiting for the real one instead.
+    const seed = getLastPosition();
+    if (seed && Date.now() - seed.at < 60000) this.applyFix(seed);
     this.watchId = watchPosition(
-      (fix) => this.setState({ userLoc: fix.coords, userAccuracy: fix.accuracy }),
-      (err) => this.flash(messageForError(err && err.code))
+      (fix) => {
+        this._trackErrorShown = false;
+        this.applyFix(fix);
+      },
+      (err) => {
+        const code = (err && err.code) || "unavailable";
+        this.setState({ navFixStatus: code === "denied" ? "denied" : "no-fix" });
+        // A watch can fail repeatedly indoors; say it once, not every retry.
+        if (!this._trackErrorShown) {
+          this._trackErrorShown = true;
+          this.flash(messageForError(code));
+        }
+      }
     );
   };
   stopTracking = () => {
+    this._trackErrorShown = false;
     if (this.watchId != null) {
       clearWatch(this.watchId);
       this.watchId = null;
@@ -525,6 +584,15 @@ export class AppLogic extends Component {
     }, 350);
   };
 
+  // Has the position moved far enough from the one the current options were
+  // planned from to be worth planning again? A few metres of GPS wander is not.
+  originDrifted = () => {
+    const here = this.state.userLoc;
+    if (!here) return false;
+    if (!this._planOrigin) return true;
+    return metresBetween(this._planOrigin, here) > REPLAN_DRIFT_M;
+  };
+
   // Real journey options for the picked destination and mode. No fallback:
   // a failure surfaces in the sheet rather than being papered over.
   loadTripOptions = () => {
@@ -532,8 +600,10 @@ export class AppLogic extends Component {
     if (!dest || !dest.ll) return;
     const request = (origin) => {
       const key = `${dest.name}|${tripMode}|${origin.join(",")}`;
-      if (this.state.trips.key === key && this.state.trips.options.length) return Promise.resolve();
-
+      if (this.state.trips.key === key && (this.state.trips.pending || this.state.trips.options.length)) {
+        return Promise.resolve();
+      }
+      this._planOrigin = origin;
       this.setState({ trips: { key, options: [], pending: true, error: null } });
       return getTripOptions(origin, dest.ll, tripMode, dest.name)
       .then((options) => {
@@ -609,7 +679,7 @@ export class AppLogic extends Component {
     this.setState((st) => ({ stop: { ...st.stop, pending: true, error: null } }));
     getPosition()
       .then((fix) => {
-        this.setState((st) => ({ userLoc: st.userLoc || fix.coords, userAccuracy: st.userAccuracy || fix.accuracy }));
+        this.applyFix(fix);
         return getNearestStop(fix.coords[0], fix.coords[1]);
       })
       .then((data) => this.setState({ stop: { data, pending: false, error: null } }))
@@ -806,12 +876,6 @@ export class AppLogic extends Component {
     e.preventDefault();
   }
 
-  lerpRoute(coords, f) {
-    if (!coords || coords.length < 2) return coords && coords[0];
-    const t = Math.max(0, Math.min(1, f)) * (coords.length - 1), idx = Math.min(coords.length - 2, Math.floor(t)), k = t - idx;
-    return [coords[idx][0] + (coords[idx + 1][0] - coords[idx][0]) * k, coords[idx][1] + (coords[idx + 1][1] - coords[idx][1]) * k];
-  }
-
   startSheetDrag(e) {
     const el = this.sheetEl, host = el && el.parentElement;
     if (!host) return;
@@ -889,6 +953,17 @@ export class AppLogic extends Component {
     });
 
     const ORIGIN = this.currentOrigin();
+    // The dot follows every fix; the viewport follows real movement only. GPS
+    // wander of a few metres would otherwise pan the map continuously under
+    // anyone trying to read it.
+    if (
+      !this._mapCenter ||
+      (!this._mapCenterReal && s.userLoc) ||
+      metresBetween(this._mapCenter, ORIGIN) > MAP_FOLLOW_M
+    ) {
+      this._mapCenter = ORIGIN;
+      this._mapCenterReal = !!s.userLoc;
+    }
     const q = s.query.trim().toLowerCase();
     // Only ever live OneMap results.
     const resultSource = s.liveResults && s.liveResults.query === s.query ? s.liveResults.items : [];
@@ -910,7 +985,10 @@ export class AppLogic extends Component {
         if (e && e.stopPropagation) e.stopPropagation();
         // Snapshot the route: re-planning while under way must not pull the
         // steps out from under the screen showing them.
-        this.setState({ tripRoute: i, navRoute: i, navTrip: o, screen: "nav", navStart: Date.now() });
+        this.setState({
+          tripRoute: i, navRoute: i, navTrip: o, screen: "nav", navStart: Date.now(),
+          navProgress: null, navFixStatus: null, navPage: 0,
+        });
       },
       legs: (o.legs || []).map((label) => ({ label, style: this.lineStyle(label) })),
       bars: o.crowdLevel ? this.barsFor(o.crowdLevel) : [],
@@ -924,27 +1002,42 @@ export class AppLogic extends Component {
     const navGeometry = (navOpt && navOpt.geometry) || [];
     const navTotal = navArr.reduce((a, b) => a + (b.secs || 0), 0) || 1;
 
-    // Progress is measured against the real clock, and against the real
-    // position when the device is sharing one.
-    const elapsedSecs = s.navStart ? ((s.tick || Date.now()) - s.navStart) / 1000 : 0;
-    const alongRoute = s.userLoc && navGeometry.length > 1 ? fractionAlong(navGeometry, s.userLoc) : null;
-    const navFrac = Math.max(0, Math.min(1, alongRoute != null ? alongRoute : elapsedSecs / navTotal));
-    const navElapsed = navFrac * navTotal;
+    // Progress comes from the device's position whenever one has placed the
+    // traveller on this route. The clock is only a stand-in until then: mixing
+    // the two mid-trip is what made the countdown and the current station jump
+    // about, so once the position leads, the clock never takes over again — a
+    // lost or off-route fix holds progress where it was and says so.
+    const nowMs = s.tick || Date.now();
+    const elapsedSecs = s.navStart ? (nowMs - s.navStart) / 1000 : 0;
+    const navByGps = !!s.navProgress;
+    const navAlongM = navByGps ? s.navProgress.alongM : alongMAtTime(navOpt, elapsedSecs);
+    const at = navByGps ? timeAtAlongM(navOpt, navAlongM) : stepAtTime(navOpt, elapsedSecs);
+    const navElapsed = at.elapsedSecs;
+    const navFrac = Math.max(0, Math.min(1, navTotal ? navElapsed / navTotal : 0));
+    const navIdx = at.stepIdx;
+    const stepRem = at.stepRemainSecs;
 
-    let acc = 0, navIdx = 0, stepRem = 0;
-    for (let idx = 0; idx < navArr.length; idx++) {
-      if (navElapsed < acc + (navArr[idx].secs || 0) || idx === navArr.length - 1) {
-        navIdx = idx;
-        stepRem = acc + (navArr[idx].secs || 0) - navElapsed;
-        break;
-      }
-      acc += navArr[idx].secs || 0;
-    }
+    const fixAge = s.userFixAt ? nowMs - s.userFixAt : null;
+    const navStale = navByGps && (s.navFixStatus === "off-route" || (fixAge != null && fixAge > STALE_FIX_MS));
+    const navTrackNote = !s.navTrip
+      ? null
+      : s.navFixStatus === "denied"
+      ? "Location off · timings are estimated"
+      : s.navFixStatus === "no-route"
+      ? "Timings from the timetable · this route has no map line"
+      : !navByGps
+      ? "Waiting for GPS · timings are estimated"
+      : s.navFixStatus === "off-route"
+      ? "Off route · holding your last position"
+      : navStale
+      ? "GPS lost · holding your last position"
+      : null;
+
     const arrived = navArr.length > 0 && navElapsed >= navTotal - 1;
     this._navIdx = navIdx;
     const fmtS = (x) => (x >= 60 ? Math.ceil(x / 60) + " min" : Math.max(0, Math.ceil(x)) + " s");
     const curStep = navArr[navIdx] || {};
-    const stepProg = curStep.secs ? Math.max(0, Math.min(1, 1 - stepRem / curStep.secs)) : 0;
+    const stepProg = at.stepFrac || 0;
     const curStops = curStep.stops && curStep.stops.length ? curStep.stops : null;
     const passed = curStops ? Math.min(curStops.length - 1, Math.floor(stepProg * curStops.length)) : 0;
     const stopsLeft = curStops ? curStops.length - passed : 0;
@@ -960,7 +1053,13 @@ export class AppLogic extends Component {
       navStepLabel: arrived ? "Trip complete" : navArr.length ? "Step " + (navIdx + 1) + " of " + navArr.length : "Preparing trip",
       navEta: navOpt ? navOpt.eta : "",
       navRemainLabel: arrived ? "Arrived · " + destShort : Math.max(1, Math.ceil((navTotal - navElapsed) / 60)) + " min left · " + destShort,
-      navCoord: s.userLoc || this.lerpRoute(navGeometry, navFrac) || ORIGIN,
+      navTrackNote,
+      navTrackTone: s.navFixStatus === "denied" || navStale || s.navFixStatus === "off-route" ? "warn" : "muted",
+      // The map follows the real position; where there isn't one, it frames the
+      // route instead of drawing a dot the device never reported.
+      navCoord: s.userLoc || coordAt(navOpt, navAlongM) || navGeometry[0] || ORIGIN,
+      navMarker: s.userLoc || null,
+      navAccuracy: s.userLoc ? s.userAccuracy : null,
       navProgressStyle: { width: Math.round(navFrac * 100) + "%", height: "100%", background: "var(--accent)", borderRadius: 999, transition: "width 1s linear" },
       setStepsRef: (el) => { this.stepsEl = el; },
       stepsPagerStyle: {
@@ -1041,7 +1140,7 @@ export class AppLogic extends Component {
       searchError: s.searchError || null,
       searchFooter: "Results from OneMap · Singapore Land Authority",
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
-      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: ORIGIN,
+      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: this._mapCenter,
       routeCoords: (tripOptions[s.tripRoute] || tripOptions[0] || {}).geometry || [],
       userAccuracy: s.userLoc ? s.userAccuracy : null,
       recenterToken: s.recenterToken || 0,
@@ -1113,7 +1212,7 @@ export class AppLogic extends Component {
       tripsEmpty: !!trips.key && !trips.pending && !trips.error && tripOptions.length === 0,
       retryTrips: () => { this.setState({ trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions); },
       isNav: sc === "nav",
-      endTrip: () => { this.setState({ screen: "map", navTrip: null }); this.flash("Trip ended"); },
+      endTrip: () => { this.setState({ screen: "map", navTrip: null, navProgress: null, navFixStatus: null }); this.flash("Trip ended"); },
       goReport: () => this.setState({ navRepOpen: true, nrType: null, nrSev: null }),
       ...nav,
       headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today" }[sc] || "Solvik",

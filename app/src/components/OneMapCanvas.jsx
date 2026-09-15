@@ -80,6 +80,14 @@ export function OneMapCanvas({
     }
     return () => {
       if (ro) ro.disconnect();
+      // Finish anything in flight first: a pan or zoom animation still running
+      // when the panes go away throws from its own callback afterwards.
+      try {
+        map.stop();
+        if (map._animatingZoom && typeof map._onZoomTransitionEnd === "function") map._onZoomTransitionEnd();
+      } catch {
+        // Already torn down — nothing left to settle.
+      }
       map.remove();
       mapRef.current = null;
     };
@@ -177,13 +185,19 @@ export function OneMapCanvas({
     // overrides both the route framing and the unchanged-centre short-circuit.
     const forced = recenterToken !== lastTokenRef.current;
     lastTokenRef.current = recenterToken;
-    if (forced) {
-      map.setView(center, Math.max(safeZoom, 16), { animate: true });
-      return;
+    // A view change can land while the map is being torn down (leaving the
+    // screen mid-animation); that is not worth an uncaught error.
+    try {
+      if (forced) {
+        map.setView(center, Math.max(safeZoom, 16), { animate: true });
+        return;
+      }
+      if (safeRoute.length && fitRoute) return;
+      if (Math.abs(map.getZoom() - safeZoom) > 0.01) map.setView(center, safeZoom, { animate: false });
+      else map.panTo(center, { animate: true, duration: 0.8 });
+    } catch {
+      // The map is gone or not laid out yet; the next render sets the view.
     }
-    if (safeRoute.length && fitRoute) return;
-    if (Math.abs(map.getZoom() - safeZoom) > 0.01) map.setView(center, safeZoom, { animate: false });
-    else map.panTo(center, { animate: true, duration: 0.8 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(center), safeZoom, fitRoute, recenterToken]);
 

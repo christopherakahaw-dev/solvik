@@ -42,6 +42,25 @@ The locate button uses the browser's own geolocation, which needs no keys but
 does require a secure context — it works on `localhost` and on the deployed
 HTTPS URL, but not over a plain-HTTP LAN address.
 
+### How position tracking behaves
+
+The map and turn-by-turn both watch the device's position continuously. While a
+trip is under way, progress along the route drives the countdown and the current
+step — and only fixes worth believing move it:
+
+- a fix vaguer than ~150 m is ignored;
+- a fix more than ~250 m from the route line counts as off-route, and progress
+  holds where it was instead of guessing;
+- after the first one, a fix is only matched within reach of the last known
+  progress, at up to 35 m/s, so a route that doubles back can't jump the reading;
+- progress never runs backwards, so GPS wander can't rewind the ETA;
+- distance is converted to time per leg, so half the metres of a trip isn't read
+  as half its minutes when one leg walks and the next takes a train.
+
+Until a fix has placed you on the route, the timetable drives the screen and
+says so. Once your position leads, the clock never silently takes over again:
+losing GPS holds the last reading and shows that instead.
+
 Restart `npm run dev` after editing `.env`. **Both keys are needed for the
 app to be useful**: without them, search, journey planning, crowding and
 alerts all report that they're unavailable rather than showing stand-in data.

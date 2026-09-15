@@ -27,12 +27,29 @@ function fareOf(itin) {
   return isFinite(n) ? n : null;
 }
 
+// The whole journey as one line, plus where each leg sits inside it. The spans
+// line up 1:1 with the steps from stepsOf(), which is what lets the app turn a
+// GPS position into "which step, and how long is left on it" — without them,
+// progress along the line would have to be read as progress through the clock,
+// and a fast rail leg would look like it was taking as long as a short walk.
 export function geometryOf(itin) {
+  return geometryWithSpans(itin).coords;
+}
+
+export function geometryWithSpans(itin) {
   const coords = [];
+  const spans = [];
   (itin.legs || []).forEach((leg) => {
-    if (leg.legGeometry && leg.legGeometry.points) coords.push(...decodePolyline(leg.legGeometry.points));
+    const pts = leg.legGeometry && leg.legGeometry.points ? decodePolyline(leg.legGeometry.points) : [];
+    if (pts.length < 2) {
+      spans.push(null);
+      return;
+    }
+    const from = coords.length;
+    coords.push(...pts);
+    spans.push({ from, to: coords.length - 1 });
   });
-  return coords;
+  return { coords, spans };
 }
 
 // Steps for the turn-by-turn pager: walk / board / transfer / arrive, with the
@@ -80,6 +97,7 @@ export function stepsOf(itin, destName) {
 export function normalizeItinerary(itin, destName) {
   const allLegs = itin.legs || [];
   if (!allLegs.length) return null;
+  const path = geometryWithSpans(itin);
   const legs = allLegs.filter((l) => String(l.mode).toUpperCase() !== "WALK");
   // A walk-only itinerary is OneMap's correct answer for a short trip, not a
   // failure — keep it as a walking option instead of discarding it.
@@ -104,7 +122,8 @@ export function normalizeItinerary(itin, destName) {
       fromName: (leg.from && leg.from.name) || "",
       fromStopCode: (leg.from && (leg.from.stopCode || leg.from.stopId)) || null,
     })),
-    geometry: geometryOf(itin),
+    geometry: path.coords,
+    legSpans: path.spans,
     steps: stepsOf(itin, destName),
     startTime: itin.startTime || null,
     endTime: itin.endTime || null,

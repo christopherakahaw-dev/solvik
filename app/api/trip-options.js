@@ -110,6 +110,7 @@ async function cycleOption(start, end) {
   const secs = summary.total_time || 0;
   const metres = summary.total_distance || 0;
   if (!secs) return [];
+  const coords = data.route_geometry ? decodePolyline(data.route_geometry) : [];
   return [
     {
       mins: Math.max(1, Math.round(secs / 60)),
@@ -122,7 +123,8 @@ async function cycleOption(start, end) {
       legs: [`CYCLE ${(metres / 1000).toFixed(1)} km`],
       transitLegs: [],
       crowdLevel: null,
-      geometry: data.route_geometry ? decodePolyline(data.route_geometry) : [],
+      geometry: coords,
+      legSpans: coords.length > 1 ? [{ from: 0, to: coords.length - 1 }] : [null],
       steps: [{ icon: "bike", title: "Cycle to your destination", detail: `${(metres / 1000).toFixed(1)} km on the cycling network`, secs }],
       note: `${(metres / 1000).toFixed(1)} km ride · no fare`,
       tag: "Bike",
