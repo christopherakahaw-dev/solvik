@@ -4,11 +4,19 @@
 // do not need auth, so only routing goes through this.
 let cached = null; // { token, expiresAt }
 
-export async function getOneMapToken() {
-  if (process.env.ONEMAP_TOKEN) return process.env.ONEMAP_TOKEN;
+function envValue(name) {
+  const value = process.env[name];
+  if (!value) return "";
+  const trimmed = String(value).trim();
+  return trimmed.replace(/^(['"])(.*)\1$/, "$2").trim();
+}
 
-  const email = process.env.ONEMAP_EMAIL;
-  const password = process.env.ONEMAP_PASSWORD;
+export async function getOneMapToken() {
+  const configuredToken = envValue("ONEMAP_TOKEN");
+  if (configuredToken) return configuredToken;
+
+  const email = envValue("ONEMAP_EMAIL");
+  const password = envValue("ONEMAP_PASSWORD");
   if (!email || !password) {
     throw new Error(
       "OneMap credentials are not configured. Set ONEMAP_TOKEN, or ONEMAP_EMAIL + ONEMAP_PASSWORD, as environment variables."

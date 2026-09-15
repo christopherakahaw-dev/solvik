@@ -69,22 +69,34 @@ export class AppLogic extends Component {
 
   // Centre the map on the real position and adopt it as the trip origin.
   locateMe = () => {
-    if (this.state.locating) return;
+    this.requestCurrentLocation(true);
+  };
+
+  requestCurrentLocation = (recenter = false) => {
+    if (this.state.userLoc) return Promise.resolve(this.state.userLoc);
+    if (this._locationPromise) return this._locationPromise;
+
     this.setState({ locating: true });
-    getPosition()
+    this._locationPromise = getPosition()
       .then((fix) => {
         this.setState((st) => ({
           userLoc: fix.coords,
           userAccuracy: fix.accuracy,
           locating: false,
-          recenterToken: st.recenterToken + 1,
-          fcPin: null,
+          recenterToken: recenter ? st.recenterToken + 1 : st.recenterToken,
+          fcPin: recenter ? null : st.fcPin,
         }));
+        return fix.coords;
       })
       .catch((err) => {
         this.setState({ locating: false });
-        this.flash(messageForError(err && err.code));
+        if (recenter) this.flash(messageForError(err && err.code));
+        throw err;
+      })
+      .finally(() => {
+        this._locationPromise = null;
       });
+    return this._locationPromise;
   };
 
   addCommuteVals(s) {
@@ -351,9 +363,11 @@ export class AppLogic extends Component {
       }),
       fcFaults: faults.items.map((f, fi) => ({
         ...f,
-        readLabel: fcRead.indexOf(fi) >= 0 ? "Read · tap to mark unread" : "Tap to mark as read",
+        readLabel: fcRead.indexOf(fi) >= 0 ? "Read" : "Tap to mark as read",
         readDotStyle: fcRead.indexOf(fi) >= 0 ? "display:none" : "width:7px;height:7px;border-radius:999px;background:var(--status-fault)",
-        toggleRead: () => this.setState({ fcRead: fcRead.indexOf(fi) >= 0 ? fcRead.filter((x) => x !== fi) : fcRead.concat([fi]) }),
+        toggleRead: () => {
+          if (fcRead.indexOf(fi) < 0) this.setState({ fcRead: fcRead.concat([fi]) });
+        },
         cardStyle: "width:100%;text-align:left;display:block;cursor:pointer;padding:13px 14px;border-radius:16px;background:var(--surface-card);opacity:" + (fcRead.indexOf(fi) >= 0 ? ".6" : "1") + ";border:1px solid " + (fcRead.indexOf(fi) >= 0 ? "var(--border-card)" : sevTone[f.sev] || "var(--border-card)"),
         badgeStyle: "flex:none;padding:3px 8px;border-radius:999px;font:var(--weight-heavy) 11px/1.3 var(--font-body);letter-spacing:.02em;color:#fff;background:" + (sevTone[f.sev] || "var(--sand-500)"),
         tagStyle: "font:var(--weight-semibold) 11px/1 var(--font-body);letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)",
@@ -406,6 +420,7 @@ export class AppLogic extends Component {
   componentDidMount() {
     this.t0 = Date.now();
     this.iv = setInterval(() => this.setState({ tick: Date.now() }), 1000);
+    if (this.state.screen === "map") this.requestCurrentLocation().catch(() => {});
     this.loadFaults();
     this.loadCrowding();
     this.findNearestStop();
@@ -509,11 +524,12 @@ export class AppLogic extends Component {
   loadTripOptions = () => {
     const { dest, tripMode } = this.state;
     if (!dest || !dest.ll) return;
-    const key = `${dest.name}|${tripMode}|${this.currentOrigin().join(",")}`;
-    if (this.state.trips.key === key && this.state.trips.options.length) return;
+    const request = (origin) => {
+      const key = `${dest.name}|${tripMode}|${origin.join(",")}`;
+      if (this.state.trips.key === key && this.state.trips.options.length) return Promise.resolve();
 
-    this.setState({ trips: { key, options: [], pending: true, error: null } });
-    getTripOptions(this.currentOrigin(), dest.ll, tripMode, dest.name)
+      this.setState({ trips: { key, options: [], pending: true, error: null } });
+      return getTripOptions(origin, dest.ll, tripMode, dest.name)
       .then((options) => {
         if (this.state.dest !== dest || this.state.tripMode !== tripMode) return;
         this.setState({ trips: { key, options, pending: false, error: null }, tripRoute: 0 });
@@ -521,6 +537,14 @@ export class AppLogic extends Component {
       .catch((err) => {
         if (this.state.dest !== dest) return;
         this.setState({ trips: { key, options: [], pending: false, error: String(err.message || err) } });
+      });
+    };
+
+    (this.state.userLoc ? Promise.resolve(this.state.userLoc) : this.requestCurrentLocation())
+      .then(request)
+      .catch((err) => {
+        if (this.state.dest !== dest) return;
+        this.setState({ trips: { key: null, options: [], pending: false, error: messageForError(err && err.code) } });
       });
   };
 
@@ -540,7 +564,7 @@ export class AppLogic extends Component {
     getTrainServiceAlerts()
       .then((data) => {
         const segments = data && Array.isArray(data.AffectedSegments) ? data.AffectedSegments : [];
-        const items = segments.map((seg) => ({
+        const segmentItems = segments.map((seg) => ({
           line: seg.Line || "Rail",
           tag: "Delay",
           sev: "warn",
@@ -551,6 +575,22 @@ export class AppLogic extends Component {
             seg.Stations ? `Stations: ${seg.Stations}` : "",
           ].filter(Boolean).join(" "),
         }));
+        const messageItems = data && Array.isArray(data.Message)
+          ? data.Message.filter((message) => message && message.Content).map((message) => {
+              const content = String(message.Content).trim();
+              const separator = content.indexOf("-");
+              const title = separator > 0 ? content.slice(separator + 1).split(". ")[0] : content;
+              return {
+                line: "LTA",
+                tag: "Service update",
+                sev: "warn",
+                time: message.CreatedDate || "Today",
+                title,
+                detail: content,
+              };
+            })
+          : [];
+        const items = [...segmentItems, ...messageItems];
         this.setState({ faults: { items, pending: false, error: null } });
       })
       .catch((err) =>

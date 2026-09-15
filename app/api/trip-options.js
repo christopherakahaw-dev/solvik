@@ -8,12 +8,12 @@ import { normalizeItinerary, crowdLevelOf, crowdScoreOf, signature, clockFrom } 
 import { decodePolyline } from "./_lib/polyline.js";
 
 const MODES = {
-  fast: { query: [{ mode: "TRANSIT", maxWalkDistance: 1000 }], rank: (a, b) => a.mins - b.mins, tag: "Fastest" },
-  budget: { query: [{ mode: "TRANSIT", maxWalkDistance: 1000 }, { mode: "BUS", maxWalkDistance: 1200 }], rank: (a, b) => (a.fareValue ?? 99) - (b.fareValue ?? 99) || a.mins - b.mins, tag: "Cheapest" },
-  quiet: { query: [{ mode: "TRANSIT", maxWalkDistance: 1000 }], rank: (a, b) => (crowdScoreOf(a) ?? 9) - (crowdScoreOf(b) ?? 9) || a.mins - b.mins, tag: "Quietest" },
-  step: { query: [{ mode: "TRANSIT", maxWalkDistance: 800 }], rank: (a, b) => (b.accessibleScore ?? 0) - (a.accessibleScore ?? 0) || a.mins - b.mins, tag: "Step-free" },
-  few: { query: [{ mode: "TRANSIT", maxWalkDistance: 1200 }], rank: (a, b) => a.transfers - b.transfers || a.mins - b.mins, tag: "Fewest changes" },
-  walk: { query: [{ mode: "TRANSIT", maxWalkDistance: 500 }], rank: (a, b) => a.walkSecs - b.walkSecs || a.mins - b.mins, tag: "Least walking" },
+  fast: { query: [{ mode: "transit", maxWalkDistance: 1000 }], rank: (a, b) => a.mins - b.mins, tag: "Fastest" },
+  budget: { query: [{ mode: "transit", maxWalkDistance: 1000 }, { mode: "bus", maxWalkDistance: 1200 }], rank: (a, b) => (a.fareValue ?? 99) - (b.fareValue ?? 99) || a.mins - b.mins, tag: "Cheapest" },
+  quiet: { query: [{ mode: "transit", maxWalkDistance: 1000 }], rank: (a, b) => (crowdScoreOf(a) ?? 9) - (crowdScoreOf(b) ?? 9) || a.mins - b.mins, tag: "Quietest" },
+  step: { query: [{ mode: "transit", maxWalkDistance: 800 }], rank: (a, b) => (b.accessibleScore ?? 0) - (a.accessibleScore ?? 0) || a.mins - b.mins, tag: "Step-free" },
+  few: { query: [{ mode: "transit", maxWalkDistance: 1200 }], rank: (a, b) => a.transfers - b.transfers || a.mins - b.mins, tag: "Fewest changes" },
+  walk: { query: [{ mode: "transit", maxWalkDistance: 500 }], rank: (a, b) => a.walkSecs - b.walkSecs || a.mins - b.mins, tag: "Least walking" },
   bike: { cycle: true, tag: "Bike" },
 };
 
@@ -133,7 +133,7 @@ async function cycleOption(start, end) {
 
 export default async function handler(req, res) {
   const q = req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
-  const { from, to, mode = "fast", destName = "" } = q;
+  const { from, to, mode = "fast", destName = "", date, time } = q;
   if (!from || !to) {
     res.status(400).json({ error: "Missing from or to (lat,lng)" });
     return;
@@ -146,9 +146,12 @@ export default async function handler(req, res) {
       return;
     }
 
-    const responses = await Promise.all(
-      spec.query.map((params) => oneMapRoute({ start: from, end: to, routeType: "pt", numItineraries: 5, ...params }))
+    const settled = await Promise.allSettled(
+      spec.query.map((params) => oneMapRoute({ start: from, end: to, routeType: "pt", date, time, numItineraries: 3, ...params }))
     );
+    const unexpectedFailure = settled.find((result) => result.status === "rejected" && result.reason?.status !== 404);
+    if (unexpectedFailure) throw unexpectedFailure.reason;
+    const responses = settled.filter((result) => result.status === "fulfilled").map((result) => result.value);
     const itineraries = responses.flatMap((data) => (data.plan && data.plan.itineraries) || []);
     if (!itineraries.length) {
       res.status(200).json({ mode, options: [] });
@@ -158,6 +161,7 @@ export default async function handler(req, res) {
     const seen = new Set();
     const normalized = itineraries
       .map((itin) => normalizeItinerary(itin, destName))
+      .filter(Boolean)
       .filter((opt) => {
         const sig = signature(opt);
         if (seen.has(sig)) return false;
@@ -172,6 +176,10 @@ export default async function handler(req, res) {
     res.status(200).json({ mode, options: tagsFor(ranked, spec.tag) });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
+    if (err && err.status === 404) {
+      res.status(200).json({ mode, options: [] });
+      return;
+    }
     res.status(msg.includes("not configured") || msg.includes("credentials") ? 501 : 502).json({ error: msg });
   }
 }

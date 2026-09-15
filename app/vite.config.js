@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 
 // Runs the api/*.js serverless functions inside the Vite dev server, so
 // `npm run dev` gives a working full-stack app locally without needing the
@@ -47,6 +47,10 @@ function apiDevMiddleware() {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), apiDevMiddleware()],
+export default defineConfig(({ mode }) => {
+  Object.assign(process.env, loadEnv(mode, process.cwd(), ''));
+
+  return {
+    plugins: [react(), apiDevMiddleware()],
+  };
 })

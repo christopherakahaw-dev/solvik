@@ -79,6 +79,7 @@ export function stepsOf(itin, destName) {
 
 export function normalizeItinerary(itin, destName) {
   const legs = (itin.legs || []).filter((l) => String(l.mode).toUpperCase() !== "WALK");
+  if (!legs.length) return null;
   const fare = fareOf(itin);
   const durationSecs = itin.duration || Math.round(((itin.endTime || 0) - (itin.startTime || 0)) / 1000);
   return {

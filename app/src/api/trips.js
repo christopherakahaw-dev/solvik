@@ -1,10 +1,33 @@
+function singaporeDateTime(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now).reduce((out, part) => {
+    if (part.type !== "literal") out[part.type] = part.value;
+    return out;
+  }, {});
+  return {
+    date: `${parts.month}-${parts.day}-${parts.year}`,
+    time: `${parts.hour}:${parts.minute}:${parts.second}`,
+  };
+}
+
 // Journey options from /api/trip-options. Throws on failure so the caller can
 // show an explicit error state rather than substituting invented routes.
 export async function getTripOptions(from, to, mode, destName) {
+  const { date, time } = singaporeDateTime();
   const params = new URLSearchParams({
     from: `${from[0]},${from[1]}`,
     to: `${to[0]},${to[1]}`,
     mode,
+    date,
+    time,
   });
   if (destName) params.set("destName", destName);
   const res = await fetch(`/api/trip-options?${params.toString()}`);

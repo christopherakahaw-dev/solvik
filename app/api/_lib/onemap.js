@@ -26,17 +26,20 @@ export async function oneMapSearch(query) {
 }
 
 // start/end are "lat,lng" strings. Extra params vary by route type.
-export async function oneMapRoute({ start, end, routeType = "pt", mode = "TRANSIT", date, time, maxWalkDistance = 1000, numItineraries = 3 }) {
+export async function oneMapRoute({ start, end, routeType = "pt", mode = "transit", date, time, maxWalkDistance = 1000, numItineraries = 3 }) {
   const token = await getOneMapToken();
-  const now = new Date();
   const url = new URL(ROUTE_URL);
   url.searchParams.set("start", start);
   url.searchParams.set("end", end);
   url.searchParams.set("routeType", routeType);
   if (routeType === "pt") {
-    url.searchParams.set("date", date || now.toISOString().slice(0, 10));
-    url.searchParams.set("time", time || now.toTimeString().slice(0, 8));
-    url.searchParams.set("mode", mode);
+    if (!date || !time) throw new Error("OneMap routing requires a date and time");
+    if (!["transit", "bus", "rail"].includes(String(mode).toLowerCase())) {
+      throw new Error("OneMap routing requires mode transit, bus, or rail");
+    }
+    url.searchParams.set("date", date);
+    url.searchParams.set("time", time);
+    url.searchParams.set("mode", String(mode).toLowerCase());
     url.searchParams.set("maxWalkDistance", String(maxWalkDistance));
     url.searchParams.set("numItineraries", String(numItineraries));
     // The turn-by-turn lane diagram needs the stops between board and alight.
@@ -45,6 +48,10 @@ export async function oneMapRoute({ start, end, routeType = "pt", mode = "TRANSI
 
   const res = await fetch(url.toString(), { headers: { Authorization: token } });
   const data = await res.json();
-  if (!res.ok) throw new Error(`OneMap routing failed (${res.status})`);
+  if (!res.ok) {
+    const error = new Error(data.error || `OneMap routing failed (${res.status})`);
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
