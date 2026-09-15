@@ -8,7 +8,7 @@
 // head of the raw response. The token itself is never printed.
 import { readFileSync } from "node:fs";
 import { credentialSummary, getOneMapToken } from "../api/_lib/onemapAuth.js";
-import { buildRouteUrl, otpError } from "../api/_lib/onemap.js";
+import { buildRouteUrl, otpError, hasTransit, REQUEST_VARIANTS } from "../api/_lib/onemap.js";
 import { normalizeItinerary } from "../api/_lib/itinerary.js";
 
 // Load .env the same way the dev server does, without adding a dependency.
@@ -73,37 +73,50 @@ try {
 
 console.log("\n=== routing request ===");
 const { date, time } = sgNow();
-const url = buildRouteUrl({ start: from, end: to, routeType: "pt", mode, date, time });
-line("url", url.toString());
+let solved = false;
+for (const variant of REQUEST_VARIANTS) {
+  const url = buildRouteUrl({ start: from, end: to, routeType: "pt", mode, date, time, variant });
 
-for (const scheme of ["raw", "bearer"]) {
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: scheme === "bearer" ? `Bearer ${token}` : token },
-  });
-  const text = await res.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch { /* keep raw */ }
+  for (const scheme of ["raw", "bearer"]) {
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: scheme === "bearer" ? `Bearer ${token}` : token },
+    });
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* keep raw */ }
 
-  console.log(`\n--- Authorization: ${scheme} ---`);
-  line("status", `${res.status} ${res.statusText}`);
-  line("content-type", res.headers.get("content-type") || "(none)");
+    console.log(`\n--- ${variant.id} · ${scheme} auth ---`);
+    line("sent mode/date", `${url.searchParams.get("mode")} / ${url.searchParams.get("date")}`);
+    line("status", `${res.status} ${res.statusText}`);
 
-  const otp = otpError(json);
-  if (otp) line("onemap error", `id=${otp.id} msg=${otp.msg}`);
+    const otp = otpError(json);
+    if (otp) line("onemap error", `id=${otp.id} msg=${otp.msg}`);
 
-  const itineraries = (json && json.plan && json.plan.itineraries) || [];
-  line("itineraries", String(itineraries.length));
-  if (itineraries.length) {
-    const kept = itineraries.map((i) => normalizeItinerary(i, "test")).filter(Boolean);
-    line("after normalise", String(kept.length));
-    kept.slice(0, 3).forEach((o, i) =>
-      line(`  option ${i + 1}`, `${o.mins} min · ${o.fare || "no fare"} · ${o.legs.join(" + ") || "walk only"}`)
-    );
-  } else {
-    line("body head", text.slice(0, 400).replace(/\s+/g, " "));
+    const itineraries = (json && json.plan && json.plan.itineraries) || [];
+    line("itineraries", String(itineraries.length));
+    line("has transit", hasTransit(json) ? "YES" : "no (walking only)");
+
+    if (itineraries.length) {
+      const kept = itineraries.map((i) => normalizeItinerary(i, "test")).filter(Boolean);
+      kept.slice(0, 3).forEach((o, i) =>
+        line(`  option ${i + 1}`, `${o.mins} min · ${o.fare || "no fare"} · ${o.legs.join(" + ")}`)
+      );
+    } else {
+      line("body head", text.slice(0, 300).replace(/\s+/g, " "));
+    }
+
+    if (hasTransit(json)) {
+      console.log(`\n=> OneMap accepts mode="${url.searchParams.get("mode")}" date="${url.searchParams.get("date")}" with ${scheme} auth.`);
+      solved = true;
+      break;
+    }
+    if (res.status !== 401 && res.status !== 403) break; // only auth issues are worth another scheme
   }
+  if (solved) break;
+}
 
-  if (res.ok && itineraries.length) break; // no need to try the other scheme
+if (!solved) {
+  console.log("\n=> No spelling returned transit. If every attempt showed walking only, OneMap is reachable but has no transit for this pair — try points a few km apart during service hours.");
 }
 
 console.log("\nDone. Paste this output (it contains no secrets) if anything above looks wrong.");

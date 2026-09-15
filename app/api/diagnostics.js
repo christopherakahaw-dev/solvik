@@ -3,7 +3,7 @@
 // responses only — never a token, password or account key — so the output is
 // safe to paste into an issue.
 import { credentialSummary, getOneMapToken } from "./_lib/onemapAuth.js";
-import { buildRouteUrl, otpError } from "./_lib/onemap.js";
+import { buildRouteUrl, otpError, hasTransit, REQUEST_VARIANTS, learnedRequestShape } from "./_lib/onemap.js";
 import { normalizeItinerary } from "./_lib/itinerary.js";
 import { ltaKey, ltaFetch } from "./_lib/lta.js";
 
@@ -59,45 +59,56 @@ export default async function handler(req, res) {
   }
 
   // --- OneMap routing ---
+  // Probe every request spelling: OneMap answers an unparsed mode or date with
+  // HTTP 200 and a walking-only plan, so "which spelling returns transit" is
+  // the question that actually matters.
   const { date, time } = singaporeNow();
+  const attempts = [];
   try {
-    const url = buildRouteUrl({ start: from, end: to, routeType: "pt", mode: "transit", date, time });
-    const attempts = [];
-    for (const scheme of ["raw", "bearer"]) {
-      const upstream = await fetch(url.toString(), {
-        headers: { Authorization: scheme === "bearer" ? `Bearer ${token}` : token },
-      });
-      const text = await upstream.text();
-      let json = null;
-      try { json = JSON.parse(text); } catch { /* keep raw */ }
+    for (const variant of REQUEST_VARIANTS) {
+      const url = buildRouteUrl({ start: from, end: to, routeType: "pt", mode: "transit", date, time, variant });
+      for (const scheme of ["raw", "bearer"]) {
+        const upstream = await fetch(url.toString(), {
+          headers: { Authorization: scheme === "bearer" ? `Bearer ${token}` : token },
+        });
+        const text = await upstream.text();
+        let json = null;
+        try { json = JSON.parse(text); } catch { /* keep raw */ }
 
-      const itineraries = (json && json.plan && json.plan.itineraries) || [];
-      const kept = itineraries.map((i) => normalizeItinerary(i, "diagnostic")).filter(Boolean);
-      attempts.push({
-        authScheme: scheme,
-        status: upstream.status,
-        contentType: upstream.headers.get("content-type"),
-        onemapError: otpError(json),
-        itineraries: itineraries.length,
-        usableOptions: kept.length,
-        sample: kept.slice(0, 2).map((o) => ({ mins: o.mins, fare: o.fare, legs: o.legs })),
-        bodyHead: itineraries.length ? undefined : text.slice(0, 400),
-      });
-      if (upstream.ok && itineraries.length) break;
+        const itineraries = (json && json.plan && json.plan.itineraries) || [];
+        const kept = itineraries.map((i) => normalizeItinerary(i, "diagnostic")).filter(Boolean);
+        const transit = hasTransit(json);
+        attempts.push({
+          variant: variant.id,
+          authScheme: scheme,
+          status: upstream.status,
+          onemapError: otpError(json),
+          itineraries: itineraries.length,
+          withTransit: transit,
+          sample: kept.slice(0, 2).map((o) => ({ mins: o.mins, fare: o.fare, legs: o.legs })),
+          bodyHead: itineraries.length ? undefined : text.slice(0, 300),
+          sentDate: url.searchParams.get("date"),
+          sentMode: url.searchParams.get("mode"),
+        });
+        if (upstream.status === 401 || upstream.status === 403) continue; // try other auth
+        break; // this variant answered; move to the next spelling
+      }
+      if (attempts[attempts.length - 1]?.withTransit) break;
     }
 
-    report.routing = { request: { from, to, date, time, url: url.toString() }, attempts };
+    report.routing = { request: { from, to, date, time }, learned: learnedRequestShape(), attempts };
 
-    const best = attempts.find((a) => a.usableOptions > 0);
+    const winner = attempts.find((a) => a.withTransit);
+    const walkOnly = attempts.find((a) => a.itineraries > 0 && !a.withTransit);
     if (!report.hint) {
-      if (best) report.hint = `Routing works (${best.usableOptions} options via ${best.authScheme} auth).`;
-      else if (attempts.some((a) => a.status === 401 || a.status === 403)) report.hint = "OneMap rejected the token (401/403) under both auth schemes — the credentials are wrong or the account lacks routing access.";
-      else if (attempts.some((a) => a.onemapError)) report.hint = `OneMap answered but declined the trip: ${attempts.find((a) => a.onemapError).onemapError.msg}`;
-      else if (attempts.some((a) => a.status >= 400)) report.hint = "OneMap returned an HTTP error — see status and bodyHead.";
-      else report.hint = "OneMap returned no itineraries for this pair. Try coordinates further apart, or a time inside service hours.";
+      if (winner) report.hint = `Routing works. OneMap accepts mode="${winner.sentMode}" with date="${winner.sentDate}" (${winner.authScheme} auth) — ${winner.itineraries} itineraries.`;
+      else if (walkOnly) report.hint = "Every request spelling came back with walking only. That means OneMap is reachable but returning no transit for this pair — try coordinates a few km apart, and a time inside service hours (roughly 05:30–24:00).";
+      else if (attempts.some((a) => a.status === 401 || a.status === 403)) report.hint = "OneMap rejected the token (401/403) under both auth schemes — the credentials are wrong or lack routing access.";
+      else if (attempts.some((a) => a.onemapError)) report.hint = `OneMap declined the trip: ${attempts.find((a) => a.onemapError).onemapError.msg}`;
+      else report.hint = "OneMap returned an HTTP error — see status and bodyHead below.";
     }
   } catch (err) {
-    report.routing = { error: String(err.message || err) };
+    report.routing = { error: String(err.message || err), attempts };
   }
 
   // --- LTA reachability ---

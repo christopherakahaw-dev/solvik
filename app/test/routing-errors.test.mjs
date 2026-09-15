@@ -78,3 +78,54 @@ test("a rejected token is retried as Bearer before giving up", async () => {
   assert.equal(seen[0], "test-token");
   assert.equal(seen[1], "Bearer test-token");
 });
+
+// --- request-shape probing -------------------------------------------------
+// OneMap answers an unparsed `mode` or `date` with HTTP 200 and a walking-only
+// plan, which is indistinguishable from "no transit exists" unless the other
+// spellings are tried.
+import { buildRouteUrl, hasTransit, parseDateInput, REQUEST_VARIANTS } from "../api/_lib/onemap.js";
+
+const transitPlan = { plan: { itineraries: [{ duration: 1800, legs: [{ mode: "WALK" }, { mode: "SUBWAY", routeShortName: "NS" }] }] } };
+const walkPlan = { plan: { itineraries: [{ duration: 6420, legs: [{ mode: "WALK", distance: 9000 }] }] } };
+
+test("a walking-only plan is not treated as a transit answer", () => {
+  assert.equal(hasTransit(transitPlan), true);
+  assert.equal(hasTransit(walkPlan), false);
+  assert.equal(hasTransit({}), false);
+});
+
+test("both date spellings are understood and re-emitted per variant", () => {
+  assert.deepEqual(parseDateInput("09-15-2026"), { y: 2026, m: 9, d: 15 });
+  assert.deepEqual(parseDateInput("2026-09-15"), { y: 2026, m: 9, d: 15 });
+  assert.equal(parseDateInput("nonsense"), null);
+
+  const args = { start: "1,103", end: "1.1,103.1", date: "09-15-2026", time: "08:00:00", mode: "transit" };
+  const upper = buildRouteUrl({ ...args, variant: REQUEST_VARIANTS[0] });
+  assert.equal(upper.searchParams.get("mode"), "TRANSIT");
+  assert.equal(upper.searchParams.get("date"), "09-15-2026");
+
+  const isoLower = buildRouteUrl({ ...args, variant: { modeCase: "lower", dateFormat: "YYYY-MM-DD" } });
+  assert.equal(isoLower.searchParams.get("mode"), "transit");
+  assert.equal(isoLower.searchParams.get("date"), "2026-09-15");
+});
+
+test("a walking-only reply makes it try the other spellings, and it keeps the one with transit", async () => {
+  const tried = [];
+  globalThis.fetch = async (url) => {
+    const u = new URL(url);
+    tried.push(`${u.searchParams.get("mode")}|${u.searchParams.get("date")}`);
+    // Only uppercase TRANSIT yields transit here.
+    const payload = u.searchParams.get("mode") === "TRANSIT" ? transitPlan : walkPlan;
+    return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const data = await oneMapRoute({ start: "1,103", end: "1.1,103.1", date: "09-15-2026", time: "08:00:00" });
+  assert.equal(hasTransit(data), true, "should return the transit-bearing plan");
+  assert.equal(tried[0], "TRANSIT|09-15-2026", "tries the documented spelling first");
+});
+
+test("when every spelling returns walking only, the walk plan is still returned", async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify(walkPlan), { status: 200, headers: { "content-type": "application/json" } });
+  const data = await oneMapRoute({ start: "1,103", end: "1.0001,103.0001", date: "09-15-2026", time: "08:00:00" });
+  assert.equal(hasTransit(data), false);
+  assert.equal(data.plan.itineraries.length, 1, "a genuinely short trip still gets its walking option");
+});

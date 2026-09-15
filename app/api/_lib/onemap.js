@@ -47,7 +47,36 @@ export async function oneMapSearch(query) {
   }));
 }
 
-export function buildRouteUrl({ start, end, routeType = "pt", mode = "transit", date, time, maxWalkDistance = 1000, numItineraries = 3 }) {
+const pad = (n) => String(n).padStart(2, "0");
+
+// Accepts either spelling and returns parts, so the wire format can be varied
+// independently of what the caller passed.
+export function parseDateInput(date) {
+  const mdy = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(String(date || ""));
+  if (mdy) return { y: +mdy[3], m: +mdy[1], d: +mdy[2] };
+  const ymd = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(date || ""));
+  if (ymd) return { y: +ymd[1], m: +ymd[2], d: +ymd[3] };
+  return null;
+}
+
+const DATE_FORMATS = {
+  "MM-DD-YYYY": (p) => `${pad(p.m)}-${pad(p.d)}-${p.y}`,
+  "YYYY-MM-DD": (p) => `${p.y}-${pad(p.m)}-${pad(p.d)}`,
+};
+
+// OneMap's docs and its deployed OTP build have disagreed about the casing of
+// `mode` and the spelling of `date`. A request with an unparsed mode comes back
+// 200 with walking-only itineraries rather than an error, which is impossible
+// to tell from "no transit exists" — so try the plausible spellings once and
+// remember whichever actually returns transit.
+export const REQUEST_VARIANTS = [
+  { id: "MODE_UPPER+MM-DD-YYYY", modeCase: "upper", dateFormat: "MM-DD-YYYY" },
+  { id: "mode_lower+MM-DD-YYYY", modeCase: "lower", dateFormat: "MM-DD-YYYY" },
+  { id: "MODE_UPPER+YYYY-MM-DD", modeCase: "upper", dateFormat: "YYYY-MM-DD" },
+  { id: "mode_lower+YYYY-MM-DD", modeCase: "lower", dateFormat: "YYYY-MM-DD" },
+];
+
+export function buildRouteUrl({ start, end, routeType = "pt", mode = "transit", date, time, maxWalkDistance = 1000, numItineraries = 3, variant = REQUEST_VARIANTS[0] }) {
   const url = new URL(ROUTE_URL);
   url.searchParams.set("start", start);
   url.searchParams.set("end", end);
@@ -57,15 +86,25 @@ export function buildRouteUrl({ start, end, routeType = "pt", mode = "transit", 
     if (!["transit", "bus", "rail"].includes(String(mode).toLowerCase())) {
       throw new Error("OneMap routing requires mode transit, bus, or rail");
     }
-    url.searchParams.set("date", date);
+    const parts = parseDateInput(date);
+    if (!parts) throw new Error(`OneMap routing got an unrecognised date: ${date}`);
+
+    url.searchParams.set("date", DATE_FORMATS[variant.dateFormat](parts));
     url.searchParams.set("time", time);
-    url.searchParams.set("mode", String(mode).toLowerCase());
+    url.searchParams.set("mode", variant.modeCase === "upper" ? String(mode).toUpperCase() : String(mode).toLowerCase());
     url.searchParams.set("maxWalkDistance", String(maxWalkDistance));
     url.searchParams.set("numItineraries", String(numItineraries));
     // The turn-by-turn lane diagram needs the stops between board and alight.
     url.searchParams.set("showIntermediateStops", "true");
   }
   return url;
+}
+
+// A plan that contains nothing but walking is what OneMap returns when it
+// cannot use the request, so it does not count as a transit answer.
+export function hasTransit(json) {
+  const itineraries = (json && json.plan && json.plan.itineraries) || [];
+  return itineraries.some((i) => (i.legs || []).some((l) => String(l.mode).toUpperCase() !== "WALK"));
 }
 
 // OneMap answers "trip not possible" with HTTP 200 and an OTP-style error
@@ -78,39 +117,72 @@ export function otpError(json) {
   return { id, msg: msg || "OneMap could not plan this trip" };
 }
 
+// Remembered once per process: the first combination that actually worked.
+let learned = { auth: null, variant: null };
+
+export function learnedRequestShape() {
+  return { ...learned };
+}
+
+async function callOnce(url, authScheme) {
+  const token = await getOneMapToken({ force: authScheme === "refresh" });
+  const header = authScheme === "bearer" ? `Bearer ${token}` : token;
+  const res = await fetch(url.toString(), { headers: { Authorization: header } });
+  return { res, body: await readBody(res) };
+}
+
 // start/end are "lat,lng" strings. Extra params vary by route type.
 export async function oneMapRoute(params) {
-  const url = buildRouteUrl(params);
-
-  // The docs and community examples disagree on whether the token is sent bare
-  // or as a Bearer credential, and an expired token has to be replaced rather
-  // than retried — so each of those gets exactly one retry.
-  const attempts = [
-    { force: false, bearer: false },
-    { force: false, bearer: true },
-    { force: true, bearer: false },
-  ];
-
-  let lastError = null;
-  for (const attempt of attempts) {
-    const token = await getOneMapToken({ force: attempt.force });
-    const res = await fetch(url.toString(), {
-      headers: { Authorization: attempt.bearer ? `Bearer ${token}` : token },
-    });
-    const body = await readBody(res);
-
-    if (res.ok) {
-      const err = otpError(body.json);
-      if (err) {
-        const e = new Error(err.msg);
-        e.otpErrorId = err.id;
-        throw e;
-      }
-      return body.json || {};
-    }
-
-    lastError = upstreamError("OneMap routing", res, body);
-    if (res.status !== 401 && res.status !== 403) throw lastError;
+  if ((params.routeType || "pt") !== "pt") {
+    const url = buildRouteUrl(params);
+    const { res, body } = await callOnce(url, learned.auth || "raw");
+    if (!res.ok) throw upstreamError("OneMap routing", res, body);
+    return body.json || {};
   }
-  throw lastError;
+
+  const authSchemes = learned.auth ? [learned.auth, "raw", "bearer", "refresh"] : ["raw", "bearer", "refresh"];
+  const variants = learned.variant
+    ? [learned.variant, ...REQUEST_VARIANTS.filter((v) => v.id !== learned.variant.id)]
+    : REQUEST_VARIANTS;
+
+  let walkOnlyFallback = null;
+  let lastError = null;
+
+  for (const variant of variants) {
+    const url = buildRouteUrl({ ...params, variant });
+
+    for (const scheme of [...new Set(authSchemes)]) {
+      const { res, body } = await callOnce(url, scheme);
+
+      if (res.status === 401 || res.status === 403) {
+        lastError = upstreamError("OneMap routing", res, body);
+        continue; // try the next auth scheme
+      }
+      if (!res.ok) {
+        lastError = upstreamError("OneMap routing", res, body);
+        break; // a real upstream fault: another auth scheme will not help
+      }
+
+      const otp = otpError(body.json);
+      if (otp) {
+        const e = new Error(otp.msg);
+        e.otpErrorId = otp.id;
+        lastError = e;
+        break; // try the next request variant
+      }
+
+      if (hasTransit(body.json)) {
+        learned = { auth: scheme === "refresh" ? "raw" : scheme, variant };
+        return body.json;
+      }
+
+      // A valid response with only walking in it — keep it in case every
+      // variant says the same, which would mean it is the true answer.
+      if (!walkOnlyFallback) walkOnlyFallback = body.json || {};
+      break;
+    }
+  }
+
+  if (walkOnlyFallback) return walkOnlyFallback;
+  throw lastError || new Error("OneMap routing returned no usable response");
 }
