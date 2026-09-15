@@ -3,7 +3,9 @@
 // and accessibility, ranks them by what the mode actually promises, and
 // returns at most three cards in the shape the UI already renders.
 import { oneMapRoute } from "./_lib/onemap.js";
-import { ltaFetch, busLoadLevel, crowdLevelFrom } from "./_lib/lta.js";
+import { ltaFetch, crowdLevelFrom } from "./_lib/lta.js";
+import { nextBuses } from "./_lib/arrivals.js";
+import { resolveStopCode } from "./_lib/busStops.js";
 import { normalizeItinerary, crowdLevelOf, crowdScoreOf, signature, clockFrom } from "./_lib/itinerary.js";
 import { decodePolyline } from "./_lib/polyline.js";
 
@@ -37,21 +39,22 @@ async function railCrowdByCode(lines = ["NSL", "EWL", "CCL", "DTL", "NEL", "TEL"
   return byCode;
 }
 
-async function busInfo(stopCode, service) {
-  if (!stopCode || !service) return null;
-  try {
-    const data = await ltaFetch(["v3/BusArrival", "BusArrivalv2"], { BusStopCode: stopCode, ServiceNo: service });
-    const svc = (data.Services || [])[0];
-    const next = svc && svc.NextBus;
-    if (!next) return null;
-    return {
-      crowdLevel: busLoadLevel(next.Load),
-      accessible: next.Feature === "WAB",
-      etaMins: next.EstimatedArrival ? Math.max(0, Math.round((new Date(next.EstimatedArrival) - Date.now()) / 60000)) : null,
-    };
-  } catch {
-    return null;
-  }
+// Live arrivals for one bus leg. The stop code a routing reply gives is not
+// always the five digits DataMall wants, and a wrong code answers with an empty
+// list rather than an error — so it is resolved (by code, else by the leg's own
+// coordinates) before asking.
+async function busInfo(leg) {
+  if (!leg || !leg.service) return null;
+  const code = await resolveStopCode(leg.stopCode, leg.lat, leg.lng);
+  if (!code) return { buses: [], reason: "unknown-stop", stopCode: null };
+  const answer = await nextBuses(code, leg.service);
+  const first = answer.buses[0];
+  return {
+    ...answer,
+    crowdLevel: first ? first.load : null,
+    accessible: first ? first.accessible : false,
+    etaMins: first ? first.etaMins : null,
+  };
 }
 
 async function enrich(options) {
@@ -59,20 +62,38 @@ async function enrich(options) {
 
   await Promise.all(
     options.map(async (opt) => {
+      // Each leg's enrichment also lands on the step that renders it, so the
+      // card's breakdown can show arrivals and crowding without a second fetch.
+      const stepFor = (leg) => (opt.steps || []).find((st) => st.legIndex === leg.legIndex) || null;
       await Promise.all(
         opt.transitLegs.map(async (leg) => {
+          const step = stepFor(leg);
           if (leg.mode === "BUS") {
-            const info = await busInfo(leg.fromStopCode, leg.service);
-            if (info) {
-              leg.crowdLevel = info.crowdLevel;
-              leg.accessible = info.accessible;
-              leg.etaMins = info.etaMins;
+            const info = await busInfo({
+              service: leg.service,
+              stopCode: leg.fromStopCode,
+              lat: leg.fromLat,
+              lng: leg.fromLng,
+            });
+            if (!info) return;
+            leg.crowdLevel = info.crowdLevel;
+            leg.accessible = info.accessible;
+            leg.etaMins = info.etaMins;
+            leg.stopCode = info.stopCode;
+            if (step) {
+              step.stopCode = info.stopCode;
+              step.arrivals = { buses: info.buses, reason: info.reason, at: Date.now() };
+              step.crowdLevel = info.crowdLevel;
+              step.accessible = info.accessible;
             }
             return;
           }
           if (byCode && leg.fromStopCode) {
             const level = byCode.get(String(leg.fromStopCode).toUpperCase());
-            if (level) leg.crowdLevel = level;
+            if (level) {
+              leg.crowdLevel = level;
+              if (step) step.crowdLevel = level;
+            }
           }
         })
       );

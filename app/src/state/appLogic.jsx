@@ -4,32 +4,19 @@ import { getTrainServiceAlerts } from "../api/lta";
 import { getTripOptions } from "../api/trips";
 import { getCrowding } from "../api/crowding";
 import { getNearestStop } from "../api/stop";
+import { getArrivals } from "../api/arrivals";
+import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
 import { acceptFix, alongMAtTime, coordAt, stepAtTime, timeAtAlongM, STALE_FIX_MS } from "../lib/navProgress";
 import { metresBetween } from "../lib/geometry";
+import {
+  KEYS, loadStored, store, rememberSearch, recentSearches, clearSearches,
+  loadReadAlerts, markAlertsRead, alertId,
+} from "../lib/storage";
 
-const ONBOARDED_KEY = "solvik:onboarded";
-const PLACES_KEY = "solvik:places";
-const COMMUTES_KEY = "solvik:commutes";
-
-function loadStored(key, fallback) {
-  if (typeof localStorage === "undefined") return fallback;
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function store(key, value) {
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage can be unavailable (private mode); the session still works.
-  }
-}
+const ONBOARDED_KEY = KEYS.onboarded;
+const PLACES_KEY = KEYS.places;
+const COMMUTES_KEY = KEYS.commutes;
 
 // Used until the browser gives us a real fix: Blk 726 Yishun St 71, the
 // starting point the prototype was designed around.
@@ -66,6 +53,12 @@ export class AppLogic extends Component {
     // Remote data, each held with its own pending/error so screens can say
     // exactly what is missing instead of showing invented values.
     trips: { key: null, options: [], pending: false, error: null },
+    // Live bus arrivals keyed "<stopCode>:<service>", refreshed while the
+    // route sheet is open so the times on the cards tick down.
+    arrivals: {},
+    // Remembered between visits: where you've been, and which alerts you read.
+    recents: recentSearches(),
+    readAlerts: loadReadAlerts(),
     crowd: { stations: [], slots: [], at: null, pending: false, error: null },
     faults: { items: [], pending: false, error: null },
     stop: { data: null, pending: false, error: null },
@@ -331,8 +324,9 @@ export class AppLogic extends Component {
 
     const faults = s.faults || { items: [], error: null };
     const sevTone = { fault: "var(--status-fault)", warn: "var(--status-warn)", info: "var(--sand-500)" };
-    const fcRead = s.fcRead || [];
-    const unread = faults.items.map((f, i) => i).filter((i) => fcRead.indexOf(i) < 0);
+    const readAlerts = s.readAlerts || {};
+    const isRead = (f) => !!(f && f.id && readAlerts[f.id]);
+    const unread = faults.items.filter((f) => !isRead(f));
 
     const slots = crowd.slots || [];
     const slotIndex = Math.min(s.fcSlot || 0, Math.max(0, slots.length - 1));
@@ -355,11 +349,10 @@ export class AppLogic extends Component {
       fcPickZone: (id) => this.setState({ fcPin: id, fcAlerts: false, pin: null, searchOpen: false }),
       fcRoutesHere: () => {
         if (!pinned) return;
-        this.setState({
-          dest: { name: pinned.name, detail: word[level(pinned)] + " now · platform crowding from LTA", ll: [pinned.lat, pinned.lng] },
-          fcPin: null,
-          tripRoute: 0,
-        });
+        this.chooseDest(
+          { name: pinned.name, detail: word[level(pinned)] + " now · platform crowding from LTA", ll: [pinned.lat, pinned.lng] },
+          { fcPin: null }
+        );
       },
       fcClearPin: () => this.setState({ fcPin: null }),
       fcWatchLabel: pinned && watched.indexOf(pinned.code) >= 0 ? "Watching" : "Alert me",
@@ -395,14 +388,14 @@ export class AppLogic extends Component {
           barStyle: "display:block;width:30px;height:4px;border-radius:999px;background:" + (on ? "#fff" : "var(--sand-400)") + ";opacity:" + (on ? 0.9 : 0.8),
         };
       }),
-      fcFaults: faults.items.map((f, fi) => ({
+      fcFaults: faults.items.map((f) => ({
         ...f,
-        readLabel: fcRead.indexOf(fi) >= 0 ? "Read" : "Tap to mark as read",
-        readDotStyle: fcRead.indexOf(fi) >= 0 ? "display:none" : "width:7px;height:7px;border-radius:999px;background:var(--status-fault)",
+        readLabel: isRead(f) ? "Read" : "Tap to mark as read",
+        readDotStyle: isRead(f) ? "display:none" : "width:7px;height:7px;border-radius:999px;background:var(--status-fault)",
         toggleRead: () => {
-          if (fcRead.indexOf(fi) < 0) this.setState({ fcRead: fcRead.concat([fi]) });
+          if (!isRead(f)) this.setState((st) => ({ readAlerts: markAlertsRead([f.id], st.readAlerts) }));
         },
-        cardStyle: "width:100%;text-align:left;display:block;cursor:pointer;padding:13px 14px;border-radius:16px;background:var(--surface-card);opacity:" + (fcRead.indexOf(fi) >= 0 ? ".6" : "1") + ";border:1px solid " + (fcRead.indexOf(fi) >= 0 ? "var(--border-card)" : sevTone[f.sev] || "var(--border-card)"),
+        cardStyle: "width:100%;text-align:left;display:block;cursor:pointer;padding:13px 14px;border-radius:16px;background:var(--surface-card);opacity:" + (isRead(f) ? ".6" : "1") + ";border:1px solid " + (isRead(f) ? "var(--border-card)" : sevTone[f.sev] || "var(--border-card)"),
         badgeStyle: "flex:none;padding:3px 8px;border-radius:999px;font:var(--weight-heavy) 11px/1.3 var(--font-body);letter-spacing:.02em;color:#fff;background:" + (sevTone[f.sev] || "var(--sand-500)"),
         tagStyle: "font:var(--weight-semibold) 11px/1 var(--font-body);letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)",
       })),
@@ -413,7 +406,10 @@ export class AppLogic extends Component {
       fcFaultN: unread.length,
       fcHasFaults: unread.length > 0,
       fcHasUnread: unread.length > 0,
-      fcMarkAllRead: () => { this.setState({ fcRead: faults.items.map((f, i) => i) }); this.flash("All alerts marked read"); },
+      fcMarkAllRead: () => {
+        this.setState((st) => ({ readAlerts: markAlertsRead(faults.items.map((f) => f.id), st.readAlerts) }));
+        this.flash("All alerts marked read");
+      },
       fcAlertsOpen: !!s.fcAlerts,
       fcToggleAlerts: () => this.setState({ fcAlerts: !s.fcAlerts }),
       fcBellStyle: "position:relative;flex:none;margin-left:auto;width:46px;height:46px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;color:" +
@@ -454,6 +450,13 @@ export class AppLogic extends Component {
       store(PLACES_KEY, { plHome: s.plHome, plWork: s.plWork, plSchool: s.plSchool });
     }
 
+    // Arrivals are polled only while there are options on screen to show them.
+    if (s.trips.options !== prevState.trips.options) {
+      if (s.dest && s.trips.options.length) this.startArrivalsPoll();
+      else this.stopArrivalsPoll();
+    }
+    if (!s.dest && prevState.dest) this.stopArrivalsPoll();
+
     // The map and turn-by-turn both show where you are, so both watch.
     const tracks = s.screen === "map" || s.screen === "nav";
     const tracked = prevState.screen === "map" || prevState.screen === "nav";
@@ -479,6 +482,7 @@ export class AppLogic extends Component {
     if (this._settleT) clearTimeout(this._settleT);
     if (this._snapBackT) clearTimeout(this._snapBackT);
     this.stopTracking();
+    this.stopArrivalsPoll();
   }
 
   // Turn-by-turn follows the real position rather than a simulated clock.
@@ -505,6 +509,31 @@ export class AppLogic extends Component {
       }
     );
   };
+  // Bus arrivals go stale in about a minute, so they are re-asked while the
+  // route sheet is on screen — one batched request for every bus leg showing.
+  startArrivalsPoll = () => {
+    this.stopArrivalsPoll();
+    const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      const keys = arrivalKeys(this.state.trips.options);
+      if (!keys.length) return;
+      getArrivals(keys)
+        .then((arrivals) => this.setState((st) => ({ arrivals: { ...st.arrivals, ...arrivals } })))
+        .catch(() => {
+          // The cards keep the times the planner returned, and say how old
+          // they are rather than blanking.
+        });
+    };
+    tick();
+    this._arrivalsIv = setInterval(tick, 30000);
+  };
+  stopArrivalsPoll = () => {
+    if (this._arrivalsIv) {
+      clearInterval(this._arrivalsIv);
+      this._arrivalsIv = null;
+    }
+  };
+
   stopTracking = () => {
     this._trackErrorShown = false;
     if (this.watchId != null) {
@@ -582,6 +611,59 @@ export class AppLogic extends Component {
           this.setState({ addSearchResults: { items: [], pending: false, error: String(err.message || err), query } });
         });
     }, 350);
+  };
+
+  // One step of a route card's breakdown, dressed in design-system tokens.
+  detailRowVals(row) {
+    const tone = { light: "var(--crowd-light)", moderate: "var(--crowd-moderate)", busy: "var(--crowd-busy)" };
+    return {
+      ...row,
+      iconWrapStyle:
+        "flex:none;width:28px;height:28px;border-radius:999px;display:flex;align-items:center;justify-content:center;" +
+        (row.kind === "walk"
+          ? "background:var(--sand-200,rgba(32,30,29,.06));color:var(--text-body)"
+          : "background:var(--accent-soft);color:var(--text-accent)"),
+      arrivalStyle:
+        "font:var(--weight-bold) 12px/1.2 var(--font-body);font-variant-numeric:tabular-nums;color:" +
+        (row.arrival && row.arrival.tone === "accent" ? "var(--text-accent)" : "var(--text-muted)"),
+      loadDotStyle: row.arrival && row.arrival.load
+        ? "display:inline-block;width:7px;height:7px;border-radius:999px;margin-right:6px;background:" + tone[row.arrival.load]
+        : "display:none",
+      crowdStyle: row.crowdLevel
+        ? "font:var(--weight-semibold) 11px/1 var(--font-body);color:" + tone[row.crowdLevel]
+        : "display:none",
+      crowdLabel: row.crowdLevel ? WORD[row.crowdLevel] + " now" : "",
+      stopChipStyle:
+        "font:var(--weight-medium) 11px/1 var(--font-body);color:var(--text-muted);background:var(--accent-soft);" +
+        "border-radius:999px;padding:5px 9px;white-space:nowrap",
+    };
+  }
+
+  // The one way a destination is chosen or cleared. Everything derived from it
+  // resets together — otherwise the previous plan's route line stays drawn over
+  // the map after you go back, and its cards flash under the new destination
+  // before its own request resolves.
+  rememberSearch = (dest) => {
+    this.setState({ recents: rememberSearch(dest) });
+  };
+
+  chooseDest = (dest, extra) => {
+    this.setState({
+      dest: dest || null,
+      tripRoute: 0,
+      navRoute: null,
+      query: "",
+      liveResults: null,
+      searchOpen: false,
+      searchPending: false,
+      trips: { key: null, options: [], pending: !!dest, error: null },
+      arrivals: {},
+      ...(extra || {}),
+    });
+    // The first card is selected for you, so its breakdown is already open —
+    // count it as "seen" rather than scrolling the sheet on arrival.
+    this._detailsFor = 0;
+    if (dest) this.rememberSearch(dest);
   };
 
   // Has the position moved far enough from the one the current options were
@@ -666,7 +748,9 @@ export class AppLogic extends Component {
               };
             })
           : [];
-        const items = [...segmentItems, ...messageItems];
+        // A content-derived id, so "read" survives a reload and LTA's feed
+        // reordering — an index into this array survives neither.
+        const items = [...segmentItems, ...messageItems].map((item) => ({ ...item, id: alertId(item) }));
         this.setState({ faults: { items, pending: false, error: null } });
       })
       .catch((err) =>
@@ -823,6 +907,29 @@ export class AppLogic extends Component {
   bars(v) { return this.barsFor(this.level(v)); }
   snaps(H) { return [190, Math.round(H * 0.55), Math.round(H - 104)]; }
 
+  // The tall snap point, for when there is a breakdown to read.
+  tallSheet() {
+    const host = this.sheetEl && this.sheetEl.parentElement;
+    const H = host ? host.getBoundingClientRect().height : (typeof window !== "undefined" ? window.innerHeight : 844);
+    return this.snaps(H)[2];
+  }
+
+  // Bring a newly opened breakdown into view, once per selection — a ref
+  // callback fires on every render, and scrolling on every tick would fight
+  // anyone trying to read it.
+  scrollDetailsIntoView = (el) => {
+    if (!el) return;
+    if (this._detailsFor === this.state.tripRoute) return;
+    this._detailsFor = this.state.tripRoute;
+    requestAnimationFrame(() => {
+      try {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } catch {
+        el.scrollIntoView(false);
+      }
+    });
+  };
+
   // Distance between two step cards. Measured rather than assumed, so a gap or
   // width change can't put paging out of step with the layout.
   stepPitch(el) {
@@ -971,7 +1078,7 @@ export class AppLogic extends Component {
       ...p,
       // Clearing the query here is what stops the panel reopening when the
       // user comes back via "Change".
-      pick: () => this.setState({ dest: p, tripRoute: 0, query: "", liveResults: null, searchOpen: false, searchPending: false }),
+      pick: () => this.chooseDest(p),
     }));
 
     const dest = s.dest;
@@ -979,7 +1086,8 @@ export class AppLogic extends Component {
     // Cards come straight from OneMap itineraries, enriched with LTA crowding.
     const tripOptions = (trips.options || []).map((o, i) => ({
       ...o,
-      pick: () => this.setState({ tripRoute: i }),
+      // Selecting a card opens its breakdown, so give the sheet room for it.
+      pick: () => this.setState((st) => ({ tripRoute: i, sheetH: Math.max(st.sheetH || 430, this.tallSheet()) })),
       tone: s.tripRoute === i ? "accent" : "hairline",
       start: (e) => {
         if (e && e.stopPropagation) e.stopPropagation();
@@ -994,6 +1102,12 @@ export class AppLogic extends Component {
       bars: o.crowdLevel ? this.barsFor(o.crowdLevel) : [],
       crowd: o.crowdLevel ? WORD[o.crowdLevel] : "Crowding unknown",
       fare: o.fare || "Fare unknown",
+      // The breakdown is built for the selected card only — the others stay
+      // compact so three options still fit on a phone screen.
+      expanded: s.tripRoute === i,
+      detailHint: s.tripRoute === i ? "Hide steps" : "Tap for step-by-step",
+      details: s.tripRoute === i ? detailRows(o, s.arrivals).map((row) => this.detailRowVals(row)) : [],
+      detailsRef: this.scrollDetailsIntoView,
     }));
 
     const destShort = dest ? dest.name.split(" (")[0].replace(/\s+$/, "") : "your destination";
@@ -1127,6 +1241,15 @@ export class AppLogic extends Component {
       // The panel stays shut until there is a real query to answer — focusing
       // the field no longer surfaces the built-in place list.
       showResults: !s.dest && q.length >= 2,
+      // Your own history, shown only when you open an empty search box — it
+      // disappears the moment you start typing.
+      showRecents: !s.dest && !!s.searchOpen && q.length < 2 && (s.recents || []).length > 0,
+      recents: (s.recents || []).map((r) => ({
+        name: r.name,
+        detail: r.detail || "Recent destination",
+        pick: () => this.chooseDest({ name: r.name, detail: r.detail || "", ll: r.ll, kind: r.kind || "Recent" }),
+      })),
+      clearRecents: () => this.setState({ recents: clearSearches() }),
       openSearch: () => this.setState({ searchOpen: true }),
       closeSearch: () => { if (this.bt) clearTimeout(this.bt); this.bt = setTimeout(() => this.setState({ searchOpen: false }), 160); },
       dismissSearch: () => this.setState({ query: "", searchOpen: false, liveResults: null, searchPending: false }),
@@ -1141,7 +1264,12 @@ export class AppLogic extends Component {
       searchFooter: "Results from OneMap · Singapore Land Authority",
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
       destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: this._mapCenter,
-      routeCoords: (tripOptions[s.tripRoute] || tripOptions[0] || {}).geometry || [],
+      // The dot is drawn only where the device actually reported being — the
+      // fallback origin is good enough to plan from, not to point at.
+      userMarker: s.userLoc || null,
+      // No destination, no line: the map must not keep drawing the plan you
+      // just backed out of.
+      routeCoords: dest ? (tripOptions[s.tripRoute] || tripOptions[0] || {}).geometry || [] : [],
       userAccuracy: s.userLoc ? s.userAccuracy : null,
       recenterToken: s.recenterToken || 0,
       locating: !!s.locating,
@@ -1149,7 +1277,7 @@ export class AppLogic extends Component {
       locateMe: this.locateMe,
       // Sits clear of whichever bottom overlay is currently showing.
       locateBottom: dest ? (s.sheetH || 430) + 12 : s.fcPin ? 250 : s.pin ? 210 : (s.crowdOn !== false && !s.searchOpen && !q) ? 170 : 96,
-      backToSearch: () => this.setState({ dest: null }),
+      backToSearch: () => this.chooseDest(null),
       pinCoord: s.pin ? s.pin.ll : null,
       hasPin: !!s.pin && !dest && !s.fcPin,
       showMapAttrib: !dest && !s.pin && !s.fcPin && s.crowdOn === false,
@@ -1166,7 +1294,7 @@ export class AppLogic extends Component {
       pinDirections: () => {
         const p = this.state.pin;
         if (!p) return;
-        this.setState({ dest: { name: p.name, detail: p.detail, ll: p.ll, kind: "Pin" }, tripRoute: 0, pin: null, sheetH: 430 });
+        this.chooseDest({ name: p.name, detail: p.detail, ll: p.ll, kind: "Pin" }, { pin: null, sheetH: 430 });
       },
       pinSearch: () => {
         const p = this.state.pin;

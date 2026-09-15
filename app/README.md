@@ -77,13 +77,20 @@ invented data.
 | Journey options: duration, arrival, fare, legs, transfers, walking | OneMap public-transport routing |
 | Route line on the map | The chosen itinerary's own geometry |
 | Turn-by-turn steps and stop sequences | The same itinerary's legs and intermediate stops |
+| Step-by-step breakdown on a route card | The itinerary's own legs: walk distance and time, stop counts, boarding and alighting stops |
+| Next bus times per bus leg | LTA bus arrivals, re-asked every 30 s while the route sheet is open |
 | Crowding circles per MRT station + time scrubber | LTA platform crowd density, real-time and same-day forecast |
 | "Less crowded" ranking | LTA crowd density (rail) and bus loading |
 | Service alerts | LTA train service alerts |
 | Nearest stop for reports | LTA bus stops, via `/api/nearest-stop` |
 | Your position and trip origin | Browser geolocation |
-| Your places and watched commutes | Your own input, saved in the browser |
+| Your places, watched commutes, recent destinations and read alerts | Your own input, saved in the browser |
 | **Points, vouchers, nearby-reports feed** | **Sample data** — an account/social service, which neither API provides. Labelled as such in the UI. |
+
+Trains have no arrival feed — DataMall publishes crowding for rail, not
+timings — so a rail leg shows how busy the platform is rather than a countdown.
+Where bus times are missing, the card says which kind of missing it is (no key,
+unknown stop, nothing running) instead of leaving a gap.
 
 Ranking caveats worth knowing: "Step-free" prefers wheelchair-accessible
 buses and short walks but cannot guarantee lift availability; "Bike + rail"
@@ -102,8 +109,9 @@ src/
   lib/             Small helpers (geolocation, geometry, polyline, style text)
   tokens/          Design tokens (colors, type, spacing, radius, motion)
 test/              Fixture-based tests for the API response parsers
-api/               Serverless functions: journey options, crowding, nearest stop,
-                   OneMap search/routing and the LTA DataMall proxy
+api/               Serverless functions: journey options, live bus arrivals,
+                   crowding, nearest stop, OneMap search/routing and the LTA
+                   DataMall proxy
 api/_lib/          Shared server helpers (LTA fetch, OneMap calls, station
                    directory, itinerary → UI mapping)
 ```

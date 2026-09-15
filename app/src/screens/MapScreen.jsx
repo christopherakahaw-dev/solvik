@@ -9,7 +9,7 @@ export function MapScreen({ v }) {
         center={v.mapCenter}
         zoom={12}
         route={v.routeCoords}
-        marker={v.originCoord}
+        marker={v.userMarker}
         markerAccuracy={v.userAccuracy}
         dest={v.destCoord}
         pin={v.pinCoord}
@@ -41,14 +41,42 @@ export function MapScreen({ v }) {
               <SearchField value={v.query} placeholder="Search address, stop or area" icon="search" onChange={v.setQuery} onClear={v.clearQuery} />
             </div>
             <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-              <button onClick={v.fcToggleAlerts} style={styleText(v.fcBellStyle)}>
+              <button onClick={v.fcToggleAlerts} aria-label="Alerts" title="Alerts" style={styleText(v.fcBellStyle)}>
                 <Icon name="bell" size={20} strokeWidth={2.1} />
                 {v.fcHasFaults && <span style={styleText(v.fcBellDotStyle)}>{v.fcFaultN}</span>}
               </button>
-              <button onClick={v.toggleCrowd} title={v.crowdToggleLabel} style={styleText(v.crowdToggleStyle)}>
+              <button onClick={v.toggleCrowd} aria-label={v.crowdToggleLabel} title={v.crowdToggleLabel} style={styleText(v.crowdToggleStyle)}>
                 <Icon name="layers" size={19} strokeWidth={2.1} />
               </button>
             </div>
+          </div>
+        )}
+
+        {v.showRecents && (
+          <div style={{ pointerEvents: "auto", marginTop: -5, borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+            <Card tone="plain">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>Recent</div>
+                <div style={{ marginLeft: "auto" }}>
+                  <Button variant="ghost" size="sm" onClick={v.clearRecents}>Clear</Button>
+                </div>
+              </div>
+              {v.recents.map((p, i) => (
+                <button
+                  key={i}
+                  onPointerDown={p.pick}
+                  style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid var(--border-card)", padding: "13px 0", cursor: "pointer" }}
+                >
+                  <span style={{ flex: "none", width: 30, height: 30, borderRadius: 999, background: "var(--accent-soft)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Icon name="history" size={15} />
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)", textWrap: "pretty" }}>{p.name}</span>
+                    <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{p.detail}</span>
+                  </span>
+                </button>
+              ))}
+            </Card>
           </div>
         )}
 
@@ -166,7 +194,59 @@ export function MapScreen({ v }) {
                         {l.label}
                       </span>
                     ))}
+                    <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, font: "var(--weight-semibold) 11px/1 var(--font-body)", color: "var(--text-muted)" }}>
+                      {o.detailHint}
+                      <Icon name={o.expanded ? "chevron-up" : "chevron-down"} size={13} />
+                    </span>
                   </div>
+
+                  {o.expanded && o.details.length > 0 && (
+                    <div ref={o.detailsRef} style={{ marginTop: 12, paddingLeft: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {o.details.map((d, di) => (
+                        <div key={di} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                          <div style={{ flex: "none", display: "flex", flexDirection: "column", alignItems: "center", alignSelf: "stretch" }}>
+                            <span style={styleText(d.iconWrapStyle)}>
+                              <Icon name={d.icon} size={15} />
+                            </span>
+                            {di < o.details.length - 1 && (
+                              <span style={{ flex: 1, width: 2, minHeight: 12, background: "var(--border-card)", borderRadius: 999, margin: "3px 0" }} />
+                            )}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0, paddingBottom: di < o.details.length - 1 ? 12 : 0 }}>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                              <span style={{ font: "var(--type-body-strong)", color: "var(--text-strong)", textWrap: "pretty" }}>{d.title}</span>
+                              <span style={{ marginLeft: "auto", flex: "none", font: "var(--type-caption)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{d.meta}</span>
+                            </div>
+                            {d.board && (
+                              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{d.board}</div>
+                            )}
+                            {d.alight && (
+                              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 2, textWrap: "pretty" }}>{d.alight}</div>
+                            )}
+                            {d.arrival && d.arrival.text && (
+                              <div style={{ display: "flex", alignItems: "center", marginTop: 6 }}>
+                                <span style={styleText(d.loadDotStyle)} />
+                                <span style={styleText(d.arrivalStyle)}>{d.arrival.text}</span>
+                                {d.crowdLabel && <span style={{ ...styleText(d.crowdStyle), marginLeft: 8 }}>{d.crowdLabel}</span>}
+                              </div>
+                            )}
+                            {!(d.arrival && d.arrival.text) && d.crowdLabel && (
+                              <div style={{ marginTop: 6 }}>
+                                <span style={styleText(d.crowdStyle)}>{d.crowdLabel}</span>
+                              </div>
+                            )}
+                            {d.stops.length > 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+                                {d.stops.map((sp, si) => (
+                                  <span key={si} style={styleText(d.stopChipStyle)}>{sp}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ marginTop: 10 }}>
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>

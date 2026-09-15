@@ -107,21 +107,34 @@ export function OneMapCanvas({
       if (fitRoute) map.fitBounds(line.getBounds(), { padding: [34, 34] });
     }
     if (isLL(marker)) {
-      // GPS accuracy ring, drawn under the position dot.
+      // GPS accuracy ring, drawn under the position dot — context, not the
+      // marker itself, so it stays faint.
       if (isFinite(markerAccuracy) && markerAccuracy > 0) {
         const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#437858";
-        const halo = L.circle(marker, {
+        const ring = L.circle(marker, {
           radius: Math.min(markerAccuracy, 2000),
           color: accent,
           weight: 1,
-          opacity: 0.45,
+          opacity: 0.3,
           fillColor: accent,
-          fillOpacity: 0.1,
+          fillOpacity: 0.06,
         }).addTo(map);
-        layersRef.current.push(halo);
+        layersRef.current.push(ring);
       }
-      const m = L.circleMarker(marker, { radius: 8, color: "#fff", weight: 3, fillColor: "#201e1d", fillOpacity: 1 }).addTo(map);
-      layersRef.current.push(m);
+      // An HTML marker rather than a circle, so the dot can carry the pulsing
+      // halo (CSS, see tokens/index.css) that a Leaflet vector can't.
+      const me = L.marker(marker, {
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: 800,
+        icon: L.divIcon({
+          className: "",
+          html: '<div class="sv-locate"><span class="sv-locate-halo"></span><span class="sv-locate-dot"></span></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        }),
+      }).addTo(map);
+      layersRef.current.push(me);
     }
     if (isLL(pin)) {
       const rust = getComputedStyle(document.documentElement).getPropertyValue("--crowd-busy").trim() || "#b3402c";
