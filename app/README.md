@@ -98,17 +98,33 @@ project settings before deploying.
 
 ## Diagnosing live-data problems
 
-If routing or crowding misbehaves, run the diagnostic against your real `.env`:
+Two ways, both reporting the same thing: which credential path was used,
+whether the token is valid and when it expires, the exact request sent to
+OneMap, the HTTP status, how many itineraries survived parsing, and whether LTA
+DataMall answers. Tokens, passwords and account keys are never included, so the
+output is safe to paste into an issue.
+
+**In the browser** — with the app running, open:
+
+```
+http://localhost:5173/api/diagnostics
+```
+
+(or `/api/diagnostics` on your deployed URL). Add `?from=1.43,103.83&to=1.30,103.85`
+to test a specific pair. Each response ends with a `hint` field in plain
+English saying what to fix.
+
+**In a terminal** — from the `app/` directory, not the repo root:
 
 ```bash
+cd app
 npm run diagnose
 npm run diagnose -- --from 1.4294,103.8350 --to 1.3009,103.8559
 ```
 
-It reports which credential path was used, whether the token is valid and when
-it expires, the exact request sent to OneMap, the HTTP status, and how many
-itineraries survived parsing — with the token itself never printed, so the
-output is safe to paste into an issue.
+The endpoint exposes only status information, never secret values, but it does
+reveal which keys are configured — remove `api/diagnostics.js` before a public
+launch if that bothers you.
 
 ## Tests
 
