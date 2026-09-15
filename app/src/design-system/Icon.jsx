@@ -2,6 +2,8 @@ import { useEffect, useReducer } from "react";
 import * as lucide from "lucide";
 
 function nodesFor(name) {
+  // A missing or malformed name must not take down the whole tree.
+  if (!name || typeof name !== "string") return null;
   const pascal = name.replace(/(^|-)([a-z])/g, (_, __, c) => c.toUpperCase());
   const node = lucide[pascal];
   if (!node) return null;

@@ -403,7 +403,11 @@ export class AppLogic extends Component {
 
     // Anything that changes what a journey looks like re-asks OneMap.
     const s = this.state;
-    if (s.dest && (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.userLoc !== prevState.userLoc)) {
+    if (
+      s.dest &&
+      s.screen !== "nav" &&
+      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.userLoc !== prevState.userLoc)
+    ) {
       this.loadTripOptions();
     }
     // Scrubbing to another forecast slot re-asks LTA.
@@ -869,7 +873,12 @@ export class AppLogic extends Component {
       ...o,
       pick: () => this.setState({ tripRoute: i }),
       tone: s.tripRoute === i ? "accent" : "hairline",
-      start: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState({ tripRoute: i, navRoute: i, screen: "nav", navStart: Date.now() }); },
+      start: (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        // Snapshot the route: re-planning while under way must not pull the
+        // steps out from under the screen showing them.
+        this.setState({ tripRoute: i, navRoute: i, navTrip: o, screen: "nav", navStart: Date.now() });
+      },
       legs: (o.legs || []).map((label) => ({ label, style: this.lineStyle(label) })),
       bars: o.crowdLevel ? this.barsFor(o.crowdLevel) : [],
       crowd: o.crowdLevel ? WORD[o.crowdLevel] : "Crowding unknown",
@@ -877,7 +886,7 @@ export class AppLogic extends Component {
     }));
 
     const destShort = dest ? dest.name.split(" (")[0].replace(/\s+$/, "") : "your destination";
-    const navOpt = tripOptions[s.navRoute != null ? s.navRoute : s.tripRoute] || tripOptions[0];
+    const navOpt = s.navTrip || tripOptions[s.navRoute != null ? s.navRoute : s.tripRoute] || tripOptions[0];
     const navArr = (navOpt && navOpt.steps) || [];
     const navGeometry = (navOpt && navOpt.geometry) || [];
     const navTotal = navArr.reduce((a, b) => a + (b.secs || 0), 0) || 1;
@@ -911,11 +920,11 @@ export class AppLogic extends Component {
       : curStep.detail;
 
     const nav = {
-      navIcon: arrived ? "circle-check" : curStep.icon,
-      navTitle: arrived ? "You have arrived" : curStep.title,
+      navIcon: arrived ? "circle-check" : curStep.icon || "navigation",
+      navTitle: arrived ? "You have arrived" : curStep.title || "Getting your next step",
       navDetail: arrived ? destShort : liveStopLine,
       navCountdown: arrived ? "Done" : fmtS(stepRem),
-      navStepLabel: arrived ? "Trip complete" : "Step " + (navIdx + 1) + " of " + navArr.length,
+      navStepLabel: arrived ? "Trip complete" : navArr.length ? "Step " + (navIdx + 1) + " of " + navArr.length : "Preparing trip",
       navEta: navOpt ? navOpt.eta : "",
       navRemainLabel: arrived ? "Arrived · " + destShort : Math.max(1, Math.ceil((navTotal - navElapsed) / 60)) + " min left · " + destShort,
       navCoord: s.userLoc || this.lerpRoute(navGeometry, navFrac) || ORIGIN,
@@ -1066,7 +1075,7 @@ export class AppLogic extends Component {
       tripsEmpty: !!trips.key && !trips.pending && !trips.error && tripOptions.length === 0,
       retryTrips: () => { this.setState({ trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions); },
       isNav: sc === "nav",
-      endTrip: () => { this.setState({ screen: "map" }); this.flash("Trip ended"); },
+      endTrip: () => { this.setState({ screen: "map", navTrip: null }); this.flash("Trip ended"); },
       goReport: () => this.setState({ navRepOpen: true, nrType: null, nrSev: null }),
       ...nav,
       headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today" }[sc] || "Solvik",
