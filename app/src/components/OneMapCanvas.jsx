@@ -190,7 +190,7 @@ export function OneMapCanvas({
     });
     if (safeZones.length) {
       const cs = getComputedStyle(document.documentElement);
-      const tone = (lv) => cs.getPropertyValue("--crowd-" + (lv || "light")).trim() || "#437858";
+      const tone = (lv) => cs.getPropertyValue("--crowd-" + lv).trim() || "#777974";
       safeZones.forEach((z) => {
         const c = tone(z.level);
         const sel = !!z.selected;

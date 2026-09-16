@@ -3,7 +3,7 @@
 // only by code) with OneMap coordinates.
 import { serveRecorded } from "./_lib/demo.js";
 import { recordedForecast, recordedStations } from "./_lib/recorded/index.js";
-import { realtimeLevels, forecastIndex, PCT } from "./_lib/crowd.js";
+import { realtimeLevels, forecastIndex, PCT, stationsAtForecast } from "./_lib/crowd.js";
 import { resolveStations } from "./_lib/stations.js";
 
 let locatedCache = null; // { at, stations } — resolved coordinates, not levels
@@ -23,26 +23,18 @@ export default async function handler(req, res) {
   const q = req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
 
   try {
-    const stations = await stationsWithLevels();
+    let stations = await stationsWithLevels();
 
     let slots = [];
-    let at = null;
+    const at = q.at || null;
     try {
       const fc = await forecastIndex();
       slots = fc.slots;
-      if (q.at && fc.byCode.size) {
-        at = q.at;
-        stations.forEach((st) => {
-          const level = (fc.byCode.get(st.code) || {})[q.at];
-          if (level) {
-            st.level = level;
-            st.pct = PCT[level];
-          }
-        });
-      }
+      if (at) stations = stationsAtForecast(stations, fc.byCode, at);
     } catch {
       // Forecast is optional — real-time alone still renders the map.
       slots = [];
+      if (at) stations = stationsAtForecast(stations, new Map(), at);
     }
 
     res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");

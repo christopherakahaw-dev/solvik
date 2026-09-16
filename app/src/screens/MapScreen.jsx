@@ -1,5 +1,6 @@
 import { Icon, IconButton, SearchField, Card, Tag, Button } from "../design-system";
 import { OneMapCanvas } from "../components/OneMapCanvas";
+import { PlacePicker } from "../components/PlacePicker";
 import { styleText } from "../lib/styleText";
 
 export function MapScreen({ v }) {
@@ -55,7 +56,7 @@ export function MapScreen({ v }) {
         )}
 
         {v.showRecents && (
-          <div style={{ position: "absolute", top: 183, left: 14, right: 14, zIndex: 30, pointerEvents: "auto", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+          <div className="sv-map-results">
             <Card tone="plain">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>Recent</div>
@@ -66,7 +67,8 @@ export function MapScreen({ v }) {
               {v.recents.map((p, i) => (
                 <button
                   key={i}
-                  onPointerDown={p.pick}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={p.pick}
                   style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid var(--border-card)", padding: "13px 0", cursor: "pointer" }}
                 >
                   <span style={{ flex: "none", width: 30, height: 30, borderRadius: 999, background: "var(--accent-soft)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -83,7 +85,7 @@ export function MapScreen({ v }) {
         )}
 
         {v.showResults && (
-          <div style={{ position: "absolute", top: 183, left: 14, right: 14, zIndex: 30, pointerEvents: "auto", overflowY: "auto", maxHeight: "calc(100vh - 280px)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+          <div className="sv-map-results">
             <Card tone="plain">
               <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>{v.resultsLabel}</div>
               {v.searchPending && (
@@ -103,7 +105,7 @@ export function MapScreen({ v }) {
                 </div>
               )}
               {v.results.map((p, i) => (
-                <button key={i} onClick={p.pick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid var(--border-card)", padding: "14px 0", cursor: "pointer" }}>
+                <button key={i} onMouseDown={(event) => event.preventDefault()} onClick={p.pick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid var(--border-card)", padding: "14px 0", cursor: "pointer" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ font: "var(--type-body-strong)", color: "var(--text-strong)", textWrap: "pretty" }}>{p.name}</div>
                     <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 4, textWrap: "pretty" }}>{p.detail}</div>
@@ -123,40 +125,22 @@ export function MapScreen({ v }) {
             <div onPointerDown={v.sheetDragStart} style={v.sheetGrabStyle}>
               <div style={{ width: 42, height: 4, borderRadius: 999, background: "var(--border-strong)", margin: "0 auto" }} />
             </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 12, paddingBottom: 10 }}>
+            <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 12, paddingBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ width: "min(100%, 360px)", marginBottom: 8 }}>
-                    <SearchField
-                      value={v.routeOriginInput}
-                      placeholder="Current location"
-                      icon="circle-dot"
-                      onChange={v.setQuery}
-                      onClear={v.clearQuery}
-                      onFocus={(e) => {
-                        v.openOriginSearch();
-                        e.target.select();
-                      }}
-                      style={{ height: 44 }}
-                    />
-                    {v.searchTarget === "origin" && v.showResults && (
-                      <Card tone="plain" style={{ marginTop: 6, boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
-                        {v.searchPending && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--text-muted)" }}>Searching…</div>}
-                        {!v.searchPending && v.searchError && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--status-fault)" }}>{v.searchError}</div>}
-                        {!v.searchPending && !v.searchError && v.searchEmpty && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--text-muted)" }}>No starting place found.</div>}
-                        {v.results.map((p, i) => (
-                          <button key={i} onClick={p.pick} style={{ display: "block", width: "100%", padding: "10px 0", textAlign: "left", background: "none", border: 0, borderBottom: "1px solid var(--border-card)", cursor: "pointer" }}>
-                            <div style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>{p.name}</div>
-                            <div style={{ marginTop: 3, font: "var(--type-caption)", color: "var(--text-muted)" }}>{p.detail}</div>
-                          </button>
-                        ))}
-                      </Card>
-                    )}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="sv-origin-picker">
+                    <label>From · {v.routeOriginName}</label>
+                    <PlacePicker key={v.routeOriginReset} value={v.routeOriginPlace} placeholder="Search starting place" icon="circle-dot" onChange={v.setRouteOrigin} onDraftChange={v.setRouteOriginDraft} showDetails={false} />
+                    <div className="sv-origin-shortcuts">
+                      {v.originPresets.map((preset) => <button key={preset.id} type="button" disabled={preset.disabled} aria-pressed={preset.active} onClick={preset.pick}>
+                        <Icon name={preset.icon} size={14} />{preset.label}
+                      </button>)}
+                    </div>
                   </div>
                   <div style={{ font: "var(--type-heading)", letterSpacing: "var(--tracking-heading)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.destName}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
                     <Icon name="map-pin" size={14} />
-                    {v.destDetail}
+                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{v.destDetail}</span>
                   </div>
                 </div>
                 <div style={{ marginLeft: "auto", flex: "none" }}>
@@ -229,10 +213,10 @@ export function MapScreen({ v }) {
                         {l.label}
                       </span>
                     ))}
-                    <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, font: "var(--weight-semibold) 11px/1 var(--font-body)", color: "var(--text-muted)" }}>
+                    <button type="button" aria-expanded={o.expanded} onClick={(event) => { event.stopPropagation(); o.pick(); }} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, font: "var(--weight-semibold) 11px/1 var(--font-body)", color: "var(--text-muted)", border: 0, padding: "8px 0", background: "transparent", cursor: "pointer" }}>
                       {o.detailHint}
                       <Icon name={o.expanded ? "chevron-up" : "chevron-down"} size={13} />
-                    </span>
+                    </button>
                   </div>
 
                   {o.expanded && o.details.length > 0 && (
@@ -248,9 +232,9 @@ export function MapScreen({ v }) {
                             )}
                           </div>
                           <div style={{ flex: 1, minWidth: 0, paddingBottom: di < o.details.length - 1 ? 12 : 0 }}>
-                            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                               <span style={{ font: "var(--type-body-strong)", color: "var(--text-strong)", textWrap: "pretty" }}>{d.title}</span>
-                              <span style={{ marginLeft: "auto", flex: "none", font: "var(--type-caption)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{d.meta}</span>
+                              <span style={{ font: "var(--type-caption)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{d.meta}</span>
                             </div>
                             {d.board && (
                               <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{d.board}</div>
@@ -295,8 +279,8 @@ export function MapScreen({ v }) {
                   <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginTop: 8 }}>
                     <div style={{ flex: 1, minWidth: 0, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>{o.note}</div>
                     <div style={{ flex: "none" }}>
-                      <Button size="md" iconRight="navigation" onClick={o.start}>
-                        Go
+                      <Button size="md" iconRight="navigation" onClick={o.start} disabled={o.recorded}>
+                        {o.recorded ? "Preview only" : "Go"}
                       </Button>
                     </div>
                   </div>
@@ -418,7 +402,7 @@ export function MapScreen({ v }) {
       )}
 
       {v.showCrowdBar && (
-        <div style={{ position: "absolute", left: 14, right: 14, bottom: 88, zIndex: 14, padding: "11px 12px 12px", borderRadius: 20, background: "var(--surface-card)", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={v.setCrowdBarRef} className="sv-crowd-bar" style={{ position: "absolute", left: 14, right: 14, bottom: "calc(94px + env(safe-area-inset-bottom))", zIndex: 14, padding: "11px 12px 12px", borderRadius: 20, background: "var(--surface-card)", boxShadow: "var(--shadow-sheet)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {v.fcLegend.map((g, i) => (
               <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -426,13 +410,13 @@ export function MapScreen({ v }) {
                 <span style={{ font: "var(--weight-semibold) 10.5px/1 var(--font-body)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{g.short}</span>
               </span>
             ))}
-            <span style={{ marginLeft: "auto", font: "var(--weight-semibold) 10.5px/1 var(--font-body)", color: v.crowdError ? "var(--status-fault)" : "var(--text-muted)", whiteSpace: "nowrap" }}>
+            <span style={{ flexBasis: "100%", font: "var(--weight-semibold) 10.5px/1.3 var(--font-body)", color: v.crowdError ? "var(--status-fault)" : "var(--text-muted)" }}>
               {v.crowdError ? "Crowding unavailable" : v.crowdPending ? "Loading crowding…" : v.crowdEmpty ? "No crowding data" : "Tap a station for its level"}
             </span>
           </div>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginTop: 10, paddingBottom: 2 }}>
             {v.fcSlots.map((h, i) => (
-              <button key={i} onClick={h.pick} style={styleText(h.style)}>
+              <button key={i} onClick={h.pick} aria-pressed={h.active} style={styleText(h.style)}>
                 <span style={styleText(h.timeStyle)}>{h.label}</span>
                 <span style={styleText(h.barStyle)} />
               </button>
@@ -449,6 +433,7 @@ export function MapScreen({ v }) {
           position: "absolute",
           right: 14,
           bottom: v.locateBottom,
+          maxHeight: 46,
           zIndex: 18,
           width: 46,
           height: 46,

@@ -7,13 +7,14 @@ import { ReportScreen } from "./screens/ReportScreen";
 import { RewardsScreen } from "./screens/RewardsScreen";
 import { PlanScreen, PlacesSheet, AddCommuteSheet } from "./screens/PlanScreen";
 import { TabBar } from "./screens/TabBar";
+import { ViewportShell } from "./components/ViewportShell";
 import "./app.css";
 
 export class App extends AppLogic {
   render() {
     const v = this.renderVals();
     return (
-      <div className="solvik-app-shell">
+      <ViewportShell>
         {v.isIntro && <Intro v={v} />}
         {v.isMap && <MapScreen v={v} />}
         {v.isNav && <NavScreen v={v} />}
@@ -25,7 +26,7 @@ export class App extends AppLogic {
         )}
 
         {(v.isReport || v.isRewards || v.isPlan) && (
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0 16px 96px" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "0 16px calc(96px + env(safe-area-inset-bottom))" }}>
             {v.isReport && <ReportScreen v={v} />}
             {v.isRewards && <RewardsScreen v={v} />}
             {v.isPlan && <PlanScreen v={v} />}
@@ -50,7 +51,7 @@ export class App extends AppLogic {
         )}
 
         {v.showTabs && <TabBar v={v} />}
-      </div>
+      </ViewportShell>
     );
   }
 }

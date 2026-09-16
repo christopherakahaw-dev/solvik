@@ -15,6 +15,7 @@ import { getPosition, watchPosition, clearWatch, messageForError, getLastPositio
 import { acceptFix, alongMAtTime, coordAt, stepAtTime, timeAtAlongM, STALE_FIX_MS } from "../lib/navProgress";
 import { metresBetween } from "../lib/geometry";
 import { resolveRouteOrigin } from "../lib/routeOrigin";
+import { addressDetail, durationLabel, forecastSlots, singaporeClock } from "../lib/display";
 import {
   KEYS, loadStored, store, rememberSearch, recentSearches, clearSearches,
   loadReadAlerts, markAlertsRead, alertId, loadSavedPlaces, saveSavedPlaces,
@@ -73,7 +74,7 @@ export class AppLogic extends Component {
     addMode: "Comfort", addMins: 462, addWhen: "leave", fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
     hoverTab: null, pressTab: null, sheetH: 430, sheetDrag: false, navRoute: null, navStart: null,
     navPage: 0, stepsDrag: false, pin: null,
-    screen: typeof localStorage !== "undefined" && localStorage.getItem(ONBOARDED_KEY) ? "map" : "intro",
+    screen: loadStored(ONBOARDED_KEY, false) ? "map" : "intro",
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
     query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
@@ -111,6 +112,20 @@ export class AppLogic extends Component {
   currentOrigin() {
     return this.effectiveRouteOrigin()?.ll || ORIGIN_FALLBACK;
   }
+
+  setCrowdBarRef = (element) => {
+    if (this._crowdBar === element) return;
+    this._crowdBarObserver?.disconnect();
+    this._crowdBar = element;
+    if (!element) return;
+    const measure = () => {
+      const height = Math.ceil(element.getBoundingClientRect().height);
+      if (this.state.crowdBarHeight !== height) this.setState({ crowdBarHeight: height });
+    };
+    this._crowdBarObserver = new ResizeObserver(measure);
+    this._crowdBarObserver.observe(element);
+    measure();
+  };
 
   // Centre the map on the real position and adopt it as the trip origin. Every
   // press recentres, not just the first: the watch is already delivering fixes,
@@ -612,9 +627,9 @@ export class AppLogic extends Component {
     const days = s.addDays || ["Mon", "Tue", "Wed", "Thu", "Fri"];
     const mode = s.addMode || "Comfort";
     const mins = s.addMins == null ? 462 : s.addMins;
-    const fromP = PLACES.find((p) => p.id === from) || PLACES[0] || null;
-    const toP = PLACES.find((p) => p.id === to) || PLACES[1] || null;
-    const clock = (m) => String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+    const fromP = PLACES.find((p) => p.id === from) || null;
+    const toP = PLACES.find((p) => p.id === to) || null;
+    const clock = (m) => { const n = ((m % 1440) + 1440) % 1440; return `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`; };
     const weekday = ["Mon", "Tue", "Wed", "Thu", "Fri"];
     const dayLabel =
       days.length === 0 ? "no days yet"
@@ -623,18 +638,18 @@ export class AppLogic extends Component {
       : days.length === 2 && days.indexOf("Sat") >= 0 && days.indexOf("Sun") >= 0 ? "weekends"
       : DAYS.filter((d) => days.indexOf(d) >= 0).join(", ");
     const pill = (on) =>
-      "flex:none;padding:10px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;" +
+      "flex:none;max-width:100%;overflow-wrap:anywhere;padding:10px 14px;border-radius:999px;cursor:pointer;white-space:normal;" +
       "font:var(--weight-bold) 13px/1 var(--font-body);transition:background .15s,color .15s;" +
       (on
         ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);"
         : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);");
     const aq = (s.addQuery || "").trim();
     const aResults = addSearch.query === aq ? addSearch.items : [];
-    const invalid = !fromP || !toP || from === to || days.length === 0;
+    const invalid = !fromP?.ll || !toP?.ll || from === to || (fromP?.ll && toP?.ll && metresBetween(fromP.ll, toP.ll) < 10) || days.length === 0;
     const name = invalid ? "" : fromP.label + " → " + toP.label;
     return {
       addOpen: !!s.addOpen,
-      closeAdd: () => this.setState({ addOpen: false, addEdit: null }),
+      closeAdd: () => this.setState({ addOpen: false, addEdit: null, addSearchFor: null, addQuery: "" }),
       addFromOpts: PLACES.map((p) => ({ label: p.label, style: pill(p.id === from), pick: () => this.setState({ addFrom: p.id }) })),
       addToOpts: PLACES.map((p) => ({ label: p.label, style: pill(p.id === to), pick: () => this.setState({ addTo: p.id }) })),
       addSearchOpen: !!s.addSearchFor,
@@ -666,8 +681,8 @@ export class AppLogic extends Component {
         : (s.addWhen || "leave") === "arrive"
         ? "Solvik works out when to leave from the live journey time, and says so if a leg turns busy."
         : "Solvik checks this trip against LTA's forecast before you leave.",
-      addTimeUp: () => this.setState({ addMins: mins + 5 }),
-      addTimeDown: () => this.setState({ addMins: mins - 5 }),
+      addTimeUp: () => this.setState({ addMins: (mins + 5 + 1440) % 1440 }),
+      addTimeDown: () => this.setState({ addMins: (mins - 5 + 1440) % 1440 }),
       addDaysLabel: dayLabel,
       addDayOpts: DAYS.map((d) => {
         const on = days.indexOf(d) >= 0;
@@ -700,7 +715,7 @@ export class AppLogic extends Component {
       addInvalid: invalid,
       addEditing: s.addEdit != null,
       addSheetTitle: s.addEdit != null ? "Edit commute" : "Add a commute",
-      addCta: invalid ? "Pick places and days" : s.addEdit != null ? "Save changes · " + name : "Save · watch " + name,
+      addCta: invalid ? "Pick places and days" : s.addEdit != null ? "Save changes" : "Save commute",
       deleteCommute: () => {
         const list = (s.savedList || []).filter((x, i) => i !== s.addEdit);
         this.setState({ savedList: list, addOpen: false, addEdit: null });
@@ -767,14 +782,16 @@ export class AppLogic extends Component {
           dismiss: () => this.setState({ justAdded: null }),
         };
       })(),
-      openAdd: () => this.setState({ addOpen: true, addEdit: null, addFrom: "home", addTo: "work", addDays: weekday.slice(), addMins: 462, addMode: "Comfort", addWhen: "leave" }),
+      openAdd: () => this.setState({ addOpen: true, addEdit: null, addSearchFor: null, addQuery: "", addFrom: PLACES[0]?.id || "", addTo: PLACES[1]?.id || "", addDays: weekday.slice(), addMins: 462, addMode: "Comfort", addWhen: "leave" }),
       placesOpen: !!s.placesOpen,
-      openPlaces: () => this.setState({ placesOpen: true }),
-      closePlaces: () => this.setState({ placesOpen: false }),
+      openPlaces: () => this.setState({ placesOpen: true, placesDraft: { ...savedPlaces }, placesDraftPending: {}, placesShowDraft: s.routingPreferences?.showSavedPlaces !== false }),
+      closePlaces: () => this.setState({ placesOpen: false, placesDraft: null, placesDraftPending: {} }),
+      placesInvalid: Object.values(s.placesDraftPending || {}).some(Boolean),
       savePlaces: () => {
-        this.setState({ placesOpen: false });
-        const names = [savedPlaces.home?.name, savedPlaces.work?.name, savedPlaces.school?.name].filter(Boolean);
-        this.flash(names.length ? "Saved on this device · " + names.join(" · ") : "No saved places");
+        if (Object.values(s.placesDraftPending || {}).some(Boolean)) return;
+        this.setState({ placesOpen: false, savedPlaces: s.placesDraft || savedPlaces, placesDraft: null,
+          routingPreferences: { ...s.routingPreferences, showSavedPlaces: s.placesShowDraft } });
+        this.flash("Places saved on this device");
       },
       placeRows: [
         { key: "home", label: "Home", short: "Home", icon: "house", placeholder: "Block, street or MRT stop" },
@@ -782,14 +799,13 @@ export class AppLogic extends Component {
         { key: "school", label: "School or campus", short: "School", icon: "graduation-cap", placeholder: "Optional" },
       ].map((p) => ({
         label: p.label, short: p.short, icon: p.icon, placeholder: p.placeholder,
-        value: savedPlaces[p.key] || null,
+        value: (s.placesOpen ? s.placesDraft : savedPlaces)?.[p.key] || null,
         shown: savedPlaces[p.key]?.name || "Add",
-        set: (place) => this.setState({ savedPlaces: { ...(this.state.savedPlaces || {}), [p.key]: place ? { ...place, id: p.key } : null } }),
+        set: (place) => this.setState((st) => ({ placesDraft: { ...(st.placesDraft || {}), [p.key]: place ? { ...place, id: p.key } : null } })),
+        draft: (pending) => this.setState((st) => ({ placesDraftPending: { ...st.placesDraftPending, [p.key]: pending } })),
       })),
-      showSavedPlaces: s.routingPreferences?.showSavedPlaces !== false,
-      toggleSavedPlaces: () => this.setState({
-        routingPreferences: { ...(s.routingPreferences || {}), showSavedPlaces: s.routingPreferences?.showSavedPlaces === false },
-      }),
+      showSavedPlaces: s.placesOpen ? s.placesShowDraft : s.routingPreferences?.showSavedPlaces !== false,
+      toggleSavedPlaces: () => this.setState((st) => ({ placesShowDraft: !st.placesShowDraft })),
       clearAllData: () => {
         if (typeof window !== "undefined" && !window.confirm("Erase all Solvik data saved in this browser? This cannot be undone.")) return;
         clearAllUserData();
@@ -798,7 +814,7 @@ export class AppLogic extends Component {
       saveCommute: () => {
         if (invalid) return;
         const arrive = (s.addWhen || "leave") === "arrive";
-        const entry = { from, to, days: days.slice(), mins, mode, arriveBy: arrive ? mins : null };
+        const entry = { from, to, fromPlace: { ...fromP }, toPlace: { ...toP }, days: days.slice(), mins: ((mins % 1440) + 1440) % 1440, mode, arriveBy: arrive ? ((mins % 1440) + 1440) % 1440 : null };
         const list = (s.savedList || []).slice();
         if (s.addEdit != null) list[s.addEdit] = entry;
         else list.push(entry);
@@ -811,9 +827,9 @@ export class AppLogic extends Component {
   forecastVals(s) {
     const crowd = s.crowd || { stations: [], slots: [] };
     const stations = crowd.stations || [];
-    const level = (st) => st.level || "light";
-    const tone = (lv) => "var(--crowd-" + lv + ")";
-    const word = { busy: "Busy", moderate: "Filling", light: "Light" };
+    const level = (st) => st.level || "unknown";
+    const tone = (lv) => lv === "unknown" ? "var(--text-muted)" : "var(--crowd-" + lv + ")";
+    const word = { busy: "Busy", moderate: "Filling", light: "Light", unknown: "No data" };
 
     const pinned = s.crowdOn !== false ? stations.find((st) => st.code === s.fcPin) || null : null;
     const watched = s.fcWatch || [];
@@ -826,7 +842,7 @@ export class AppLogic extends Component {
       radius: 320,
       level: level(st),
       label: st.name,
-      pct: st.pct != null ? st.pct + "%" : "",
+      pct: "", // LTA supplies categories, not measured occupancy percentages.
       selected: st.code === s.fcPin,
     }));
 
@@ -836,11 +852,10 @@ export class AppLogic extends Component {
     const isRead = (f) => !!(f && f.id && readAlerts[f.id]);
     const unread = faults.items.filter((f) => !isRead(f));
 
-    const slots = crowd.slots || [];
-    const slotIndex = Math.min(s.fcSlot || 0, Math.max(0, slots.length - 1));
+    const slots = forecastSlots(crowd.slots);
+    const slotIndex = s.fcAt ? slots.indexOf(s.fcAt) : 0;
     const slotLabel = (iso) => {
-      const d = new Date(iso);
-      return isNaN(d) ? String(iso) : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      return singaporeClock(iso);
     };
 
     return {
@@ -858,7 +873,7 @@ export class AppLogic extends Component {
       fcRoutesHere: () => {
         if (!pinned) return;
         this.chooseDest(
-          { name: pinned.name, detail: word[level(pinned)] + " now · platform crowding from LTA", ll: [pinned.lat, pinned.lng] },
+          { name: pinned.name, detail: word[level(pinned)] + (s.fcAt ? " forecast" : " now") + " · platform crowding from LTA", ll: [pinned.lat, pinned.lng] },
           { fcPin: null }
         );
       },
@@ -872,8 +887,8 @@ export class AppLogic extends Component {
       },
       fcPinned: pinned && {
         name: pinned.name,
-        detail: pinned.code + " · platform crowding, LTA DataMall",
-        pct: pinned.pct != null ? pinned.pct + "%" : "",
+        detail: pinned.code + " · " + (s.fcAt ? "Forecast " + singaporeClock(s.fcAt) : "Live platform crowding") + " · LTA DataMall",
+        pct: "",
         word: word[level(pinned)],
         dotStyle: "flex:none;margin-top:4px;width:12px;height:12px;border-radius:999px;background:" + tone(level(pinned)),
         pctStyle: "font:var(--weight-heavy) 24px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:" + tone(level(pinned)),
@@ -885,11 +900,12 @@ export class AppLogic extends Component {
         swatch: "width:9px;height:9px;border-radius:999px;flex:none;background:" + tone(lv) + ";opacity:.9",
       })),
       // Scrubber slots are the forecast intervals LTA actually publishes.
-      fcSlots: slots.map((iso, n) => {
+      fcSlots: (crowd.error || !stations.length ? [] : slots).map((iso, n) => {
         const on = n === slotIndex;
         return {
           label: n === 0 ? "Now" : slotLabel(iso),
-          pick: () => this.setState({ fcSlot: n }),
+          active: on,
+          pick: () => this.setState({ fcAt: iso }),
           style: "flex:none;display:flex;flex-direction:column;align-items:center;gap:7px;padding:9px 13px;border-radius:14px;cursor:pointer;transition:background .16s,border-color .16s;" +
             (on ? "background:var(--accent);border:1.5px solid var(--accent);" : "background:var(--sand-100);border:1.5px solid var(--border-card);"),
           timeStyle: "font:var(--weight-bold) 12.5px/1 var(--font-numeric);font-variant-numeric:tabular-nums;color:" + (on ? "#fff" : "var(--text-body)"),
@@ -947,12 +963,12 @@ export class AppLogic extends Component {
       s.dest &&
       !s.routeLocationPending &&
       s.screen !== "nav" &&
-      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.routeOrigin !== prevState.routeOrigin || s.routeLocationPending !== prevState.routeLocationPending || this.originDrifted())
+      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.routeOrigin !== prevState.routeOrigin || s.routeOriginDraft !== prevState.routeOriginDraft || s.routeLocationPending !== prevState.routeLocationPending || (!s.routeOriginDraft && this.originDrifted()))
     ) {
       this.loadTripOptions();
     }
     // Scrubbing to another forecast slot re-asks LTA.
-    if (s.fcSlot !== prevState.fcSlot) this.loadCrowding(s.crowd.slots[s.fcSlot] || null);
+    if (s.fcAt !== prevState.fcAt) this.loadCrowding(s.fcAt || null);
 
     if (s.savedList !== prevState.savedList) store(COMMUTES_KEY, s.savedList);
     if (s.savedPlaces !== prevState.savedPlaces) saveSavedPlaces(s.savedPlaces);
@@ -999,6 +1015,8 @@ export class AppLogic extends Component {
     }, 5 * 60 * 1000);
   }
   componentWillUnmount() {
+    this._crowdBarObserver?.disconnect();
+    clearTimeout(this.bt);
     clearInterval(this.iv);
     if (this.tt) clearTimeout(this.tt);
     if (this._searchT) clearTimeout(this._searchT);
@@ -1101,7 +1119,7 @@ export class AppLogic extends Component {
             query,
             items: (items || []).map((r) => ({
               name: r.name || r.address,
-              detail: r.postal ? r.address + " · " + r.postal : r.address,
+              detail: addressDetail(r.address, r.postal),
               kind: "Address",
               ll: [r.lat, r.lng],
             })),
@@ -1137,7 +1155,7 @@ export class AppLogic extends Component {
               items: (items || []).map((r, i) => ({
                 id: `om-${r.postal || i}-${r.lat}`,
                 name: r.name || r.address,
-                detail: r.postal ? `${r.address} · ${r.postal}` : r.address,
+                detail: addressDetail(r.address, r.postal),
                 kind: "Address",
                 ll: [r.lat, r.lng],
               })),
@@ -1186,11 +1204,7 @@ export class AppLogic extends Component {
   };
 
   chooseDest = (dest, extra) => {
-    // A caller that supplies its own starting place (the Today tab knows where
-    // the commute begins) settles the origin here, so neither the location
-    // request below nor the saved-Home fallback is reached.
-    const nextOrigin = extra && "routeOrigin" in extra ? extra.routeOrigin : this.state.routeOrigin;
-    const needCurrentLocation = !!dest && !nextOrigin && !this.state.userLoc;
+    // Selecting a destination never requests device location implicitly.
     this.setState({
       dest: dest || null,
       tripRoute: 0,
@@ -1198,8 +1212,11 @@ export class AppLogic extends Component {
       query: "",
       liveResults: null,
       searchOpen: false,
+      searchTarget: "dest",
       searchPending: false,
-      routeLocationPending: needCurrentLocation,
+      routeLocationPending: false,
+      routeOriginDraft: false,
+      tripCollapsed: false,
       trips: { key: null, options: [], pending: !!dest, error: null },
       arrivals: {},
       ...(extra || {}),
@@ -1209,11 +1226,6 @@ export class AppLogic extends Component {
     this._detailsFor = 0;
     if (dest) {
       this.rememberSearch(dest);
-      if (needCurrentLocation) {
-        this.requestCurrentLocation(false, false)
-          .then(() => this.setState({ routeLocationPending: false }))
-          .catch(() => this.setState({ routeLocationPending: false }));
-      }
     }
   };
 
@@ -1231,6 +1243,10 @@ export class AppLogic extends Component {
   loadTripOptions = () => {
     const { dest, tripMode } = this.state;
     if (!dest || !dest.ll) return;
+    if (this.state.routeOriginDraft) {
+      this.setState({ trips: { key: null, options: [], pending: false, error: "Select a starting place from the search results." } });
+      return;
+    }
     const resolvedOrigin = this.effectiveRouteOrigin();
     if (!resolvedOrigin) {
       this.setState({ trips: { key: null, options: [], pending: false, error: "Choose a starting place or use your location." } });
@@ -1258,12 +1274,11 @@ export class AppLogic extends Component {
 
   // Live platform crowding, optionally for a forecast slot.
   loadCrowding = (at) => {
+    const requestId = this._crowdRequestId = (this._crowdRequestId || 0) + 1;
     this.setState((st) => ({ crowd: { ...st.crowd, pending: true, error: null } }));
     getCrowding(at)
-      .then((data) => this.setState({ crowd: { ...data, pending: false, error: null } }))
-      .catch((err) =>
-        this.setState((st) => ({ crowd: { ...st.crowd, stations: [], pending: false, error: String(err.message || err) } }))
-      );
+      .then((data) => { if (requestId === this._crowdRequestId) this.setState({ crowd: { ...data, pending: false, error: null } }); })
+      .catch((err) => { if (requestId === this._crowdRequestId) this.setState((st) => ({ crowd: { ...st.crowd, stations: [], pending: false, error: String(err.message || err) } })); });
   };
 
   // Live LTA DataMall train service alerts.
@@ -1322,12 +1337,12 @@ export class AppLogic extends Component {
       );
   };
 
-  navSnaps = [152, 336, 620];
+  navSnaps = [152, 260, 620];
   navSnap(h) {
     return this.navSnaps.reduce((a, b) => (Math.abs(b - h) < Math.abs(a - h) ? b : a), this.navSnaps[0]);
   }
   startNavDrag = (e) => {
-    const startY = e.clientY, startH = this.state.navSheetH == null ? 336 : this.state.navSheetH;
+    const startY = e.clientY, startH = this.state.navSheetH == null ? 260 : this.state.navSheetH;
     this.setState({ navDragging: true });
     const move = (ev) => {
       const h = Math.max(148, Math.min(680, startH - (ev.clientY - startY)));
@@ -1336,13 +1351,13 @@ export class AppLogic extends Component {
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      this.setState((st) => ({ navDragging: false, navSheetH: this.navSnap(st.navSheetH == null ? 336 : st.navSheetH) }));
+      this.setState((st) => ({ navDragging: false, navSheetH: this.navSnap(st.navSheetH == null ? 260 : st.navSheetH) }));
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
   cycleNavSheet = () => {
-    const h = this.state.navSheetH == null ? 336 : this.state.navSheetH;
+    const h = this.state.navSheetH == null ? 260 : this.state.navSheetH;
     const idx = this.navSnaps.indexOf(this.navSnap(h));
     this.setState({ navSheetH: this.navSnaps[(idx + 1) % this.navSnaps.length] });
   };
@@ -1372,16 +1387,16 @@ export class AppLogic extends Component {
     const homeLabel = s.introHomePlace?.name;
     const workLabel = s.introWorkPlace?.name;
     const summary = [
-      { text: homeLabel && workLabel ? "Watching " + homeLabel + " → " + workLabel + ", with a leave-by alert 25 min ahead." : "You can add or verify Home and Work later in Plan." },
+      { text: homeLabel && workLabel ? "Saved " + homeLabel + " and " + workLabel + ". Add a commute in Plan to set its schedule and reminders." : "You can add or verify Home and Work later in Plan." },
       { text: stepFree
-        ? "Step-free routing is on. Lifts, level boarding and wider gantries only — lift faults reroute you automatically."
+        ? "Step-free preference is on. Accessibility information may be incomplete; check the route details before travelling."
         : has("comfort")
-        ? "Comfort routes come first, with longer transfer buffers and seat odds on every option."
+        ? "Less-crowded routes come first where crowding information is available."
         : "Fastest routes come first, with crowding shown before you board." },
       { text: wantsSchool && s.introSchoolPlace?.name
-        ? "Campus trips to " + s.introSchoolPlace.name + " are saved, including term-time weekday mornings."
-        : "Crowding on your lines is checked every few minutes while you travel." },
-      { text: "Reports you post at your stop earn points towards fare vouchers." },
+        ? "Your campus at " + s.introSchoolPlace.name + " is saved. Set its commute days in Plan."
+        : "Service alerts are checked while the app is open; background alerts are not supported." },
+      { text: "Reports and rewards are previews. No public report is submitted and no real voucher is issued." },
     ];
     return {
       isIntro: sc === "intro",
@@ -1392,7 +1407,7 @@ export class AppLogic extends Component {
       })),
       introPromises: [
         { icon: "bell", title: "Leave-by alerts", detail: "A nudge before your usual door-to-door time slips." },
-        { icon: "users", title: "Crowding you can trust", detail: "Live counts from LTA plus reports from people at the stop." },
+        { icon: "users", title: "Platform crowding", detail: "LTA crowd levels when available, with missing data clearly marked." },
         { icon: "accessibility", title: "Routes that fit you", detail: "Step-free, fewest changes or least walking — your default, not an afterthought." },
       ],
       introRoles: ROLES.map((r) => ({
@@ -1406,12 +1421,15 @@ export class AppLogic extends Component {
       introPlaces: places.map((p) => ({
         label: p.label, placeholder: p.placeholder, icon: p.icon, value: s[p.key] || null,
         set: (place) => this.setState({ [p.key]: place ? { ...place, id: p.id } : null }),
+        draft: (pending) => this.setState((st) => ({ introDraftPending: { ...st.introDraftPending, [p.key]: pending } })),
         suggestions: p.sugg,
       })),
       introSummaryTitle: "Solvik is set up for " + (stepFree ? "step-free travel" : has("student") ? "student travel" : has("comfort") ? "a calmer commute" : has("commuter") ? "your daily commute" : "your commute"),
       introSummary: summary,
       introCta: ["Set up in a minute", roles.length ? "Next · " + roles.length + " selected" : "Next", filled ? "Next · " + filled + " saved" : "Next", "Start using Solvik"][step],
+      introInvalid: step === 2 && places.some((p) => s.introDraftPending?.[p.key]),
       introNext: () => {
+        if (step === 2 && places.some((p) => s.introDraftPending?.[p.key])) return;
         if (step < total - 1) return this.setState({ introStep: step + 1 });
         const routingPreferences = {
           ...(s.routingPreferences || {}),
@@ -1433,13 +1451,13 @@ export class AppLogic extends Component {
           mode: stepFree ? "silver" : has("comfort") ? "comfort" : "rush",
           tripMode: stepFree ? "step" : has("comfort") ? "quiet" : "fast",
         });
-        if (typeof localStorage !== "undefined") localStorage.setItem(ONBOARDED_KEY, "1");
-        this.flash(homeLabel && workLabel ? (stepFree ? "Step-free routing on · watching " + homeLabel + " → " + workLabel : "Watching " + homeLabel + " → " + workLabel) : "Setup saved on this device");
+        store(ONBOARDED_KEY, 1);
+        this.flash("Setup saved on this device");
       },
       introBack: () => this.setState({ introStep: Math.max(0, step - 1) }),
       introSkip: () => {
         this.setState({ screen: "map", introStep: 0 });
-        if (typeof localStorage !== "undefined") localStorage.setItem(ONBOARDED_KEY, "1");
+        store(ONBOARDED_KEY, 1);
         this.flash("Set your places any time in Plan");
       },
     };
@@ -1622,7 +1640,7 @@ export class AppLogic extends Component {
     // anyone trying to read it.
     if (
       !this._mapCenter ||
-      (!this._mapCenterReal && s.userLoc) ||
+      (!this._mapCenterReal && s.userLoc && !s.routeOrigin) ||
       metresBetween(this._mapCenter, MAP_ORIGIN) > MAP_FOLLOW_M
     ) {
       this._mapCenter = MAP_ORIGIN;
@@ -1646,10 +1664,11 @@ export class AppLogic extends Component {
     const tripOptions = (trips.options || []).map((o, i) => ({
       ...o,
       // Selecting a card opens its breakdown, so give the sheet room for it.
-      pick: () => this.setState((st) => ({ tripRoute: i, sheetH: Math.max(st.sheetH || 430, this.tallSheet()) })),
+      pick: () => this.setState((st) => ({ tripRoute: i, tripCollapsed: st.tripRoute === i ? !st.tripCollapsed : false, sheetH: Math.max(st.sheetH || 430, this.tallSheet()) })),
       tone: s.tripRoute === i ? "accent" : "hairline",
       start: (e) => {
         if (e && e.stopPropagation) e.stopPropagation();
+        if (trips.recorded || o.recorded) return;
         // Starting a route is the strongest signal there is about where you
         // actually travel, so it is what the memory learns from.
         this.rememberJourney(o);
@@ -1662,12 +1681,13 @@ export class AppLogic extends Component {
       },
       legs: (o.legs || []).map((label) => ({ label, style: this.lineStyle(label) })),
       bars: o.crowdLevel ? this.barsFor(o.crowdLevel) : [],
-      crowd: o.crowdLevel ? WORD[o.crowdLevel] : "Crowding unknown",
+      recorded: !!trips.recorded || !!o.recorded,
+      crowd: o.walkOnly ? "Walking route" : o.crowdLevel ? WORD[o.crowdLevel] : "Crowding unknown",
       fare: o.fare || "Fare unknown",
       // The breakdown is built for the selected card only — the others stay
       // compact so three options still fit on a phone screen.
-      expanded: s.tripRoute === i,
-      detailHint: s.tripRoute === i ? "Hide steps" : "Tap for step-by-step",
+      expanded: s.tripRoute === i && !s.tripCollapsed,
+      detailHint: s.tripRoute === i && !s.tripCollapsed ? "Hide steps" : "Show steps",
       details: s.tripRoute === i ? detailRows(o, s.arrivals).map((row) => this.detailRowVals(row)) : [],
       detailsRef: this.scrollDetailsIntoView,
     }));
@@ -1712,7 +1732,7 @@ export class AppLogic extends Component {
     const arrived = navArr.length > 0 && navElapsed >= navTotal - 1;
     if (arrived) this.markArrived();
     this._navIdx = navIdx;
-    const fmtS = (x) => (x >= 60 ? Math.ceil(x / 60) + " min" : Math.max(0, Math.ceil(x)) + " s");
+    const fmtS = (x) => (x >= 60 ? durationLabel(x) : Math.max(0, Math.ceil(x)) + " s");
     const curStep = navArr[navIdx] || {};
     const stepProg = at.stepFrac || 0;
     const curStops = curStep.stops && curStep.stops.length ? curStep.stops : null;
@@ -1728,7 +1748,7 @@ export class AppLogic extends Component {
       navDetail: arrived ? destShort : liveStopLine,
       navCountdown: arrived ? "Done" : fmtS(stepRem),
       navStepLabel: arrived ? "Trip complete" : navArr.length ? "Step " + (navIdx + 1) + " of " + navArr.length : "Preparing trip",
-      navEta: navOpt ? navOpt.eta : "",
+      navEta: navOpt ? singaporeClock(Date.now() + Math.max(0, navTotal - navElapsed) * 1000) : "",
       navRemainLabel: arrived ? "Arrived · " + destShort : Math.max(1, Math.ceil((navTotal - navElapsed) / 60)) + " min left · " + destShort,
       navTrackNote,
       navTrackTone: s.navFixStatus === "denied" || navStale || s.navFixStatus === "off-route" ? "warn" : "muted",
@@ -1803,7 +1823,7 @@ export class AppLogic extends Component {
       isMap: sc === "map", mapSearch: !s.dest, mapRoute: !!s.dest,
       // The panel stays shut until there is a real query to answer — focusing
       // the field no longer surfaces the built-in place list.
-      showResults: (!s.dest || s.searchTarget === "origin") && q.length >= 2,
+      showResults: !s.dest && s.searchOpen && q.length >= 2,
       // Your own history, shown only when you open an empty search box — it
       // disappears the moment you start typing.
       showRecents: s.searchTarget === "dest" && !s.dest && !!s.searchOpen && q.length < 2 && (s.recents || []).length > 0,
@@ -1813,7 +1833,7 @@ export class AppLogic extends Component {
         pick: () => this.chooseDest({ name: r.name, detail: r.detail || "", ll: r.ll, kind: r.kind || "Recent" }),
       })),
       clearRecents: () => this.setState({ recents: clearSearches() }),
-      openSearch: () => this.setState({ searchOpen: true, searchTarget: "dest" }),
+      openSearch: () => { clearTimeout(this.bt); this.setState({ searchOpen: true, searchTarget: "dest" }); },
       openOriginSearch: () => this.setState({
         searchOpen: true,
         searchTarget: "origin",
@@ -1834,7 +1854,10 @@ export class AppLogic extends Component {
       searchError: s.searchError || null,
       searchFooter: "Results from OneMap · Singapore Land Authority",
       routeOriginPlace: s.routeOrigin || null,
-      routeOriginName: resolvedOrigin?.name || "Current location",
+      routeOriginReset: s.routeOriginReset || 0,
+      routeOriginName: resolvedOrigin?.name || "Choose a starting place",
+      setRouteOrigin: (place) => this.setState({ routeOrigin: place, routeOriginDraft: false, tripCollapsed: false, trips: { key: null, options: [], pending: false, error: null } }),
+      setRouteOriginDraft: (draft) => this.setState({ routeOriginDraft: draft }),
       routeOriginInput: s.searchTarget === "origin" ? s.query : (resolvedOrigin?.name || "Current location"),
       searchPlaceholder: s.searchTarget === "origin" ? "Search starting place" : "Search address, stop or area",
       originPresets: [
@@ -1845,7 +1868,7 @@ export class AppLogic extends Component {
           active: !s.routeOrigin && !!s.userLoc,
           disabled: !!s.locating,
           pick: () => this.requestCurrentLocation(true, true)
-            .then(() => this.setState({ routeOrigin: null, trips: { key: null, options: [], pending: false, error: null } }))
+            .then(() => this.setState((st) => ({ routeOrigin: null, routeOriginDraft: false, routeOriginReset: (st.routeOriginReset || 0) + 1, trips: { key: null, options: [], pending: false, error: null } }), this.loadTripOptions))
             .catch(() => {}),
         },
         ...["home", "work", "school"]
@@ -1857,7 +1880,7 @@ export class AppLogic extends Component {
             icon: { home: "house", work: "briefcase", school: "graduation-cap" }[place.id],
             active: s.routeOrigin?.id === place.id || (!s.routeOrigin && !s.userLoc && place.id === "home"),
             disabled: false,
-            pick: () => this.setState({ routeOrigin: place, trips: { key: null, options: [], pending: false, error: null } }),
+            pick: () => this.setState({ routeOrigin: place, routeOriginDraft: false, trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions),
           })),
       ],
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
@@ -1877,7 +1900,8 @@ export class AppLogic extends Component {
       hasFix: !!s.userLoc,
       locateMe: this.locateMe,
       // Sits clear of whichever bottom overlay is currently showing.
-      locateBottom: dest ? (s.sheetH || 430) + 12 : s.fcPin ? 250 : s.pin ? 210 : (s.crowdOn !== false && !s.searchOpen && !q) ? 170 : 96,
+      setCrowdBarRef: this.setCrowdBarRef,
+      locateBottom: dest ? `min(${(s.sheetH || 430) + 12}px, calc(100% - 64px))` : `calc(${s.fcPin ? 250 : s.pin ? 210 : (s.crowdOn !== false && !s.searchOpen && !q) ? 106 + (s.crowdBarHeight || 110) : 96}px + env(safe-area-inset-bottom))`,
       backToSearch: () => this.chooseDest(null),
       pinCoord: s.pin ? s.pin.ll : null,
       hasPin: !!s.pin && !dest && !s.fcPin,
@@ -1904,7 +1928,7 @@ export class AppLogic extends Component {
         this.flash("Showing places near the pin");
       },
       setSheetRef: (el) => { this.sheetEl = el; },
-      sheetWrapStyle: { position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 15, display: "flex", height: (s.sheetH || 430) + "px", transition: s.sheetDrag ? "none" : "height var(--dur-base) var(--ease-out)" },
+      sheetWrapStyle: { position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 15, display: "flex", height: (s.sheetH || 430) + "px", maxHeight: "calc(100% - 70px)", transition: s.sheetDrag ? "none" : "height var(--dur-base) var(--ease-out)" },
       sheetStyle: { flex: 1, minHeight: 0, width: "100%", minWidth: 0, maxWidth: "100%", boxSizing: "border-box", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", display: "flex", flexDirection: "column", padding: "0 16px" },
       sheetGrabStyle: { flex: "none", padding: "10px 0 12px", cursor: s.sheetDrag ? "grabbing" : "grab", touchAction: "none", userSelect: "none" },
       sheetDragStart: (e) => this.startSheetDrag(e),
@@ -1915,7 +1939,7 @@ export class AppLogic extends Component {
         { id: "step", label: "Step-free" },
         { id: "few", label: "Fewest changes" },
         { id: "walk", label: "Least walking" },
-        { id: "bike", label: "Bike + rail" },
+        { id: "bike", label: "Cycling" },
       ].map((m) => {
         const on = s.tripMode === m.id;
         return {
@@ -1943,7 +1967,7 @@ export class AppLogic extends Component {
           s.crowd && s.crowd.recorded ? "crowding" : null,
           s.outlook && s.outlook.forecast && s.outlook.forecast.recorded ? "forecast" : null,
         ].filter(Boolean);
-        return sources.length ? `Recorded ${sources.join(" and ")} — the live service didn't answer` : "";
+        return trips.recorded ? "Sample route only — it does not match your selected places. Live routing is unavailable." : sources.length ? `Recorded ${sources.join(" and ")} — the live service didn't answer` : "";
       })(),
       tripsPending: !!trips.pending,
       tripsError: trips.error || null,
@@ -2000,7 +2024,7 @@ export class AppLogic extends Component {
       reportPick: s.rep === "pick", reportConfirm: s.rep === "confirm", reportDone: s.rep === "done",
       reportTypes: rTypes, chosenLabel: chosen.label, chosenPts: chosen.pts, severities, severityQ: sevSet.q,
       navSheetStyle: {
-        position: "absolute", left: 0, right: 0, bottom: 0, height: s.navSheetH == null ? 336 : s.navSheetH,
+        position: "absolute", left: 0, right: 0, bottom: 0, height: s.navSheetH == null ? 260 : s.navSheetH, maxHeight: "calc(100% - 70px)",
         background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)",
         padding: "10px 16px 16px", display: "flex", flexDirection: "column", gap: 11, boxSizing: "border-box", overflow: "hidden",
         transition: s.navDragging ? "none" : "height 260ms cubic-bezier(.2,.7,.3,1)",

@@ -1,157 +1,134 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon, SearchField } from "../design-system";
 import { searchPlaces } from "../api/onemap";
+import { addressDetail } from "../lib/display";
 
-export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, suggestions = [], showDetails = true }) {
+export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, onDraftChange, suggestions = [], showDetails = true }) {
   const [query, setQuery] = useState(value?.name || "");
   const [results, setResults] = useState([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(false);
-  const requestRef = useRef(null);
-  const previousValueNameRef = useRef(value?.name || "");
-
-  // Saved-place shortcuts can update this picker from outside. Keep the text
-  // in sync without erasing the first character when a user starts editing an
-  // existing selection (that edit intentionally clears `value`).
-  useEffect(() => {
-    const nextName = value?.name || "";
-    const previousName = previousValueNameRef.current;
-    if (nextName !== previousName) {
-      setQuery((current) => nextName || (current === previousName ? "" : current));
-      previousValueNameRef.current = nextName;
-    }
-  }, [value?.name]);
+  const [active, setActive] = useState(-1);
+  const [position, setPosition] = useState(null);
+  const anchor = useRef(null);
+  const popup = useRef(null);
+  const editing = useRef(false);
+  const listId = useId();
+  const expanded = open && !value && query.trim().length >= 2;
 
   useEffect(() => {
-    if (requestRef.current) requestRef.current.abort();
-    const trimmed = query.trim();
-    if (!open || value || trimmed.length < 2) {
-      return undefined;
-    }
+    if (editing.current) { editing.current = false; return; }
+    setQuery(value?.name || "");
+  }, [value]);
 
+  useEffect(() => {
+    if (!expanded) return;
     const controller = new AbortController();
-    requestRef.current = controller;
+    setPending(true);
+    setResults([]);
+    setError(null);
     const timer = setTimeout(() => {
-      searchPlaces(trimmed, { signal: controller.signal })
-        .then((items) => {
-          if (controller.signal.aborted) return;
-          setResults(items || []);
-          setPending(false);
-        })
-        .catch((err) => {
-          if (controller.signal.aborted) return;
-          setResults([]);
-          setPending(false);
-          setError(String(err?.message || err));
-        });
+      searchPlaces(query.trim(), { signal: controller.signal })
+        .then((items) => { if (!controller.signal.aborted) setResults(items || []); })
+        .catch((err) => { if (!controller.signal.aborted) setError(err.message || "Search unavailable. Please try again."); })
+        .finally(() => { if (!controller.signal.aborted) setPending(false); });
     }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [query, expanded]);
 
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    const update = () => {
+      const field = anchor.current?.getBoundingClientRect();
+      if (!field) return;
+      const viewport = window.visualViewport;
+      const top = viewport?.offsetTop || 0;
+      const bottom = top + (viewport?.height || window.innerHeight);
+      const fieldTop = Math.max(top + 8, Math.min(bottom - 8, field.top));
+      const fieldBottom = Math.max(top + 8, Math.min(bottom - 8, field.bottom));
+      const above = fieldTop - top - 8;
+      const below = bottom - fieldBottom - 8;
+      const up = below < 180 && above > below;
+      const maxHeight = Math.max(72, Math.min(280, up ? above : below));
+      setPosition({ position: "fixed", left: field.left, width: field.width, maxHeight,
+        top: up ? undefined : fieldBottom + 6,
+        bottom: up ? window.innerHeight - fieldTop + 6 : undefined });
     };
-  }, [query, open, value]);
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    window.visualViewport?.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("scroll", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      window.visualViewport?.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("scroll", update);
+    };
+  }, [expanded]);
+
+  useEffect(() => {
+    const outside = (event) => {
+      if (!anchor.current?.contains(event.target) && !popup.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, []);
 
   const updateQuery = (next) => {
-    if (value) onChange?.(null);
+    if (value) { editing.current = true; onChange?.(null); }
     setQuery(next);
     setOpen(true);
-    setPending(next.trim().length >= 2);
-    setError(null);
-    if (next.trim().length < 2) setResults([]);
+    setActive(-1);
+    onDraftChange?.(!!next.trim());
   };
-
   const choose = (result) => {
-    const place = {
-      name: result.name || result.address,
-      address: result.address || result.name,
-      postal: result.postal || null,
-      ll: [Number(result.lat), Number(result.lng)],
-      source: "onemap",
-      verified: true,
-    };
+    const place = { name: result.name || result.address, address: result.address || result.name,
+      postal: result.postal || null, ll: [Number(result.lat), Number(result.lng)], source: "onemap", verified: true };
+    editing.current = false;
     onChange?.(place);
+    onDraftChange?.(false);
     setQuery(place.name);
-    setResults([]);
     setOpen(false);
+    anchor.current?.querySelector("input")?.blur();
   };
 
-  return (
-    <div style={{ position: "relative" }}>
-      <SearchField
-        value={query}
-        placeholder={placeholder}
-        icon={icon}
-        onChange={updateQuery}
-        onClear={() => {
-          onChange?.(null);
-          setQuery("");
-          setResults([]);
-          setOpen(true);
+  return <div style={{ position: "relative", minWidth: 0 }}>
+    <div ref={anchor}>
+      <SearchField value={query} placeholder={placeholder} icon={icon} onChange={updateQuery}
+        onClear={() => { editing.current = false; onChange?.(null); onDraftChange?.(false); setQuery(""); setOpen(false); }}
+        onFocus={() => setOpen(true)}
+        onBlur={(event) => { if (event.relatedTarget && !popup.current?.contains(event.relatedTarget)) setOpen(false); }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") { setOpen(false); event.preventDefault(); }
+          if ((event.key === "ArrowDown" || event.key === "ArrowUp") && results.length) {
+            event.preventDefault();
+            setActive((index) => (index + (event.key === "ArrowDown" ? 1 : results.length - 1) + results.length) % results.length);
+          }
+          if (event.key === "Enter" && expanded && active >= 0 && results[active]) { event.preventDefault(); choose(results[active]); }
         }}
-        onFocus={() => {
-          setOpen(true);
-          if (!value && query.trim().length >= 2) setPending(true);
-        }}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
-        role="combobox"
-        aria-expanded={open && !value && query.trim().length >= 2}
-        aria-autocomplete="list"
-      />
-
-      {value && showDetails && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 7, marginTop: 7, font: "var(--type-caption)", color: value.verified ? "var(--text-muted)" : "var(--status-fault)" }}>
-          <Icon name={value.verified ? "check" : "triangle-alert"} size={13} style={{ flex: "none", marginTop: 1 }} />
-          <span style={{ textWrap: "pretty" }}>
-            {value.verified
-              ? [value.address, value.postal].filter(Boolean).join(" · ")
-              : "Previously saved text — select a OneMap result to verify this place."}
-          </span>
-        </div>
-      )}
-
-      {!value && suggestions.length > 0 && query.trim().length < 2 && (
-        <div style={{ display: "flex", gap: 7, marginTop: 9, flexWrap: "wrap" }}>
-          {suggestions.map((suggestion) => (
-            <button
-              type="button"
-              key={suggestion}
-              onClick={() => updateQuery(suggestion)}
-              style={{ padding: "8px 13px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", font: "var(--weight-bold) 12px/1 var(--font-body)", background: "var(--accent-soft)", border: "1px solid var(--border-card)", color: "var(--text-body)" }}
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {open && !value && query.trim().length >= 2 && (
-        <div role="listbox" style={{ position: "absolute", top: "calc(100% + 7px)", left: 0, right: 0, zIndex: 40, maxHeight: 260, overflowY: "auto", background: "var(--surface-card)", border: "1px solid var(--border-card)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-raised)" }}>
-          {pending && <div style={{ padding: 13, font: "var(--type-caption)", color: "var(--text-muted)" }}>Searching OneMap…</div>}
-          {!pending && error && <div style={{ padding: 13, font: "var(--type-caption)", color: "var(--status-fault)" }}>{error}</div>}
-          {!pending && !error && results.length === 0 && (
-            <div style={{ padding: 13, font: "var(--type-caption)", color: "var(--text-muted)" }}>No matching address yet.</div>
-          )}
-          {results.map((result, index) => (
-            <button
-              type="button"
-              role="option"
-              key={`${result.postal || index}-${result.lat}-${result.lng}`}
-              onPointerDown={(event) => {
-                event.preventDefault();
-              }}
-              onClick={() => choose(result)}
-              style={{ display: "block", width: "100%", padding: "12px 13px", textAlign: "left", cursor: "pointer", background: "var(--surface-card)", border: "none", borderBottom: "1px solid var(--border-card)", color: "var(--text-strong)" }}
-            >
-              <span style={{ display: "block", font: "var(--type-body-strong)", textWrap: "pretty" }}>{result.name || result.address}</span>
-              <span style={{ display: "block", marginTop: 3, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
-                {[result.address, result.postal].filter(Boolean).join(" · ")}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+        role="combobox" aria-expanded={expanded} aria-controls={expanded ? listId : undefined}
+        aria-activedescendant={expanded && active >= 0 ? `${listId}-${active}` : undefined} aria-autocomplete="list" />
     </div>
-  );
+    {value && showDetails && <div className="sv-place-detail">
+      <Icon name={value.verified ? "check" : "triangle-alert"} size={13} />
+      <span>{value.verified ? addressDetail(value.address, value.postal) : "Select a search result to verify this place."}</span>
+    </div>}
+    {!value && suggestions.length > 0 && query.trim().length < 2 && <div className="sv-place-suggestions">
+      {suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => updateQuery(suggestion)}>{suggestion}</button>)}
+    </div>}
+    {open && !value && query.trim().length === 1 && <div className="sv-place-detail">Type at least 2 characters to search.</div>}
+    {expanded && position && createPortal(<div ref={popup} id={listId} role="listbox" aria-label="Matching places" className="sv-place-results" style={position}>
+      {pending && <div role="status">Searching OneMap…</div>}
+      {!pending && error && <div role="alert">{error}</div>}
+      {!pending && !error && !results.length && <div>No matching address. Try a postal code or building name.</div>}
+      {!pending && results.map((result, index) => <button type="button" role="option" aria-selected={active === index} id={`${listId}-${index}`}
+        key={`${index}-${result.lat}-${result.lng}`} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(result)}>
+        <strong>{result.name || result.address}</strong>
+        <span>{addressDetail(result.address, result.postal)}</span>
+      </button>)}
+    </div>, document.body)}
+  </div>;
 }

@@ -42,8 +42,8 @@ const SHAPE = {
 // Anchored to the day it is asked for, so a recorded forecast still lines up
 // with the clock the demo is running on.
 export function recordedForecast(now = new Date()) {
-  const start = new Date(now);
-  start.setHours(6, 30, 0, 0);
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Singapore", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const start = new Date(`${day}T06:30:00+08:00`);
   const slots = SHAPE.NS13.map((_, i) => new Date(start.getTime() + i * 30 * 60000).toISOString());
   const series = {};
   Object.entries(SHAPE).forEach(([code, levels]) => {

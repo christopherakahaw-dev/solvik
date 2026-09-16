@@ -10,6 +10,7 @@ export function SearchField({
   onSubmit,
   onFocus,
   onBlur,
+  onKeyDown,
   style,
   ...rest
 }) {
@@ -29,10 +30,12 @@ export function SearchField({
         transition: "box-shadow var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard)",
         ...style,
       }}
-      {...rest}
     >
       <Icon name={icon} size={19} color="var(--text-muted)" />
       <input
+        {...rest}
+        aria-label={rest["aria-label"] || placeholder}
+        autoComplete="off"
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange && onChange(e.target.value)}
@@ -45,6 +48,8 @@ export function SearchField({
           onBlur && onBlur(e);
         }}
         onKeyDown={(e) => {
+          onKeyDown?.(e);
+          if (e.defaultPrevented) return;
           if (e.key === "Enter" && onSubmit) onSubmit(value);
         }}
         style={{
@@ -53,7 +58,7 @@ export function SearchField({
           border: "none",
           outline: "none",
           background: "transparent",
-          font: "var(--weight-medium) var(--size-body)/1.2 var(--font-body)",
+          font: "var(--weight-medium) max(16px, var(--size-body))/1.2 var(--font-body)",
           color: "var(--text-strong)",
         }}
       />
@@ -61,7 +66,7 @@ export function SearchField({
         <button
           type="button"
           aria-label="Clear"
-          onClick={onClear}
+          onClick={onClear || (() => onChange?.(""))}
           style={{ display: "flex", border: "none", background: "transparent", padding: 4, cursor: "pointer", color: "var(--text-muted)" }}
         >
           <Icon name="x" size={17} />

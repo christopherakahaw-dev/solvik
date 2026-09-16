@@ -76,7 +76,7 @@ export function Intro({ v }) {
                 <div key={i}>
                   <SectionLabel>{f.label}</SectionLabel>
                   <div style={{ marginTop: 8 }}>
-                    <PlacePicker value={f.value} placeholder={f.placeholder} icon={f.icon} onChange={f.set} suggestions={f.suggestions} />
+                    <PlacePicker value={f.value} placeholder={f.placeholder} icon={f.icon} onChange={f.set} onDraftChange={f.draft} suggestions={f.suggestions} />
                   </div>
                 </div>
               ))}
@@ -103,7 +103,8 @@ export function Intro({ v }) {
       </div>
 
       <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 9, paddingTop: 14 }}>
-        <Button size="lg" fullWidth onClick={v.introNext}>
+        {v.introInvalid && <div className="sv-place-detail" role="status">Select a search result or clear the unfinished address.</div>}
+        <Button size="lg" fullWidth disabled={v.introInvalid} onClick={v.introNext}>
           {v.introCta}
         </Button>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

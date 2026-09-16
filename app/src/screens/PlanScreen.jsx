@@ -116,7 +116,7 @@ export function PlanScreen({ v }) {
             </Button>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 9 }}>
+        <div className="sv-saved-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 9 }}>
           {v.placeRows.map((p, i) => (
             <button key={i} onClick={v.openPlaces} style={{ display: "flex", flexDirection: "column", gap: 8, textAlign: "left", padding: "13px 12px", borderRadius: 20, cursor: "pointer", background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
               <span style={{ flex: "none", width: 30, height: 30, borderRadius: 999, background: "var(--accent-soft)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -203,7 +203,7 @@ export function PlacesSheet({ v }) {
       {v.placesOpen && (
         <div style={{ position: "absolute", inset: 0, zIndex: 32, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <div onClick={v.closePlaces} style={{ flex: 1 }} />
-          <section style={{ flex: "none", maxHeight: "80%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
+          <section role="dialog" aria-modal="true" aria-label="Your places" className="sv-modal-sheet" style={{ flex: "none", maxHeight: "92%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             <div style={{ flex: "none", padding: "12px 0 6px", display: "flex", justifyContent: "center" }}>
               <div style={{ width: 42, height: 4, borderRadius: 999, background: "var(--sand-400)" }} />
             </div>
@@ -215,13 +215,13 @@ export function PlacesSheet({ v }) {
                 </Button>
               </div>
             </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
+            <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
               <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Selected places stay in this browser. Search text goes to OneMap while you search, and place coordinates only when you request a route. Solvik does not keep the search query.</div>
               {v.placeRows.map((p, i) => (
                 <div key={i}>
                   <SectionLabel>{p.label}</SectionLabel>
                   <div style={{ marginTop: 8 }}>
-                    <PlacePicker value={p.value} placeholder={p.placeholder} icon={p.icon} onChange={p.set} />
+                    <PlacePicker value={p.value} placeholder={p.placeholder} icon={p.icon} onChange={p.set} onDraftChange={p.draft} />
                   </div>
                 </div>
               ))}
@@ -235,7 +235,8 @@ export function PlacesSheet({ v }) {
               </Button>
             </div>
             <div style={{ flex: "none", paddingTop: 14 }}>
-              <Button size="lg" fullWidth onClick={v.savePlaces}>
+              {v.placesInvalid && <p className="sv-place-detail" role="status">Select a search result for each edited place, or clear its field.</p>}
+              <Button size="lg" fullWidth disabled={v.placesInvalid} onClick={v.savePlaces}>
                 Save addresses
               </Button>
             </div>
@@ -252,7 +253,7 @@ export function AddCommuteSheet({ v }) {
       {v.addOpen && (
         <div style={{ position: "absolute", inset: 0, zIndex: 30, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <div onClick={v.closeAdd} style={{ flex: 1 }} />
-          <section style={{ position: "relative", flex: "none", maxHeight: "86%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
+          <section role="dialog" aria-modal="true" aria-label={v.addSheetTitle} className="sv-modal-sheet" style={{ position: "relative", flex: "none", maxHeight: "92%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             {v.addSearchOpen && (
               <div style={{ position: "absolute", inset: 0, zIndex: 4, background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", padding: "12px 18px 18px", display: "flex", flexDirection: "column" }}>
                 <div style={{ flex: "none", display: "flex", justifyContent: "center", paddingBottom: 10 }}>
@@ -304,7 +305,7 @@ export function AddCommuteSheet({ v }) {
                 </Button>
               </div>
             </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
+            <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <SectionLabel>From</SectionLabel>
@@ -318,6 +319,7 @@ export function AddCommuteSheet({ v }) {
                       {p.label}
                     </button>
                   ))}
+                  <Button variant="secondary" size="sm" iconLeft="search" onClick={v.addSearchFrom}>Search start</Button>
                 </div>
               </div>
               <div>
@@ -333,6 +335,7 @@ export function AddCommuteSheet({ v }) {
                       {p.label}
                     </button>
                   ))}
+                  <Button variant="secondary" size="sm" iconLeft="search" onClick={v.addSearchTo}>Search destination</Button>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 15px", borderRadius: "var(--radius-card)", background: "var(--accent-soft)" }}>

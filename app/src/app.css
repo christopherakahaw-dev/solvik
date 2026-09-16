@@ -2,12 +2,39 @@
   position: relative;
   width: 100%;
   max-width: 430px;
-  height: 100dvh;
+  height: min(100dvh, var(--visible-height, 100dvh));
   margin: 0 auto;
   background: var(--surface-page);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Scroll the contents instead of shrinking rows underneath fixed footers. */
+.sv-scroll-stack { overscroll-behavior: contain; scroll-padding-block: 12px; }
+.sv-scroll-stack > * { flex-shrink: 0; }
+.sv-modal-sheet { height: min(92%, 720px); min-height: 0; overflow: hidden; padding-bottom: max(18px, env(safe-area-inset-bottom)) !important; }
+.sv-saved-grid > button { min-width: 0; }
+.sv-saved-grid > button > span:last-child { width: 100%; overflow-wrap: anywhere; }
+.sv-place-detail { display: flex; align-items: flex-start; gap: 7px; margin-top: 7px; font: var(--type-caption); color: var(--text-muted); overflow-wrap: anywhere; }
+.sv-place-detail svg { margin-top: 2px; }
+.sv-place-results { z-index: 1000; overflow-y: auto; overscroll-behavior: contain; background: var(--surface-card); border: 1px solid var(--border-card); border-radius: 18px; box-shadow: var(--shadow-raised); }
+.sv-place-results > div { padding: 13px; font: var(--type-caption); }
+.sv-place-results > button { display: block; width: 100%; min-height: 48px; padding: 12px 13px; text-align: left; cursor: pointer; background: var(--surface-card); border: 0; border-bottom: 1px solid var(--border-card); color: var(--text-strong); overflow-wrap: anywhere; }
+.sv-place-results > button[aria-selected="true"] { background: var(--accent-soft); }
+.sv-place-results strong { display: block; font: var(--type-body-strong); }
+.sv-place-results button span { display: block; margin-top: 3px; font: var(--type-caption); color: var(--text-muted); }
+.sv-place-suggestions, .sv-origin-shortcuts { display: flex; gap: 7px; margin-top: 9px; flex-wrap: wrap; }
+.sv-place-suggestions button, .sv-origin-shortcuts button { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 8px 10px; border-radius: 999px; cursor: pointer; font: var(--weight-bold) 12px/1.2 var(--font-body); background: var(--accent-soft); border: 1px solid var(--border-card); color: var(--text-body); }
+.sv-origin-shortcuts button[aria-pressed="true"] { border-color: var(--accent); }
+.sv-origin-picker { margin-bottom: 12px; }
+.sv-origin-picker label { display: block; margin-bottom: 7px; font: var(--type-caption); color: var(--text-muted); }
+.sv-map-results { position: absolute; top: 76px; left: 14px; right: 14px; z-index: 30; pointer-events: auto; overflow-y: auto; overscroll-behavior: contain; max-height: calc(var(--visible-height, 100dvh) - 180px); border-radius: var(--radius-card); box-shadow: var(--shadow-nav); }
+.sv-nav-instruction { overflow-wrap: anywhere; }
+@media (max-width: 459px) {
+  .solvik-app-shell { position: fixed; top: var(--visible-top, 0px); left: 0; right: 0; }
+  body { overflow: hidden; }
 }
 
 .sv-saved-place {
@@ -49,7 +76,7 @@
     min-height: 100vh;
   }
   .solvik-app-shell {
-    height: min(880px, 92dvh);
+    height: min(880px, 92dvh, var(--visible-height, 100dvh));
     border-radius: 40px;
     box-shadow: var(--shadow-sheet, 0 24px 60px rgba(32, 30, 29, 0.18));
   }
