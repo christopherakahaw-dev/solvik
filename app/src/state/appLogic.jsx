@@ -76,6 +76,8 @@ export class AppLogic extends Component {
   locateMe = () => {
     const last = getLastPosition();
     if (last && Date.now() - last.at < 15000) {
+      this._mapCenter = last.coords;
+      this._mapCenterReal = true;
       this.applyFix(last, (st) => ({ locating: false, recenterToken: st.recenterToken + 1, fcPin: null }));
       return;
     }
@@ -108,6 +110,10 @@ export class AppLogic extends Component {
     this.setState({ locating: true });
     this._locationPromise = getPosition(force ? { maximumAge: 5000 } : undefined)
       .then((fix) => {
+        if (recenter) {
+          this._mapCenter = fix.coords;
+          this._mapCenterReal = true;
+        }
         this.applyFix(fix, (st) => ({
           locating: false,
           recenterToken: recenter ? st.recenterToken + 1 : st.recenterToken,
