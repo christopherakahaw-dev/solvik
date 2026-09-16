@@ -7,6 +7,8 @@ import { getNearestStop } from "../api/stop";
 import { getArrivals } from "../api/arrivals";
 import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { commuteOutlook, outlookCodes } from "../lib/outlook";
+import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary } from "../lib/journeys";
+import { inferCommutes, commuteFromPattern, evidenceLine } from "../lib/patterns";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
 import { getForecast } from "../api/forecast";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
@@ -37,6 +39,11 @@ const COMMUTE_MODES = { Fastest: "fast", Comfort: "quiet", "Step-free": "step" }
 
 // How long before the leave time the reminder fires.
 const LEAVE_ALERT_LEAD_MINS = 10;
+
+// How often the service alerts are re-read while the app is open. There is no
+// service worker here, so nothing is checked while it is closed — the catch-up
+// line on reopening is the honest substitute.
+const ALERT_POLL_MS = 3 * 60 * 1000;
 
 // Ported from the Onward.dc.html prototype's embedded view-model script,
 // almost verbatim. Every screen's render() calls `this.renderVals()` and
@@ -71,6 +78,10 @@ export class AppLogic extends Component {
     // Today's outlook for the next watched commute: its journey, the forecast
     // for the stations it passes, and why either is missing.
     outlook: { key: null, itinerary: null, forecast: null, pending: false, error: null },
+    // What Solvik has learned from trips you took, all of it on this device.
+    journeys: loadJourneys(),
+    patternsRejected: loadStored(KEYS.patternsRejected, []),
+    justAdded: null,
     // Remembered between visits: where you've been, and which alerts you read.
     recents: recentSearches(),
     readAlerts: loadReadAlerts(),
@@ -166,7 +177,15 @@ export class AppLogic extends Component {
       savedPlaces.home && { id: "home", label: "Home", place: savedPlaceDetail(savedPlaces.home), ll: savedPlaces.home.ll },
       savedPlaces.work && { id: "work", label: "Work", place: savedPlaceDetail(savedPlaces.work), ll: savedPlaces.work.ll },
       savedPlaces.school && { id: "school", label: "School", place: savedPlaceDetail(savedPlaces.school), ll: savedPlaces.school.ll },
-    ].filter(Boolean).concat(s.addExtra || []);
+    ]
+      .filter(Boolean)
+      .concat(s.addExtra || [])
+      // Commutes Solvik learned carry their own endpoints, so they can be
+      // planned without depending on a saved place that may never be created.
+      .concat(
+        (s.savedList || []).flatMap((c) => [c.fromPlace, c.toPlace].filter((p) => p && p.id && Array.isArray(p.ll)))
+      )
+      .filter((place, i, all) => all.findIndex((p) => p.id === place.id) === i);
   }
 
   // The commute coming up next, by clock time, wrapping past midnight.
@@ -275,6 +294,147 @@ export class AppLogic extends Component {
         ? `Alert set · ${lead} min before ${view.departLabel} (in-app only — notifications are blocked)`
         : `Alert set · ${lead} min before ${view.departLabel} (in-app only)`
     );
+  };
+
+  // The lines you actually use: from the commutes Solvik watches (learned or
+  // your own) and the journeys you have taken. This is what an alert is
+  // matched against, so a disruption three lines away stays quiet.
+  myLines() {
+    const fromCommutes = (this.state.savedList || []).flatMap((c) => c.legs || []);
+    const fromJourneys = (this.state.journeys || []).filter((j) => j.started).flatMap((j) => j.legs || []);
+    const fromOutlook = ((this.state.outlook && this.state.outlook.itinerary) || {}).legs || [];
+    return [...new Set([...fromCommutes, ...fromJourneys, ...fromOutlook].map((l) => String(l).toUpperCase()))];
+  }
+
+  alertTouchesMe(item) {
+    const line = String((item && item.line) || "").toUpperCase();
+    if (!line || line === "LTA") return false;
+    return this.myLines().some((used) => used.includes(line) || line.includes(used));
+  }
+
+  // Alerts are re-read while the app is open, and a new one on a line you use
+  // interrupts you. One that doesn't, waits in the Alerts sheet.
+  reviewAlerts = () => {
+    const items = ((this.state.faults && this.state.faults.items) || []).filter((f) => f.id);
+    if (!items.length) return;
+    const seen = loadStored(KEYS.alertSeen, null);
+    // First run: note what is already there instead of interrupting about
+    // disruptions that may have been posted hours ago. Only what appears
+    // afterwards is worth a notification.
+    if (!seen) {
+      store(KEYS.alertSeen, { ids: items.map((f) => f.id), at: Date.now() });
+      return;
+    }
+    const known = new Set(seen.ids || []);
+    const fresh = items.filter((f) => !known.has(f.id));
+    const mine = fresh.filter((f) => this.alertTouchesMe(f));
+
+    if (mine.length) {
+      const first = mine[0];
+      const body = mine.length === 1 ? first.title : `${first.title} · and ${mine.length - 1} more on your lines`;
+      if (!showNotification(`${first.line} · ${first.tag}`, body)) this.flash(`${first.line}: ${first.title}`);
+    }
+    store(KEYS.alertSeen, { ids: items.map((f) => f.id), at: Date.now() });
+    this.setState({ alertCatchUp: mine.length ? { count: mine.length, at: seen.at || null } : null });
+  };
+
+  startAlertPoll = () => {
+    this.stopAlertPoll();
+    this.alertIv = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      this.loadFaults();
+    }, ALERT_POLL_MS);
+  };
+  stopAlertPoll = () => {
+    if (this.alertIv) {
+      clearInterval(this.alertIv);
+      this.alertIv = null;
+    }
+  };
+
+  // Record a journey the user actually began, and see whether it completes a
+  // pattern. Everything written here stays in this browser.
+  rememberJourney = (option) => {
+    const dest = this.state.dest;
+    const origin = this.effectiveRouteOrigin();
+    if (!dest || !dest.ll) return;
+    // A fresh start to the same place is a new journey, not the old one again.
+    this._arrivalMarked = null;
+    const journeys = recordJourney({
+      fromLL: origin ? origin.ll : null,
+      fromName: origin ? origin.name : null,
+      toLL: dest.ll,
+      toName: dest.name,
+      mode: this.commuteModeLabel(),
+      legs: (option && option.legs) || [],
+      started: true,
+    });
+    this.setState({ journeys }, this.reviewPatterns);
+  };
+
+  // Arriving is what separates a trip taken from a tap abandoned.
+  markArrived = () => {
+    const dest = this.state.dest;
+    if (!dest || !dest.ll || this._arrivalMarked === dest.name) return;
+    this._arrivalMarked = dest.name;
+    // Arrival is noticed while rendering the nav screen, so the write is
+    // deferred rather than run inside render.
+    setTimeout(() => this.setState({ journeys: completeJourney(dest.ll) }, this.reviewPatterns), 0);
+  };
+
+  // The planner's mode in the vocabulary a watched commute uses.
+  commuteModeLabel() {
+    const mode = this.state.tripMode;
+    return mode === "step" ? "Step-free" : mode === "fast" ? "Fastest" : "Comfort";
+  }
+
+  // A pattern strong enough to act on becomes a watched commute on its own —
+  // and says so, with the evidence, and an Undo. Suggesting would be safer but
+  // would put the work back on the user; adding without a word would leave a
+  // commute nobody could account for.
+  reviewPatterns = () => {
+    const s = this.state;
+    const patterns = inferCommutes({
+      journeys: s.journeys,
+      existing: s.savedList || [],
+      rejected: s.patternsRejected || [],
+    });
+    const pattern = patterns[0];
+    if (!pattern) return;
+    const commute = commuteFromPattern(pattern);
+    this.setState((st) => ({
+      savedList: (st.savedList || []).concat([commute]),
+      justAdded: { signature: commute.signature, at: Date.now() },
+    }));
+    this.flash(`Learned your ${commute.fromPlace.label} → ${commute.toPlace.label} trip`);
+  };
+
+  // Undo removes the commute and remembers the refusal, so the same pattern is
+  // never offered again however many more times it is seen.
+  forgetPattern = (signature) => {
+    this.setState(
+      (st) => ({
+        savedList: (st.savedList || []).filter((c) => c.signature !== signature),
+        patternsRejected: [...new Set([...(st.patternsRejected || []), signature])],
+        justAdded: null,
+      }),
+      () => store(KEYS.patternsRejected, this.state.patternsRejected)
+    );
+    this.flash("Forgotten · Solvik won't add this again");
+  };
+
+  forgetEverything = () => {
+    clearJourneys();
+    store(KEYS.patternsRejected, []);
+    this.setState((st) => ({
+      journeys: [],
+      patternsRejected: [],
+      justAdded: null,
+      recents: clearSearches(),
+      // Commutes Solvik added itself go too; ones you created stay.
+      savedList: (st.savedList || []).filter((c) => c.source !== "auto"),
+    }));
+    this.flash("Cleared everything Solvik had learned");
   };
 
   // The Today tab: when to leave, and what the stations on the way are
@@ -537,16 +697,54 @@ export class AppLogic extends Component {
           : ds.length === 2 && ds.indexOf("Sat") >= 0 && ds.indexOf("Sun") >= 0 ? "weekends"
           : DAYS.filter((d) => ds.indexOf(d) >= 0).join(", ");
         const anchored = c.arriveBy != null ? "arrive by " + clock(c.arriveBy) : "leave at " + clock(c.mins);
+        const learned = c.source === "auto" ? evidenceLine(c) : "";
         return {
           name: f.label + " → " + t.label,
           clock: clock(c.arriveBy != null ? c.arriveBy : c.mins),
           sub: f.place + " → " + t.place + " · " + dl + " · " + anchored,
+          learned,
           detail: f.place + " → " + t.place + " · " + dl + ", " + clock(c.mins),
           mode: c.mode,
           edit: () => this.setState({ addOpen: true, addEdit: i, addFrom: c.from, addTo: c.to, addDays: ds.slice(), addMins: c.arriveBy != null ? c.arriveBy : c.mins, addMode: c.mode, addWhen: c.arriveBy != null ? "arrive" : "leave" }),
         };
       }),
       ...this.todayVals(s, PLACES, clock),
+      // What Solvik has learned, and how to make it forget.
+      memoryCount: (s.journeys || []).length,
+      memorySummary: (() => {
+        const sum = journeySummary(s.journeys || []);
+        if (!sum.total) return "Nothing learned yet. Start a route and Solvik begins noticing where you go.";
+        const auto = (s.savedList || []).filter((c) => c.source === "auto").length;
+        const since = sum.oldest ? new Date(sum.oldest).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "";
+        return [
+          `${sum.total} trip${sum.total === 1 ? "" : "s"} remembered since ${since}`,
+          `${sum.completed} finished`,
+          auto ? `${auto} commute${auto === 1 ? "" : "s"} learned from them` : null,
+        ].filter(Boolean).join(" · ");
+      })(),
+      memoryLines: [...new Set((s.journeys || []).flatMap((j) => j.legs || []))].slice(0, 8),
+      alertCatchUpLine: (() => {
+        const c = s.alertCatchUp;
+        if (!c) return "";
+        const since = c.at ? ` since ${new Date(c.at).toLocaleDateString(undefined, { weekday: "long" })}` : "";
+        return `${c.count} new alert${c.count === 1 ? "" : "s"} on your lines${since}.`;
+      })(),
+      memoryNote: "Kept only in this browser and never sent anywhere. Trips older than 90 days fall away on their own.",
+      forgetEverything: this.forgetEverything,
+      // The card shown when a commute has just been learned.
+      justAdded: (() => {
+        const mark = s.justAdded;
+        if (!mark) return null;
+        const commute = (s.savedList || []).find((c) => c.signature === mark.signature);
+        if (!commute) return null;
+        return {
+          title: `Added ${commute.fromPlace.label} → ${commute.toPlace.label}`,
+          when: `${commute.days.length >= 5 ? "Weekdays" : commute.days.join(", ")}, around ${clock(commute.mins)}`,
+          evidence: evidenceLine(commute),
+          undo: () => this.forgetPattern(commute.signature),
+          dismiss: () => this.setState({ justAdded: null }),
+        };
+      })(),
       openAdd: () => this.setState({ addOpen: true, addEdit: null, addFrom: "home", addTo: "work", addDays: weekday.slice(), addMins: 462, addMode: "Comfort", addWhen: "leave" }),
       placesOpen: !!s.placesOpen,
       openPlaces: () => this.setState({ placesOpen: true }),
@@ -772,6 +970,7 @@ export class AppLogic extends Component {
     this.loadOutlook();
     // The forecast moves in 30-minute steps and the clock moves under it, so
     // the outlook is re-read a few times an hour rather than once a session.
+    this.startAlertPoll();
     this.outlookIv = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       this.loadOutlook();
@@ -785,6 +984,7 @@ export class AppLogic extends Component {
     if (this._settleT) clearTimeout(this._settleT);
     if (this._snapBackT) clearTimeout(this._snapBackT);
     if (this.outlookIv) clearInterval(this.outlookIv);
+    this.stopAlertPoll();
     if (this._leaveCancel) this._leaveCancel();
     this.stopTracking();
     this.stopArrivalsPoll();
@@ -1079,7 +1279,7 @@ export class AppLogic extends Component {
         // A content-derived id, so "read" survives a reload and LTA's feed
         // reordering — an index into this array survives neither.
         const items = [...segmentItems, ...messageItems].map((item) => ({ ...item, id: alertId(item) }));
-        this.setState({ faults: { items, pending: false, error: null } });
+        this.setState({ faults: { items, pending: false, error: null } }, this.reviewAlerts);
       })
       .catch((err) =>
         this.setState({ faults: { items: [], pending: false, error: String(err.message || err) } })
@@ -1428,6 +1628,9 @@ export class AppLogic extends Component {
       tone: s.tripRoute === i ? "accent" : "hairline",
       start: (e) => {
         if (e && e.stopPropagation) e.stopPropagation();
+        // Starting a route is the strongest signal there is about where you
+        // actually travel, so it is what the memory learns from.
+        this.rememberJourney(o);
         // Snapshot the route: re-planning while under way must not pull the
         // steps out from under the screen showing them.
         this.setState({
@@ -1485,6 +1688,7 @@ export class AppLogic extends Component {
       : null;
 
     const arrived = navArr.length > 0 && navElapsed >= navTotal - 1;
+    if (arrived) this.markArrived();
     this._navIdx = navIdx;
     const fmtS = (x) => (x >= 60 ? Math.ceil(x / 60) + " min" : Math.max(0, Math.ceil(x)) + " s");
     const curStep = navArr[navIdx] || {};

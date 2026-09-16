@@ -7,7 +7,35 @@ export function PlanScreen({ v }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
       <div style={{ padding: "0 4px" }}>
         <div style={{ font: "var(--weight-heavy) 22px/1.2 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", textWrap: "pretty" }}>{v.planGreeting}</div>
+        {v.alertCatchUpLine && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, font: "var(--type-caption)", color: "var(--status-fault)", textWrap: "pretty" }}>
+            <Icon name="triangle-alert" size={13} />
+            {v.alertCatchUpLine}
+          </div>
+        )}
       </div>
+
+      {v.justAdded && (
+        <div style={{ borderRadius: "var(--radius-card)", background: "var(--accent-soft)", border: "1px solid var(--accent)", padding: "15px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent)", color: "var(--text-on-accent)" }}>
+              <Icon name="sparkles" size={14} />
+            </span>
+            <SectionLabel>Learned from your trips</SectionLabel>
+          </div>
+          <div style={{ font: "var(--weight-heavy) 16px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 10, textWrap: "pretty" }}>{v.justAdded.title}</div>
+          <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 4, textWrap: "pretty" }}>{v.justAdded.when}</div>
+          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 6, textWrap: "pretty" }}>{v.justAdded.evidence}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 13 }}>
+            <Button variant="secondary" size="sm" onClick={v.justAdded.undo}>
+              Undo
+            </Button>
+            <Button variant="ghost" size="sm" onClick={v.justAdded.dismiss}>
+              Keep it
+            </Button>
+          </div>
+        </div>
+      )}
 
       {v.planHasNext && (
         <div style={{ position: "relative", overflow: "hidden", background: "var(--surface-dark)", color: "var(--text-on-dark)", borderRadius: "var(--radius-card)", padding: 20, boxShadow: "var(--shadow-card)", animation: "sv-rise 420ms cubic-bezier(.16,1,.3,1) both" }}>
@@ -117,10 +145,39 @@ export function PlanScreen({ v }) {
               <span style={{ minWidth: 0, flex: 1 }}>
                 <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)" }}>{s.name}</span>
                 <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{s.sub}</span>
+                {s.learned && (
+                  <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-accent)", marginTop: 3, textWrap: "pretty" }}>Learned · {s.learned}</span>
+                )}
               </span>
               <Tag tone="soft">{s.mode}</Tag>
             </button>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
+          <SectionLabel>What Solvik remembers</SectionLabel>
+        </div>
+        <div style={{ padding: "15px 16px", borderRadius: 20, background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
+          <div style={{ font: "var(--type-body)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.memorySummary}</div>
+          {v.memoryLines.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 10 }}>
+              {v.memoryLines.map((line, i) => (
+                <span key={i} style={{ font: "var(--weight-medium) 11px/1 var(--font-body)", color: "var(--text-muted)", background: "var(--accent-soft)", borderRadius: 999, padding: "5px 9px", whiteSpace: "nowrap" }}>
+                  {line}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.memoryNote}</div>
+          {v.memoryCount > 0 && (
+            <div style={{ marginTop: 13 }}>
+              <Button variant="secondary" size="sm" iconLeft="trash-2" onClick={v.forgetEverything}>
+                Forget everything
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

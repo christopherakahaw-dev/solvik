@@ -129,6 +129,52 @@ timings — so a rail leg shows how busy the platform is rather than a countdown
 Where bus times are missing, the card says which kind of missing it is (no key,
 unknown stop, nothing running) instead of leaving a gap.
 
+### What Solvik learns, and how to stop it
+
+Start a route a few times and the commute appears on the Today tab on its own,
+with the evidence that justified it and an **Undo**. There is no model and no
+training data behind this: journeys whose two ends are both within ~400 m group
+together, and a group becomes a commute only when it passes every one of these —
+
+- 4 or more journeys, at least 3 of them actually finished (tapping Go is not
+  travelling);
+- on 2 or more distinct dates of the same kind of day (weekday and weekend
+  versions of a route stay separate);
+- departure times within a 45-minute spread, measured so one late night out
+  can't disqualify a routine;
+- seen in the last 21 days.
+
+Only deliberate actions are recorded — a route you started, a destination you
+chose — never a background trace of where the device has been. Everything stays
+in the browser: no endpoint in `api/` receives any of it. Trips older than 90
+days fall away on their own, **Undo** makes a pattern stay gone however many
+more times it is seen, and **Forget everything** in the Today tab clears the
+journeys, the patterns and the commutes learned from them in one tap.
+
+Disruptions are matched against the lines those journeys actually used, so an
+alert on a line you never take stays in the Alerts sheet instead of interrupting
+you. On the first run the current alerts are noted as a baseline rather than
+announced, and reopening the app shows what is new since you last looked. As
+with the leave-time reminder, this only runs while Solvik is open.
+
+To try it without waiting a week, seed the journeys from the browser console —
+four weekday mornings between two points is enough:
+
+```js
+localStorage.setItem("solvik:journeys", JSON.stringify(
+  [1, 2, 3, 4].map((n) => {
+    const d = new Date(); d.setDate(d.getDate() - n); d.setHours(8, 5 + n, 0, 0);
+    return { id: "s" + n, at: d.getTime(), fromLL: [1.4294, 103.835], fromName: "Yishun",
+             toLL: [1.3009, 103.8559], toName: "Raffles Place", mode: "Comfort",
+             legs: ["NSL"], started: true, completed: true };
+  })
+));
+location.reload();
+```
+
+(Pick days that are actually weekdays — a Sunday trip forms a weekend pattern,
+which is kept separate on purpose.)
+
 ### Saved-place privacy
 
 Home, Work, School, route preferences, watched commutes and recent destinations

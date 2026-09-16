@@ -9,6 +9,11 @@ export const KEYS = {
   commutes: "solvik:commutes",
   searches: "solvik:searches",
   alertsRead: "solvik:alertsRead",
+  // Learned on this device, never sent anywhere: journeys you started, the
+  // patterns inferred from them, and the ones you told Solvik to forget.
+  journeys: "solvik:journeys",
+  patternsRejected: "solvik:patternsRejected",
+  alertSeen: "solvik:alertSeen",
 };
 
 export const PLACE_IDS = ["home", "work", "school"];
