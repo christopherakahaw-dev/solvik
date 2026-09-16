@@ -97,6 +97,10 @@ export function stepsOf(itin, destName) {
       stopCount: ridden.length,
       alight,
       boardStopCode: (leg.from && (leg.from.stopCode || leg.from.stopId)) || null,
+      // The crowd feed is keyed by station code, so a leg needs the codes it
+      // passes through, not just the names it shows.
+      alightStopCode: (leg.to && (leg.to.stopCode || leg.to.stopId)) || null,
+      stopCodes: (leg.intermediateStops || []).map((st) => st.stopCode || st.stopId || null).filter(Boolean),
       boardLat: (leg.from && (leg.from.lat ?? leg.from.latitude)) ?? null,
       boardLng: (leg.from && (leg.from.lon ?? leg.from.lng ?? leg.from.longitude)) ?? null,
       service: mode === "BUS" ? String(leg.routeShortName || leg.route || "") : null,
@@ -137,6 +141,7 @@ export function normalizeItinerary(itin, destName) {
       service: String(leg.routeShortName || leg.route || ""),
       fromName: (leg.from && leg.from.name) || "",
       fromStopCode: (leg.from && (leg.from.stopCode || leg.from.stopId)) || null,
+      toStopCode: (leg.to && (leg.to.stopCode || leg.to.stopId)) || null,
       fromLat: (leg.from && (leg.from.lat ?? leg.from.latitude)) ?? null,
       fromLng: (leg.from && (leg.from.lon ?? leg.from.lng ?? leg.from.longitude)) ?? null,
     })),

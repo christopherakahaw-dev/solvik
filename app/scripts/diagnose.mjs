@@ -45,6 +45,39 @@ function sgNow() {
 
 const line = (k, v) => console.log(`${k.padEnd(22)} ${v}`);
 
+// `npm run diagnose -- --coverage` answers a different question: how much of
+// the network the crowd feed covers, and how much of that we lose ourselves.
+if ("coverage" in args) {
+  const { coverageReport } = await import("../api/_lib/coverage.js");
+  console.log("=== crowd feed coverage ===");
+  line("LTA_ACCOUNT_KEY set", process.env.LTA_ACCOUNT_KEY ? "yes" : "no");
+  try {
+    const report = await coverageReport();
+    line("lines asked", report.linesAsked);
+    line("lines answering", report.linesAnswering);
+    line("stations published", report.stations);
+    line("located by us", report.located);
+    line("dropped by us", report.droppedByUs);
+    console.log("");
+    report.lines.forEach((l) => {
+      console.log(
+        `${String(l.line).padEnd(6)} realtime ${String(l.realtime).padStart(3)}  forecast ${String(l.forecast).padStart(3)}` +
+          `  located ${String(l.located).padStart(3)}` +
+          (l.dropped.length ? `  dropped: ${l.dropped.join(", ")}` : "") +
+          (l.realtimeOnly.length ? `\n       live but no forecast: ${l.realtimeOnly.join(", ")}` : "")
+      );
+    });
+    console.log(
+      report.droppedByUs
+        ? `\nFix the dropped codes in api/_lib/stations.js before treating these as LTA gaps.`
+        : `\nEvery published station was located; any gap is LTA's own coverage.`
+    );
+  } catch (err) {
+    line("failed", String((err && err.message) || err));
+  }
+  process.exit(0);
+}
+
 console.log("=== credentials ===");
 const creds = credentialSummary();
 line("ONEMAP_TOKEN set", creds.hasStaticToken ? "yes" : "no");

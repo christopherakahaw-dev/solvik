@@ -6,16 +6,19 @@ import { getCrowding } from "../api/crowding";
 import { getNearestStop } from "../api/stop";
 import { getArrivals } from "../api/arrivals";
 import { arrivalKeys, detailRows } from "../lib/tripDetail";
+import { commuteOutlook, outlookCodes } from "../lib/outlook";
+import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
+import { getForecast } from "../api/forecast";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
 import { acceptFix, alongMAtTime, coordAt, stepAtTime, timeAtAlongM, STALE_FIX_MS } from "../lib/navProgress";
 import { metresBetween } from "../lib/geometry";
 import {
   KEYS, loadStored, store, rememberSearch, recentSearches, clearSearches,
   loadReadAlerts, markAlertsRead, alertId,
+  loadPlaces, savePlaces, loadPlacesExtra, savePlacesExtra, loadProfile, saveProfile,
 } from "../lib/storage";
 
 const ONBOARDED_KEY = KEYS.onboarded;
-const PLACES_KEY = KEYS.places;
 const COMMUTES_KEY = KEYS.commutes;
 
 // Used until the browser gives us a real fix: Blk 726 Yishun St 71, the
@@ -25,6 +28,12 @@ const ORIGIN_FALLBACK = [1.4294, 103.835];
 // How far the traveller has to move before the journey is worth re-planning,
 // and before the map follows them rather than holding still.
 const REPLAN_DRIFT_M = 150;
+
+// A watched commute's preference, in the planner's own vocabulary.
+const COMMUTE_MODES = { Fastest: "fast", Comfort: "quiet", "Step-free": "step" };
+
+// How long before the leave time the reminder fires.
+const LEAVE_ALERT_LEAD_MINS = 10;
 const MAP_FOLLOW_M = 120;
 
 // Ported from the Onward.dc.html prototype's embedded view-model script,
@@ -38,10 +47,21 @@ export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 export class AppLogic extends Component {
   state = {
     savedList: loadStored(COMMUTES_KEY, []),
-    ...loadStored(PLACES_KEY, { plHome: "", plWork: "", plSchool: "" }),
+    // Text lives on plHome/plWork/plSchool as it always has, so every existing
+    // binding still works; the coordinate each one geocoded to sits alongside.
+    ...(() => {
+      const places = loadPlaces();
+      return {
+        plHome: places.plHome.text, plWork: places.plWork.text, plSchool: places.plSchool.text,
+        placeCoords: { plHome: places.plHome.ll, plWork: places.plWork.ll, plSchool: places.plSchool.ll },
+        placeLookup: {},
+      };
+    })(),
+    addExtra: loadPlacesExtra(),
+    profile: loadProfile(),
     addEdit: null, placesOpen: false,
     addOpen: false, addFrom: "home", addTo: "work", addDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-    addMode: "Comfort", addMins: 462, fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
+    addMode: "Comfort", addMins: 462, addWhen: "leave", fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
     hoverTab: null, pressTab: null, sheetH: 430, sheetDrag: false, navRoute: null, navStart: null,
     navPage: 0, stepsDrag: false, pin: null,
     screen: typeof localStorage !== "undefined" && localStorage.getItem(ONBOARDED_KEY) ? "map" : "intro",
@@ -56,6 +76,9 @@ export class AppLogic extends Component {
     // Live bus arrivals keyed "<stopCode>:<service>", refreshed while the
     // route sheet is open so the times on the cards tick down.
     arrivals: {},
+    // Today's outlook for the next watched commute: its journey, the forecast
+    // for the stations it passes, and why either is missing.
+    outlook: { key: null, itinerary: null, forecast: null, pending: false, error: null },
     // Remembered between visits: where you've been, and which alerts you read.
     recents: recentSearches(),
     readAlerts: loadReadAlerts(),
@@ -197,7 +220,9 @@ export class AppLogic extends Component {
         ? "Add your home and work addresses first, or search for a place."
         : invalid
         ? "Pick two different places and at least one day."
-        : "Solvik checks this trip 25 min before you leave.",
+        : (s.addWhen || "leave") === "arrive"
+        ? "Solvik works out when to leave from the live journey time, and says so if a leg turns busy."
+        : "Solvik checks this trip against LTA's forecast before you leave.",
       addTimeUp: () => this.setState({ addMins: mins + 5 }),
       addTimeDown: () => this.setState({ addMins: mins - 5 }),
       addDaysLabel: dayLabel,
@@ -220,6 +245,14 @@ export class AppLogic extends Component {
         style: "flex:none;padding:8px 13px;border-radius:999px;cursor:pointer;font:var(--weight-semibold) 12px/1 var(--font-body);background:var(--surface-card);border:1px solid var(--border-card);color:var(--text-body)",
       })),
       addModeOpts: ["Fastest", "Comfort", "Step-free"].map((m) => ({ label: m, style: pill(m === mode), pick: () => this.setState({ addMode: m }) })),
+      // Leave at a time, or be somewhere by one — the second lets Solvik work
+      // the leave time out from the journey and shift it when a leg turns busy.
+      addWhen: s.addWhen || "leave",
+      addWhenLabel: (s.addWhen || "leave") === "arrive" ? "Arrive by" : "Leave at",
+      addWhenOpts: [
+        { id: "leave", label: "Leave at" },
+        { id: "arrive", label: "Arrive by" },
+      ].map((o) => ({ label: o.label, style: pill(o.id === (s.addWhen || "leave")), pick: () => this.setState({ addWhen: o.id }) })),
       addPreviewName: invalid ? "Not ready yet" : "Alerts for " + name,
       addPreviewDetail: invalid ? "Choose a different destination, or tap a day." : "Checked 25 min before " + clock(mins) + " on " + dayLabel.toLowerCase() + ". " + mode + " routes preferred.",
       addInvalid: invalid,
@@ -241,46 +274,25 @@ export class AppLogic extends Component {
           : ds.length === 5 && weekday.every((d) => ds.indexOf(d) >= 0) ? "Mon to Fri"
           : ds.length === 2 && ds.indexOf("Sat") >= 0 && ds.indexOf("Sun") >= 0 ? "weekends"
           : DAYS.filter((d) => ds.indexOf(d) >= 0).join(", ");
+        const anchored = c.arriveBy != null ? "arrive by " + clock(c.arriveBy) : "leave at " + clock(c.mins);
         return {
           name: f.label + " → " + t.label,
-          clock: clock(c.mins),
-          sub: f.place + " → " + t.place + " · " + dl,
+          clock: clock(c.arriveBy != null ? c.arriveBy : c.mins),
+          sub: f.place + " → " + t.place + " · " + dl + " · " + anchored,
           detail: f.place + " → " + t.place + " · " + dl + ", " + clock(c.mins),
           mode: c.mode,
-          edit: () => this.setState({ addOpen: true, addEdit: i, addFrom: c.from, addTo: c.to, addDays: ds.slice(), addMins: c.mins, addMode: c.mode }),
+          edit: () => this.setState({ addOpen: true, addEdit: i, addFrom: c.from, addTo: c.to, addDays: ds.slice(), addMins: c.arriveBy != null ? c.arriveBy : c.mins, addMode: c.mode, addWhen: c.arriveBy != null ? "arrive" : "leave" }),
         };
       }),
-      ...(() => {
-        const list = s.savedList || [];
-        const now = new Date();
-        const nowMins = now.getHours() * 60 + now.getMinutes();
-        const next = list.slice().sort((a, b) => {
-          const da = (a.mins - nowMins + 1440) % 1440, db = (b.mins - nowMins + 1440) % 1440;
-          return da - db;
-        })[0];
-        if (!next) return { planHasNext: false, planNextName: "", planNextLeave: "", planNextIn: "", planNextRoute: "", planNextNote: "", planNextCrowd: "", startNext: () => {}, watchNext: () => {} };
-        const f = PLACES.find((p) => p.id === next.from) || { label: next.from, place: next.from };
-        const t = PLACES.find((p) => p.id === next.to) || { label: next.to, place: next.to };
-        const inMins = (next.mins - nowMins + 1440) % 1440;
-        return {
-          planHasNext: true,
-          planNextName: f.label + " → " + t.label,
-          planNextLeave: clock(next.mins),
-          planNextIn: inMins < 60 ? "leave in " + inMins + " min" : "leave in " + Math.floor(inMins / 60) + " h " + (inMins % 60) + " min",
-          planNextRoute: f.place + " → " + t.place,
-          planNextNote: next.mode.toLowerCase() + " routes · checked 25 min before you leave",
-          planNextCrowd: (() => {
-            const stations = (s.crowd && s.crowd.stations) || [];
-            if (!stations.length) return "";
-            const busy = stations.filter((st) => st.level === "busy").length;
-            return busy ? busy + " busy now" : "Network light";
-          })(),
-          startNext: () => { this.setState({ screen: "map" }); this.flash("Routes for " + f.label + " → " + t.label + " · leave " + clock(next.mins)); },
-          watchNext: () => this.flash("Alert set · 25 min before " + clock(next.mins)),
-        };
-      })(),
-      openAdd: () => this.setState({ addOpen: true, addEdit: null, addFrom: "home", addTo: "work", addDays: weekday.slice(), addMins: 462, addMode: "Comfort" }),
+      ...this.todayVals(s, PLACES, clock),
+      openAdd: () => this.setState({ addOpen: true, addEdit: null, addFrom: "home", addTo: "work", addDays: weekday.slice(), addMins: 462, addMode: "Comfort", addWhen: "leave" }),
       placesOpen: !!s.placesOpen,
+      // Only used for the greeting, and only if you choose to give one.
+      profileName: (s.profile && s.profile.name) || "",
+      setProfileName: (v) => {
+        const name = typeof v === "string" ? v : v && v.target ? v.target.value : "";
+        this.setState({ profile: saveProfile({ name }) });
+      },
       openPlaces: () => this.setState({ placesOpen: true }),
       closePlaces: () => this.setState({ placesOpen: false }),
       savePlaces: () => { this.setState({ placesOpen: false }); this.flash("Places saved · " + ((s.plHome || "Yishun") + " → " + (s.plWork || "Raffles Place"))); },
@@ -288,15 +300,33 @@ export class AppLogic extends Component {
         { key: "plHome", label: "Home", short: "Home", icon: "house", placeholder: "Block, street or MRT stop" },
         { key: "plWork", label: "Work", short: "Work", icon: "briefcase", placeholder: "Office, building or area" },
         { key: "plSchool", label: "School or campus", short: "School", icon: "graduation-cap", placeholder: "Optional" },
-      ].map((p) => ({
-        label: p.label, short: p.short, icon: p.icon, placeholder: p.placeholder,
-        value: s[p.key] || "",
-        shown: (s[p.key] || "").trim() || "Add",
-        set: (v) => this.setState({ [p.key]: typeof v === "string" ? v : v && v.target ? v.target.value : "" }),
-      })),
+      ].map((p) => {
+        const text = (s[p.key] || "").trim();
+        const ll = (s.placeCoords || {})[p.key] || null;
+        const state = (s.placeLookup || {})[p.key] || null;
+        return {
+          label: p.label, short: p.short, icon: p.icon, placeholder: p.placeholder,
+          value: s[p.key] || "",
+          shown: text || "Add",
+          located: !!ll,
+          // Says plainly whether this place can be used for a commute yet.
+          hint: !text
+            ? ""
+            : state === "pending"
+            ? "Looking this up on OneMap…"
+            : ll
+            ? "Located · used for your watched commutes"
+            : state === "failed"
+            ? "OneMap didn't answer — it'll retry"
+            : "Couldn't find this address, so commutes from here can't be planned",
+          hintTone: !text || state === "pending" || ll ? "muted" : "warn",
+          set: (v) => this.setState({ [p.key]: typeof v === "string" ? v : v && v.target ? v.target.value : "" }),
+        };
+      }),
       saveCommute: () => {
         if (invalid) return;
-        const entry = { from, to, days: days.slice(), mins, mode };
+        const arrive = (s.addWhen || "leave") === "arrive";
+        const entry = { from, to, days: days.slice(), mins, mode, arriveBy: arrive ? mins : null };
         const list = (s.savedList || []).slice();
         if (s.addEdit != null) list[s.addEdit] = entry;
         else list.push(entry);
@@ -452,9 +482,19 @@ export class AppLogic extends Component {
     if (s.fcSlot !== prevState.fcSlot) this.loadCrowding(s.crowd.slots[s.fcSlot] || null);
 
     if (s.savedList !== prevState.savedList) store(COMMUTES_KEY, s.savedList);
-    if (s.plHome !== prevState.plHome || s.plWork !== prevState.plWork || s.plSchool !== prevState.plSchool) {
-      store(PLACES_KEY, { plHome: s.plHome, plWork: s.plWork, plSchool: s.plSchool });
+    const placeKeys = ["plHome", "plWork", "plSchool"];
+    const placeTextChanged = placeKeys.some((k) => s[k] !== prevState[k]);
+    if (placeTextChanged || s.placeCoords !== prevState.placeCoords) {
+      savePlaces({
+        plHome: { text: s.plHome, ll: (s.placeCoords || {}).plHome },
+        plWork: { text: s.plWork, ll: (s.placeCoords || {}).plWork },
+        plSchool: { text: s.plSchool, ll: (s.placeCoords || {}).plSchool },
+      });
     }
+    // A place only becomes usable once it has a coordinate, so each edit is
+    // geocoded through the same OneMap search the map uses.
+    if (placeTextChanged) this.schedulePlaceLookup();
+    if (s.addExtra !== prevState.addExtra) savePlacesExtra(s.addExtra);
 
     // Arrivals are polled only while there are options on screen to show them.
     if (s.trips.options !== prevState.trips.options) {
@@ -462,6 +502,17 @@ export class AppLogic extends Component {
       else this.stopArrivalsPoll();
     }
     if (!s.dest && prevState.dest) this.stopArrivalsPoll();
+
+    // The Today tab's outlook depends on the commutes, the places they point at
+    // and the clock; re-ask when any of those move.
+    if (
+      s.savedList !== prevState.savedList ||
+      s.placeCoords !== prevState.placeCoords ||
+      s.addExtra !== prevState.addExtra ||
+      (s.screen === "plan" && prevState.screen !== "plan")
+    ) {
+      this.loadOutlook();
+    }
 
     // The map and turn-by-turn both show where you are, so both watch.
     const tracks = s.screen === "map" || s.screen === "nav";
@@ -480,12 +531,27 @@ export class AppLogic extends Component {
     this.loadFaults();
     this.loadCrowding();
     this.findNearestStop();
+    this.loadOutlook();
+    // The forecast moves in 30-minute steps and the clock moves under it, so
+    // the outlook is re-read a few times an hour rather than once a session.
+    this.outlookIv = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      this.loadOutlook();
+    }, 5 * 60 * 1000);
+    // Places saved before they carried coordinates (or that failed last time)
+    // get located now, so a watched commute is routable on this visit.
+    if (["plHome", "plWork", "plSchool"].some((k) => (this.state[k] || "").trim() && !(this.state.placeCoords || {})[k])) {
+      this.schedulePlaceLookup();
+    }
   }
   componentWillUnmount() {
     clearInterval(this.iv);
+    if (this.outlookIv) clearInterval(this.outlookIv);
+    if (this._leaveCancel) this._leaveCancel();
     if (this.tt) clearTimeout(this.tt);
     if (this._searchT) clearTimeout(this._searchT);
     if (this._addSearchT) clearTimeout(this._addSearchT);
+    if (this._placeT) clearTimeout(this._placeT);
     if (this._settleT) clearTimeout(this._settleT);
     if (this._snapBackT) clearTimeout(this._snapBackT);
     this.stopTracking();
@@ -558,6 +624,300 @@ export class AppLogic extends Component {
       clearWatch(this.watchId);
       this.watchId = null;
     }
+  };
+
+  // The places a commute can refer to: the three saved ones, plus anything
+  // searched for inside the Add sheet. Only those with a coordinate can be
+  // planned, so each carries whether it has one.
+  placeList() {
+    const s = this.state;
+    const coords = s.placeCoords || {};
+    return [
+      { id: "home", key: "plHome", label: "Home" },
+      { id: "work", key: "plWork", label: "Work" },
+      { id: "school", key: "plSchool", label: "School" },
+    ]
+      .filter((p) => (s[p.key] || "").trim())
+      .map((p) => ({ id: p.id, label: p.label, place: s[p.key], ll: coords[p.key] || null }))
+      .concat((s.addExtra || []).map((x) => ({ id: x.id, label: x.label, place: x.place, ll: x.ll || null })));
+  }
+
+  // The commute coming up next, by clock time, wrapping past midnight.
+  nextCommute() {
+    const list = this.state.savedList || [];
+    if (!list.length) return null;
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    // An arrive-by commute is anchored at its arrival, so it comes up earlier
+    // than that clock time suggests — a rough allowance keeps the ordering sane
+    // before the real journey time is known.
+    const anchor = (c) => (c.arriveBy != null ? c.arriveBy - 45 : c.mins);
+    return list
+      .slice()
+      .sort((a, b) => ((anchor(a) - nowMins + 1440) % 1440) - ((anchor(b) - nowMins + 1440) % 1440))[0];
+  }
+
+  // Plan the next commute and fetch the forecast for the stations it passes.
+  // Both halves are real requests; neither is substituted when it fails.
+  loadOutlook = () => {
+    const next = this.nextCommute();
+    if (!next) {
+      if (this.state.outlook.key) this.setState({ outlook: { key: null, itinerary: null, forecast: null, pending: false, error: null } });
+      return;
+    }
+    const places = this.placeList();
+    const from = places.find((p) => p.id === next.from);
+    const to = places.find((p) => p.id === next.to);
+    const key = [next.from, next.to, next.mode, next.mins, next.arriveBy || ""].join("|");
+
+    if (!from || !to || !from.ll || !to.ll) {
+      const missing = [!from || !from.ll ? (from && from.label) || "the start" : null, !to || !to.ll ? (to && to.label) || "the destination" : null].filter(Boolean);
+      this.setState({
+        outlook: { key, itinerary: null, forecast: null, pending: false, error: `Locate ${missing.join(" and ")} in Your places to plan this commute.`, needsPlaces: true },
+      });
+      return;
+    }
+    if (this.state.outlook.key === key && (this.state.outlook.pending || this.state.outlook.itinerary)) return;
+
+    this.setState({ outlook: { key, itinerary: null, forecast: null, pending: true, error: null } });
+    getTripOptions(from.ll, to.ll, COMMUTE_MODES[next.mode] || "fast", to.label)
+      .then(async (options) => {
+        const itinerary = (options || [])[0];
+        if (!itinerary) throw new Error("No route found for this commute right now.");
+        let forecast = null;
+        try {
+          forecast = await getForecast(outlookCodes([itinerary]));
+        } catch (err) {
+          forecast = { slots: [], series: {}, live: {}, missing: [], error: String(err.message || err) };
+        }
+        if (this.state.outlook.key !== key) return;
+        this.setState({ outlook: { key, itinerary, forecast, pending: false, error: null } });
+      })
+      .catch((err) => {
+        if (this.state.outlook.key !== key) return;
+        this.setState({ outlook: { key, itinerary: null, forecast: null, pending: false, error: String(err.message || err) } });
+      });
+  };
+
+  // "Alert me" actually sets something: a timer that fires a notification a
+  // few minutes before the leave time, for as long as Solvik stays open.
+  armLeaveAlert = async (view, name) => {
+    if (this._leaveCancel) {
+      this._leaveCancel();
+      this._leaveCancel = null;
+    }
+    if (!view) {
+      this.flash("Nothing to alert on until this trip plans");
+      return;
+    }
+    const key = (this.state.outlook && this.state.outlook.key) || "";
+    const departAt = new Date();
+    departAt.setHours(0, 0, 0, 0);
+    departAt.setMinutes(view.departMins + (view.tomorrow ? 1440 : 0));
+
+    const permission = await requestNotify();
+    const lead = Math.min(LEAVE_ALERT_LEAD_MINS, Math.max(1, view.departIn - 1));
+    const body = [
+      `Leave at ${view.departLabel} for ${name}.`,
+      view.worst ? `${view.worst.word} at ${view.worst.name} from ${view.worst.fromLabel}.` : null,
+    ].filter(Boolean).join(" ");
+
+    const cancel = scheduleLeaveAlert({
+      departAt,
+      leadMins: lead,
+      onFire: () => {
+        this.setState({ leaveAlert: null });
+        if (!showNotification("Time to go", body)) this.flash(body);
+      },
+    });
+    if (!cancel) {
+      this.flash("That leave time has already passed");
+      return;
+    }
+    this._leaveCancel = cancel;
+    this.setState({ leaveAlert: { key, at: departAt.getTime(), lead } });
+    this.flash(
+      permission === "granted"
+        ? `Alert set · ${lead} min before ${view.departLabel}, while Solvik is open`
+        : notifySupported()
+        ? `Alert set · ${lead} min before ${view.departLabel} (in-app only — notifications are blocked)`
+        : `Alert set · ${lead} min before ${view.departLabel} (in-app only)`
+    );
+  };
+
+  // The Today tab: when to leave, and what the stations on the way are
+  // forecast to be like when you get to them. Every number here comes from a
+  // real request — the journey from OneMap, the levels from LTA — and where
+  // one is missing the card says which, rather than filling it in.
+  todayVals(s, PLACES, clock) {
+    const hour = new Date().getHours();
+    const name = ((s.profile && s.profile.name) || "").trim();
+    const greeting =
+      (hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening") + (name ? `, ${name}` : "");
+
+    const next = this.nextCommute();
+    const outlook = s.outlook || { pending: false, error: null };
+    const places = this.placeList();
+    const base = {
+      planGreeting: greeting,
+      planDate: new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }),
+      fgHas: false, fgTitle: "", fgDetail: "", fgTone: "muted", fgCoverage: "", fgAlerts: [],
+      fgActionLabel: "View alternatives", fgAction: () => {}, fgHasAction: false,
+    };
+    if (!next) {
+      return {
+        ...base,
+        planHasNext: false, planNextName: "", planNextLeave: "", planNextIn: "", planNextRoute: "",
+        planNextNote: "", planNextCrowd: "", planNextPending: false, planNextError: null,
+        startNext: () => {}, watchNext: () => {}, watchNextLabel: "Alert me",
+      };
+    }
+
+    const f = places.find((p) => p.id === next.from) || PLACES.find((p) => p.id === next.from) || { label: next.from, place: next.from };
+    const t = places.find((p) => p.id === next.to) || PLACES.find((p) => p.id === next.to) || { label: next.to, place: next.to };
+    const itinerary = outlook.itinerary || null;
+    const forecast = outlook.forecast || { series: {}, slots: [], missing: [] };
+    const view = itinerary
+      ? commuteOutlook({
+          itinerary,
+          series: forecast.series,
+          slots: forecast.slots,
+          leaveAt: next.mins,
+          arriveBy: next.arriveBy != null ? next.arriveBy : null,
+        })
+      : null;
+
+    const inMins = view ? view.departIn : (next.mins - (new Date().getHours() * 60 + new Date().getMinutes()) + 1440) % 1440;
+    const inLabel = inMins < 60 ? `leave in ${Math.max(0, inMins)} min` : `leave in ${Math.floor(inMins / 60)} h ${inMins % 60} min`;
+
+    // Any service alert already loaded that names a line this journey uses.
+    const legLabels = itinerary ? (itinerary.legs || []) : [];
+    const alerts = ((s.faults && s.faults.items) || []).filter((item) =>
+      legLabels.some((label) => String(label).toUpperCase().includes(String(item.line || "").toUpperCase()) && item.line)
+    );
+
+    const worst = view && view.worst;
+    const busy = worst && worst.level !== "light";
+    const coverage = view ? view.coverage : null;
+    const coverageNote = !coverage
+      ? ""
+      : coverage.outsideWindow
+      ? "LTA publishes its crowd forecast for the current day only, and this trip falls outside it."
+      : coverage.none
+      ? "LTA publishes no crowd forecast for the stations on this trip."
+      : coverage.complete
+      ? `Forecast from LTA for all ${coverage.total} station${coverage.total === 1 ? "" : "s"} on the way.`
+      : `Forecast from LTA for ${coverage.covered} of ${coverage.total} stations on the way.`;
+
+    return {
+      ...base,
+      planHasNext: true,
+      planNextName: `${f.label} → ${t.label}`,
+      planNextLeave: view ? view.departLabel : clock(next.mins),
+      planNextIn: inLabel,
+      planNextRoute: `${f.place} → ${t.place}`,
+      planNextPending: !!outlook.pending,
+      planNextError: outlook.error || null,
+      planNextNote: outlook.pending
+        ? "Planning this trip and reading LTA's forecast…"
+        : outlook.error
+        ? outlook.error
+        : view
+        ? [
+            view.basis === "arrive-by" ? `Arrive by ${clock(next.arriveBy)} · ${view.durationMins} min journey` : `${view.durationMins} min journey · arrive ${view.arriveLabel}`,
+            itinerary.legs && itinerary.legs.length ? itinerary.legs.join(" · ") : null,
+          ].filter(Boolean).join(" · ")
+        : "",
+      planNextCrowd: view ? (worst ? `${worst.word} at ${worst.name}` : coverage && coverage.none ? "No forecast yet" : "Light all the way") : "",
+      planNextCrowdLevel: worst ? worst.level : "light",
+      startNext: () => {
+        if (!t.ll) {
+          this.flash("Locate this place in Your places first");
+          return;
+        }
+        this.setState({ screen: "map", tripMode: busy ? "quiet" : COMMUTE_MODES[next.mode] || "fast" });
+        this.chooseDest({ name: t.label, detail: t.place, ll: t.ll, kind: "Commute" });
+      },
+      watchNext: () => this.armLeaveAlert(view, `${f.label} → ${t.label}`),
+      watchNextLabel: this.state.leaveAlert && this.state.leaveAlert.key === (outlook.key || "") ? "Alert set" : "Alert me",
+
+      // The forecast card. Scoped to this commute's own stations — a network
+      // -wide list of busy stations would be noise, not a warning.
+      fgHas: !!(view && (busy || alerts.length || (coverage && coverage.none))),
+      fgTitle: busy
+        ? `${worst.word} at ${worst.name} from ${worst.fromLabel}`
+        : alerts.length
+        ? `${alerts[0].line} · ${alerts[0].tag}`
+        : coverage && coverage.outsideWindow
+        ? "No forecast for that time yet"
+        : coverage && coverage.none
+        ? "No crowd forecast for this route"
+        : "",
+      fgDetail: busy
+        ? [
+            `On your ${worst.leg} leg, around when you'd be there.`,
+            view.shift ? `Leaving ${view.shift.label} would put you there while it's ${view.shift.word.toLowerCase()} (${view.shift.departLabel}).` : null,
+          ].filter(Boolean).join(" ")
+        : alerts.length
+        ? alerts[0].title
+        : coverage && coverage.outsideWindow
+        ? "LTA's crowd forecast runs to the end of today. Check back nearer the time and this will fill in."
+        : coverage && coverage.none
+        ? "The stations on this trip aren't in LTA's crowd feed, so there's nothing to forecast from."
+        : "",
+      fgTone: busy && worst.level === "busy" ? "busy" : busy ? "moderate" : alerts.length ? "warn" : "muted",
+      fgCoverage: coverageNote,
+      fgAlerts: alerts.slice(0, 2).map((a) => ({ line: a.line, title: a.title })),
+      fgHasAction: !!(view && busy && t.ll),
+      fgActionLabel: "View alternatives",
+      fgAction: () => {
+        if (!t.ll) return;
+        this.setState({ screen: "map", tripMode: "quiet" });
+        this.chooseDest({ name: t.label, detail: t.place, ll: t.ll, kind: "Commute" });
+        this.flash("Ranked by live crowding");
+      },
+    };
+  }
+
+  // Geocode the saved places, debounced, so a commute has something a router
+  // can accept. A place that can't be found keeps its text and is marked
+  // unlocated rather than silently doing nothing.
+  schedulePlaceLookup = () => {
+    if (this._placeT) clearTimeout(this._placeT);
+    this._placeT = setTimeout(() => {
+      ["plHome", "plWork", "plSchool"].forEach((key) => this.lookupPlace(key));
+    }, 600);
+  };
+
+  lookupPlace = (key) => {
+    const text = (this.state[key] || "").trim();
+    const known = (this.state.placeCoords || {})[key];
+    if (!text) {
+      if (known || (this.state.placeLookup || {})[key]) {
+        this.setState((st) => ({
+          placeCoords: { ...st.placeCoords, [key]: null },
+          placeLookup: { ...st.placeLookup, [key]: null },
+        }));
+      }
+      return;
+    }
+    if (this._placeQuery && this._placeQuery[key] === text) return;
+    this._placeQuery = { ...(this._placeQuery || {}), [key]: text };
+
+    this.setState((st) => ({ placeLookup: { ...st.placeLookup, [key]: "pending" } }));
+    searchPlaces(text)
+      .then((items) => {
+        if ((this.state[key] || "").trim() !== text) return;
+        const hit = (items || []).find((p) => isFinite(p.lat) && isFinite(p.lng));
+        this.setState((st) => ({
+          placeCoords: { ...st.placeCoords, [key]: hit ? [hit.lat, hit.lng] : null },
+          placeLookup: { ...st.placeLookup, [key]: hit ? "found" : "not-found" },
+        }));
+      })
+      .catch(() => {
+        if ((this.state[key] || "").trim() !== text) return;
+        this.setState((st) => ({ placeLookup: { ...st.placeLookup, [key]: "failed" } }));
+      });
   };
 
   // Live OneMap place search, debounced. Falls back to the illustrative

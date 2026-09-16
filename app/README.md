@@ -78,6 +78,7 @@ invented data.
 | Route line on the map | The chosen itinerary's own geometry |
 | Turn-by-turn steps and stop sequences | The same itinerary's legs and intermediate stops |
 | Step-by-step breakdown on a route card | The itinerary's own legs: walk distance and time, stop counts, boarding and alighting stops |
+| Today tab: leave-by time, crowd outlook, alternatives | Your watched commute, planned by OneMap, joined to LTA's published crowd forecast for the stations it passes |
 | Next bus times per bus leg | LTA bus arrivals, re-asked every 30 s while the route sheet is open |
 | Crowding circles per MRT station + time scrubber | LTA platform crowd density, real-time and same-day forecast |
 | "Less crowded" ranking | LTA crowd density (rail) and bus loading |
@@ -86,6 +87,31 @@ invented data.
 | Your position and trip origin | Browser geolocation |
 | Your places, watched commutes, recent destinations and read alerts | Your own input, saved in the browser |
 | **Points, vouchers, nearby-reports feed** | **Sample data** — an account/social service, which neither API provides. Labelled as such in the UI. |
+
+### The Today tab (leave-by and the crowd outlook)
+
+A watched commute is planned as a real journey, and each rail station on the way
+is looked up in LTA's **same-day** crowd forecast at the interval you would
+actually be there — so "Busy at Bishan from 08:30" is a join, not a prediction.
+Nothing here is modelled or estimated:
+
+- the forecast is published in **30-minute intervals**, and the app never phrases
+  a warning more precisely than that;
+- a station LTA doesn't publish is reported as uncovered ("forecast for 2 of 4
+  stations on the way"), never as quiet;
+- a trip outside the published day says the forecast doesn't reach that far yet;
+- bus legs aren't counted as gaps: buses have live vehicle loading instead of a
+  stop forecast, which is what the route card shows.
+
+Commutes can be anchored to **Leave at** or **Arrive by**; with an arrive-by, the
+leave time comes from the journey's own duration plus a small buffer, and the
+card says when leaving earlier or later lands you in a quieter interval.
+"Alert me" schedules a real browser notification — but only while Solvik is open
+in a tab, which is what the app tells you when you set it.
+
+Your saved places are geocoded through OneMap when you type them, because a
+commute with no coordinates can't be routed. A place that can't be found says so
+in the Your places sheet instead of failing silently.
 
 Trains have no arrival feed — DataMall publishes crowding for rail, not
 timings — so a rail leg shows how busy the platform is rather than a countdown.
@@ -110,8 +136,8 @@ src/
   tokens/          Design tokens (colors, type, spacing, radius, motion)
 test/              Fixture-based tests for the API response parsers
 api/               Serverless functions: journey options, live bus arrivals,
-                   crowding, nearest stop, OneMap search/routing and the LTA
-                   DataMall proxy
+                   crowding, per-station forecast, coverage probe, nearest stop,
+                   OneMap search/routing and the LTA DataMall proxy
 api/_lib/          Shared server helpers (LTA fetch, OneMap calls, station
                    directory, itinerary → UI mapping)
 ```
@@ -147,7 +173,14 @@ English saying what to fix.
 cd app
 npm run diagnose
 npm run diagnose -- --from 1.4294,103.8350 --to 1.3009,103.8559
+npm run diagnose -- --coverage
 ```
+
+`--coverage` (also at `/api/coverage`) answers a different question: how many
+stations LTA's crowd feed actually publishes, per line, and how many of those
+*we* then fail to place on the map. `resolveStations()` drops any code it can't
+match through OneMap search, so without this the two kinds of gap are
+indistinguishable — and only one of them is fixable here.
 
 The endpoint exposes only status information, never secret values, but it does
 reveal which keys are configured — remove `api/diagnostics.js` before a public

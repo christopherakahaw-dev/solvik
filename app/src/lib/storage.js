@@ -5,9 +5,11 @@
 export const KEYS = {
   onboarded: "solvik:onboarded",
   places: "solvik:places",
+  placesExtra: "solvik:placesExtra",
   commutes: "solvik:commutes",
   searches: "solvik:searches",
   alertsRead: "solvik:alertsRead",
+  profile: "solvik:profile",
 };
 
 export function loadStored(key, fallback) {
@@ -81,4 +83,56 @@ export function alertId(item) {
   let hash = 5381;
   for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
   return `a${hash.toString(36)}`;
+}
+
+const PLACE_KEYS = ["plHome", "plWork", "plSchool"];
+
+// Your places used to be plain text. They now carry a coordinate too, because
+// a commute without one can't be routed — and without a route there are no
+// stations, and without stations there is no forecast. Old saves are migrated
+// on read rather than thrown away; the coordinate fills in when it geocodes.
+export function loadPlaces() {
+  const raw = loadStored(KEYS.places, {});
+  const out = {};
+  PLACE_KEYS.forEach((key) => {
+    const value = raw && raw[key];
+    if (typeof value === "string") out[key] = { text: value, ll: null };
+    else if (value && typeof value === "object") out[key] = { text: value.text || "", ll: Array.isArray(value.ll) ? value.ll : null };
+    else out[key] = { text: "", ll: null };
+  });
+  return out;
+}
+
+export function savePlaces(places) {
+  const out = {};
+  PLACE_KEYS.forEach((key) => {
+    const value = (places && places[key]) || { text: "", ll: null };
+    out[key] = { text: value.text || "", ll: Array.isArray(value.ll) ? value.ll : null };
+  });
+  store(KEYS.places, out);
+  return out;
+}
+
+// Places searched for inside the Add-a-commute sheet. These always had
+// coordinates; they just never survived a reload.
+export function loadPlacesExtra() {
+  return loadStored(KEYS.placesExtra, []).filter((p) => p && p.id && Array.isArray(p.ll));
+}
+
+export function savePlacesExtra(list) {
+  const out = (list || []).filter((p) => p && p.id && Array.isArray(p.ll)).slice(-6);
+  store(KEYS.placesExtra, out);
+  return out;
+}
+
+// Just a name for the greeting, if you want one. Nothing else is stored.
+export function loadProfile() {
+  const raw = loadStored(KEYS.profile, {});
+  return { name: (raw && typeof raw.name === "string" ? raw.name : "").slice(0, 40) };
+}
+
+export function saveProfile(profile) {
+  const out = { name: ((profile && profile.name) || "").slice(0, 40) };
+  store(KEYS.profile, out);
+  return out;
 }
