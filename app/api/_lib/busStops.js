@@ -48,6 +48,11 @@ export async function nearestStop(lat, lng) {
   return { code: best.BusStopCode, name: best.Description, road: best.RoadName, lat: best.Latitude, lng: best.Longitude, distanceM: bestD };
 }
 
+export async function nearestStopCode(lat, lng) {
+  const stop = await nearestStop(lat, lng);
+  return stop ? stop.code : null;
+}
+
 // DataMall wants a bare five-digit code. Routing replies spell stop ids in
 // several ways ("53061", "1:53061", "BUS_STOP:53061"), and a mis-spelled code
 // answers with nothing rather than an error — which reads as "no buses".

@@ -41,7 +41,7 @@ export function arrivalLabel(arrivals, service) {
   return {
     text: `Next: ${mins.join(", ")}${unit}`,
     tone: buses[0].etaMins <= 2 ? "accent" : "muted",
-    live: buses.some((b) => b.live),
+    live: buses.some((b) => b.monitored),
     load: buses[0].load || null,
     accessible: !!buses[0].accessible,
   };
@@ -84,7 +84,7 @@ export function detailRows(option, arrivals) {
       // DataMall publishes no train arrival times, so rail says what it knows.
       arrival: isBus
         ? arrivalLabel(live, step.service)
-        : { text: step.crowdLevel ? null : "Trains run every few minutes", tone: "muted", live: false },
+        : { text: "Trains every few minutes", tone: "muted", live: false },
       transfer: i > 0 && steps[i - 1] && steps[i - 1].mode !== "WALK" ? `Change at ${step.from}` : null,
     };
   });

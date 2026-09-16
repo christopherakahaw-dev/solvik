@@ -25,7 +25,7 @@ export function parseArrivals(payload, service) {
       accessible: bus.Feature === "WAB",
       // "Monitored: 0" means DataMall is working from the timetable, not a
       // vehicle's own position — worth not presenting as a live sighting.
-      live: bus.Monitored == null || Number(bus.Monitored) === 1,
+      monitored: bus.Monitored == null || Number(bus.Monitored) === 1,
     }))
     .filter((bus) => isFinite(bus.etaMins))
     .sort((a, b) => a.etaMins - b.etaMins);

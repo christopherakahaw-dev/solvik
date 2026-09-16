@@ -466,6 +466,7 @@ export class AppLogic extends Component {
   componentDidMount() {
     this.t0 = Date.now();
     this.iv = setInterval(() => this.setState({ tick: Date.now() }), 1000);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", this.handleVisibilityChange);
     if (this.state.screen === "map") {
       this.requestCurrentLocation().catch(() => {});
       this.startTracking();
@@ -483,6 +484,7 @@ export class AppLogic extends Component {
     if (this._snapBackT) clearTimeout(this._snapBackT);
     this.stopTracking();
     this.stopArrivalsPoll();
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", this.handleVisibilityChange);
   }
 
   // Turn-by-turn follows the real position rather than a simulated clock.
@@ -513,6 +515,7 @@ export class AppLogic extends Component {
   // route sheet is on screen — one batched request for every bus leg showing.
   startArrivalsPoll = () => {
     this.stopArrivalsPoll();
+    if (typeof document !== "undefined" && document.hidden) return;
     const tick = () => {
       if (typeof document !== "undefined" && document.hidden) return;
       const keys = arrivalKeys(this.state.trips.options);
@@ -532,6 +535,15 @@ export class AppLogic extends Component {
       clearInterval(this._arrivalsIv);
       this._arrivalsIv = null;
     }
+  };
+  handleVisibilityChange = () => {
+    if (typeof document === "undefined") return;
+    if (document.hidden) {
+      this.stopArrivalsPoll();
+      return;
+    }
+    const { dest, trips } = this.state;
+    if (dest && trips.options.length) this.startArrivalsPoll();
   };
 
   stopTracking = () => {

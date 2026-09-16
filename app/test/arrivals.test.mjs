@@ -32,7 +32,7 @@ test("three buses come back in order, with load and accessibility", () => {
   assert.deepEqual(out.buses.map((b) => b.etaMins), [3, 11, 19]);
   assert.deepEqual(out.buses.map((b) => b.load), ["light", "moderate", "busy"]);
   assert.equal(out.buses[0].accessible, true);
-  assert.equal(out.buses[2].live, false, "Monitored: 0 is a timetable estimate, not a sighting");
+  assert.equal(out.buses[2].monitored, false, "Monitored: 0 is a timetable estimate, not a sighting");
 });
 
 test("a gap in the sequence is skipped rather than counted as an arrival", () => {
@@ -86,7 +86,7 @@ test("live arrivals reach the bus row, keyed by stop and service", () => {
   assert.deepEqual(arrivalKeys([withCode]), ["53061:410"]);
 
   const rows = detailRows(withCode, {
-    "53061:410": { buses: [{ etaMins: 3, load: "light", live: true }, { etaMins: 11, load: "moderate", live: true }], reason: null },
+    "53061:410": { buses: [{ etaMins: 3, load: "light", monitored: true }, { etaMins: 11, load: "moderate", monitored: true }], reason: null },
   });
   assert.equal(rows[2].arrival.text, "Next: 3, 11 min");
   assert.equal(rows[2].arrival.load, "light");
@@ -99,7 +99,7 @@ test("no arrivals reads as a sentence, never as a blank", () => {
   assert.equal(arrivalLabel({ buses: [{ etaMins: 0, load: "light" }] }, "410").text, "Next: now");
   // Rail has no arrival feed at all; the row says so rather than sitting empty.
   const rail = detailRows(trip, {})[1];
-  assert.equal(rail.arrival.text, "Trains run every few minutes");
+  assert.equal(rail.arrival.text, "Trains every few minutes");
 });
 
 test("long stop lists collapse in the middle, keeping both ends", () => {
