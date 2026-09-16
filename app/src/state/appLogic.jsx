@@ -344,7 +344,13 @@ export class AppLogic extends Component {
         return;
       }
       this.setState({ screen: "map", tripMode: mode });
-      this.chooseDest({ name: t.label, detail: t.place, ll: t.ll, kind: "Commute" });
+      // A commute names both ends, so the map is given both. Without the
+      // origin it would fall back to your position — or, with none, to saved
+      // Home, which on an evening trip home means planning Home → Home.
+      this.chooseDest(
+        { name: t.label, detail: t.place, ll: t.ll, kind: "Commute" },
+        f.ll ? { routeOrigin: { id: f.id, name: f.label, address: f.place, ll: f.ll } } : undefined
+      );
     };
 
     return {
@@ -958,7 +964,11 @@ export class AppLogic extends Component {
   };
 
   chooseDest = (dest, extra) => {
-    const needCurrentLocation = !!dest && !this.state.routeOrigin && !this.state.userLoc;
+    // A caller that supplies its own starting place (the Today tab knows where
+    // the commute begins) settles the origin here, so neither the location
+    // request below nor the saved-Home fallback is reached.
+    const nextOrigin = extra && "routeOrigin" in extra ? extra.routeOrigin : this.state.routeOrigin;
+    const needCurrentLocation = !!dest && !nextOrigin && !this.state.userLoc;
     this.setState({
       dest: dest || null,
       tripRoute: 0,

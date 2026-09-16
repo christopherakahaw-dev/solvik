@@ -24,3 +24,19 @@ test("verified Home is a fallback when GPS is off", () => {
   assert.equal(unverified, null);
   assert.equal(verified.kind, "home");
 });
+
+test("a commute names both ends, so Home is never the fallback for a trip home", () => {
+  // The Today tab sends the commute's own start to the map. Without it, an
+  // evening Work → Home trip with no GPS would resolve its origin to saved
+  // Home and plan a journey from the destination to itself.
+  const home = { name: "Home", ll: [1.4294, 103.835], verified: true };
+  const work = { id: "work", name: "Raffles Place", address: "Raffles Place", ll: [1.3009, 103.8559] };
+
+  const withoutCommuteStart = resolveRouteOrigin({ selected: null, userLoc: null, home });
+  assert.deepEqual(withoutCommuteStart.ll, home.ll, "falls back to Home, which is where this trip ends");
+
+  const withCommuteStart = resolveRouteOrigin({ selected: work, userLoc: null, home });
+  assert.deepEqual(withCommuteStart.ll, work.ll);
+  assert.equal(withCommuteStart.kind, "selected");
+  assert.notDeepEqual(withCommuteStart.ll, home.ll);
+});
