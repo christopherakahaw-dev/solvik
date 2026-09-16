@@ -77,7 +77,7 @@ export function markAlertsRead(ids, current, now = Date.now()) {
 
 // A stable id for an alert, derived from what it says. Same wording, same id.
 export function alertId(item) {
-  const text = [item.line, item.tag, item.time, item.title, item.detail].filter(Boolean).join("|");
+  const text = [item.line, item.tag, item.title, item.detail].filter(Boolean).join("|");
   let hash = 5381;
   for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
   return `a${hash.toString(36)}`;
