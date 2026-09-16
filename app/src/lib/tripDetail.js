@@ -51,20 +51,21 @@ export function arrivalLabel(arrivals, service) {
 // doesn't cover falls back to what the planner already fetched.
 export function detailRows(option, arrivals) {
   const steps = (option && option.steps) || [];
-  return steps.map((step, i) => {
+  return steps.reduce((rows, step, i) => {
     const mode = step.mode || (step.stops ? "TRANSIT" : "WALK");
     const dur = minutesLabel(step.secs);
 
     if (mode === "WALK") {
       const dist = distanceLabel(step.metres);
-      return {
+      rows.push({
         kind: "walk",
         icon: step.icon || "footprints",
         title: step.title || "Walk",
         meta: [dur && `${dur} on foot`, dist].filter(Boolean).join(" · "),
         stops: [],
         arrival: null,
-      };
+      });
+      return rows;
     }
 
     const key = step.stopCode && step.service ? `${step.stopCode}:${step.service}` : null;
@@ -72,7 +73,22 @@ export function detailRows(option, arrivals) {
     const isBus = mode === "BUS";
     const count = step.stopCount != null ? step.stopCount : (step.stops || []).length;
 
-    return {
+    if (i > 0) {
+      const previous = steps[i - 1];
+      const previousMode = previous.mode || (previous.stops ? "TRANSIT" : "WALK");
+      if (previousMode !== "WALK" && step.from) {
+        rows.push({
+          kind: "transfer",
+          icon: "arrow-right-left",
+          title: `Change at ${step.from}`,
+          meta: "",
+          stops: [],
+          arrival: null,
+        });
+      }
+    }
+
+    rows.push({
       kind: isBus ? "bus" : "rail",
       icon: step.icon || (isBus ? "bus" : "train-front"),
       title: step.label ? `${step.label}${step.alight ? ` to ${step.alight}` : ""}` : step.title,
@@ -85,9 +101,9 @@ export function detailRows(option, arrivals) {
       arrival: isBus
         ? arrivalLabel(live, step.service)
         : { text: "Trains every few minutes", tone: "muted", live: false },
-      transfer: i > 0 && steps[i - 1] && steps[i - 1].mode !== "WALK" ? `Change at ${step.from}` : null,
-    };
-  });
+    });
+    return rows;
+  }, []);
 }
 
 // Every "<stopCode>:<service>" pair on screen, for one batched arrivals poll.

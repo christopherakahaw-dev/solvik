@@ -61,7 +61,7 @@ test("stop codes are recognised however the routing reply spells them", () => {
 
 test("a real itinerary becomes a step-by-step breakdown", () => {
   const rows = detailRows(trip, {});
-  assert.equal(rows.length, 4);
+  assert.equal(rows.length, 5);
 
   assert.equal(rows[0].kind, "walk");
   assert.match(rows[0].meta, /4 min on foot · 311 m/);
@@ -73,12 +73,13 @@ test("a real itinerary becomes a step-by-step breakdown", () => {
   assert.equal(rows[1].alight, "Alight at Bishan");
   assert.deepEqual(rows[1].stops, ["Khatib", "Yio Chu Kang", "Ang Mo Kio", "Bishan"]);
 
-  assert.equal(rows[2].kind, "bus");
-  assert.equal(rows[2].title, "BUS 410 to Blk 511");
-  assert.equal(rows[2].transfer, "Change at Bishan Stn Exit C");
+  assert.equal(rows[2].kind, "transfer");
+  assert.equal(rows[2].title, "Change at Bishan Stn Exit C");
+  assert.equal(rows[3].kind, "bus");
+  assert.equal(rows[3].title, "BUS 410 to Blk 511");
 
-  assert.equal(rows[3].kind, "walk");
-  assert.match(rows[3].title, /Walk to Bishan Park/);
+  assert.equal(rows[4].kind, "walk");
+  assert.match(rows[4].title, /Walk to Bishan Park/);
 });
 
 test("live arrivals reach the bus row, keyed by stop and service", () => {
@@ -88,8 +89,9 @@ test("live arrivals reach the bus row, keyed by stop and service", () => {
   const rows = detailRows(withCode, {
     "53061:410": { buses: [{ etaMins: 3, load: "light", monitored: true }, { etaMins: 11, load: "moderate", monitored: true }], reason: null },
   });
-  assert.equal(rows[2].arrival.text, "Next: 3, 11 min");
-  assert.equal(rows[2].arrival.load, "light");
+  const bus = rows.find((row) => row.kind === "bus");
+  assert.equal(bus.arrival.text, "Next: 3, 11 min");
+  assert.equal(bus.arrival.load, "light");
 });
 
 test("no arrivals reads as a sentence, never as a blank", () => {
