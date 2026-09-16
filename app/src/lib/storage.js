@@ -59,7 +59,9 @@ export function normalizeSavedPlace(value, id) {
   }
 
   if (typeof value !== "object") return null;
-  const name = String(value.name || value.label || value.address || "").trim();
+  // `text` was the shape of a short-lived intermediate version; read it too so
+  // a place saved then isn't silently dropped on upgrade.
+  const name = String(value.name || value.label || value.address || value.text || "").trim();
   if (!name) return null;
   const ll = validCoordinates(value.ll) ? [Number(value.ll[0]), Number(value.ll[1])] : null;
   return {

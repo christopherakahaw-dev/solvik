@@ -5,6 +5,10 @@ import { PlacePicker } from "../components/PlacePicker";
 export function PlanScreen({ v }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
+      <div style={{ padding: "0 4px" }}>
+        <div style={{ font: "var(--weight-heavy) 22px/1.2 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", textWrap: "pretty" }}>{v.planGreeting}</div>
+      </div>
+
       {v.planHasNext && (
         <div style={{ position: "relative", overflow: "hidden", background: "var(--surface-dark)", color: "var(--text-on-dark)", borderRadius: "var(--radius-card)", padding: 20, boxShadow: "var(--shadow-card)", animation: "sv-rise 420ms cubic-bezier(.16,1,.3,1) both" }}>
           <div style={{ position: "absolute", right: -46, top: -58, width: 180, height: 180, borderRadius: 999, background: "rgba(255,255,255,.05)" }} />
@@ -26,13 +30,46 @@ export function PlanScreen({ v }) {
             </Button>
             <button onClick={v.watchNext} style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 16px", height: 44, borderRadius: 999, cursor: "pointer", background: "rgba(255,255,255,.14)", border: "none", color: "var(--text-on-dark)", font: "var(--weight-bold) 14px/1 var(--font-body)" }}>
               <Icon name="bell" size={16} />
-              Alert me
+              {v.watchNextLabel}
             </button>
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "0 13px", height: 44, borderRadius: 999, background: "rgba(255,255,255,.09)", font: "var(--weight-bold) 12px/1 var(--font-body)" }}>
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--crowd-moderate)" }} />
-              {v.planNextCrowd}
-            </div>
+            {v.planNextCrowd && (
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "0 13px", height: 44, borderRadius: 999, background: "rgba(255,255,255,.09)", font: "var(--weight-bold) 12px/1 var(--font-body)" }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--crowd-" + (v.planNextCrowdLevel || "light") + ")" }} />
+                {v.planNextCrowd}
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {v.fgHas && (
+        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-soft)", color: v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--text-accent)" }}>
+              <Icon name="chart-no-axes-column-increasing" size={15} />
+            </span>
+            <SectionLabel>Network forecast</SectionLabel>
+          </div>
+          <div style={{ font: "var(--weight-heavy) 17px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 11, textWrap: "pretty" }}>{v.fgTitle}</div>
+          {v.fgDetail && (
+            <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.fgDetail}</div>
+          )}
+          {v.fgAlerts.map((a, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 9 }}>
+              <span style={{ flex: "none", padding: "3px 8px", borderRadius: 999, background: "var(--status-warn)", color: "#fff", font: "var(--weight-heavy) 11px/1.3 var(--font-body)" }}>{a.line}</span>
+              <span style={{ font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>{a.title}</span>
+            </div>
+          ))}
+          {v.fgCoverage && (
+            <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.fgCoverage}</div>
+          )}
+          {v.fgHasAction && (
+            <div style={{ marginTop: 13 }}>
+              <Button variant="secondary" size="md" iconRight="arrow-right" onClick={v.fgAction}>
+                {v.fgActionLabel}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -232,7 +269,13 @@ export function AddCommuteSheet({ v }) {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 15px", borderRadius: "var(--radius-card)", background: "var(--accent-soft)" }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text-muted)" }}>Leave by</div>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 2 }}>
+                    {v.addWhenOpts.map((o, i) => (
+                      <button key={i} onClick={o.pick} style={styleText(o.style)}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
                   <div style={{ font: "var(--weight-heavy) 30px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 8 }}>{v.addTime}</div>
                   <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 6, textWrap: "pretty" }}>{v.addArrive}</div>
                 </div>
