@@ -5,9 +5,21 @@
 export const KEYS = {
   onboarded: "solvik:onboarded",
   places: "solvik:places",
+  preferences: "solvik:preferences",
   commutes: "solvik:commutes",
   searches: "solvik:searches",
   alertsRead: "solvik:alertsRead",
+};
+
+export const PLACE_IDS = ["home", "work", "school"];
+
+export const DEFAULT_PREFERENCES = {
+  stepFree: false,
+  lessWalking: false,
+  avoidCrowds: false,
+  studentFare: false,
+  routineCommute: false,
+  showSavedPlaces: true,
 };
 
 export function loadStored(key, fallback) {
@@ -27,6 +39,78 @@ export function store(key, value) {
   } catch {
     // Out of quota or storage denied; the session still works.
   }
+}
+
+function validCoordinates(value) {
+  return Array.isArray(value) && value.length >= 2 && Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]));
+}
+
+// Saved places are deliberately small, provider-neutral records. Search text
+// is never retained; only the result the user explicitly selected is saved.
+export function normalizeSavedPlace(value, id) {
+  if (!value) return null;
+
+  // Version 1 saved only free-form strings. Keep the label so the user does
+  // not lose it, but do not guess coordinates or draw a potentially wrong
+  // home marker until they verify it through search.
+  if (typeof value === "string") {
+    const name = value.trim();
+    return name ? { id, name, address: name, postal: null, ll: null, source: "legacy", verified: false } : null;
+  }
+
+  if (typeof value !== "object") return null;
+  const name = String(value.name || value.label || value.address || "").trim();
+  if (!name) return null;
+  const ll = validCoordinates(value.ll) ? [Number(value.ll[0]), Number(value.ll[1])] : null;
+  return {
+    id,
+    name,
+    address: String(value.address || value.detail || name).trim(),
+    postal: value.postal ? String(value.postal) : null,
+    ll,
+    source: value.source === "onemap" && ll ? "onemap" : "legacy",
+    verified: value.source === "onemap" && !!ll,
+    updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : undefined,
+  };
+}
+
+export function loadSavedPlaces() {
+  const raw = loadStored(KEYS.places, {});
+  const source = raw && raw.version === 2 && raw.places ? raw.places : {
+    home: raw && raw.plHome,
+    work: raw && raw.plWork,
+    school: raw && raw.plSchool,
+  };
+  return Object.fromEntries(PLACE_IDS.map((id) => [id, normalizeSavedPlace(source && source[id], id)]));
+}
+
+export function saveSavedPlaces(places) {
+  const normalized = Object.fromEntries(PLACE_IDS.map((id) => [id, normalizeSavedPlace(places && places[id], id)]));
+  store(KEYS.places, { version: 2, places: normalized });
+  return normalized;
+}
+
+export function savedPlaceDetail(place) {
+  if (!place) return "";
+  return [place.address || place.name, place.postal].filter(Boolean).join(" · ");
+}
+
+export function loadPreferences() {
+  const raw = loadStored(KEYS.preferences, {});
+  return Object.fromEntries(
+    Object.entries(DEFAULT_PREFERENCES).map(([key, fallback]) => [key, typeof raw?.[key] === "boolean" ? raw[key] : fallback])
+  );
+}
+
+export function clearAllUserData() {
+  if (typeof localStorage === "undefined") return;
+  Object.values(KEYS).forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Storage may be blocked. Clearing what is available is still useful.
+    }
+  });
 }
 
 const MAX_SEARCHES = 8;

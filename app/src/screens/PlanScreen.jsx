@@ -1,5 +1,6 @@
 import { Icon, IconButton, Button, SectionLabel, SearchField, Tag } from "../design-system";
 import { styleText } from "../lib/styleText";
+import { PlacePicker } from "../components/PlacePicker";
 
 export function PlanScreen({ v }) {
   return (
@@ -110,15 +111,23 @@ export function PlacesSheet({ v }) {
               </div>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
-              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>These set the Home and Work chips on every commute, and the routes Solvik watches for you.</div>
+              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Selected places stay in this browser. Search text goes to OneMap while you search, and place coordinates only when you request a route. Solvik does not keep the search query.</div>
               {v.placeRows.map((p, i) => (
                 <div key={i}>
                   <SectionLabel>{p.label}</SectionLabel>
                   <div style={{ marginTop: 8 }}>
-                    <SearchField value={p.value} placeholder={p.placeholder} icon={p.icon} onChange={p.set} />
+                    <PlacePicker value={p.value} placeholder={p.placeholder} icon={p.icon} onChange={p.set} />
                   </div>
                 </div>
               ))}
+              <button type="button" onClick={v.toggleSavedPlaces} aria-pressed={v.showSavedPlaces} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 13px", cursor: "pointer", textAlign: "left", background: "var(--sand-100)", border: "1px solid var(--border-card)", borderRadius: "var(--radius-card)", color: "var(--text-body)" }}>
+                <Icon name={v.showSavedPlaces ? "eye" : "eye-off"} size={17} />
+                <span style={{ flex: 1, font: "var(--type-body-strong)" }}>Show saved places on the map</span>
+                <span style={{ font: "var(--type-caption)", color: "var(--text-muted)" }}>{v.showSavedPlaces ? "On" : "Off"}</span>
+              </button>
+              <Button variant="ghost" size="md" fullWidth iconLeft="trash-2" onClick={v.clearAllData}>
+                Erase all data from this device
+              </Button>
             </div>
             <div style={{ flex: "none", paddingTop: 14 }}>
               <Button size="lg" fullWidth onClick={v.savePlaces}>

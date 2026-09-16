@@ -13,6 +13,7 @@ export function MapScreen({ v }) {
         markerAccuracy={v.userAccuracy}
         dest={v.destCoord}
         pin={v.pinCoord}
+        savedPlaces={v.savedPlaceMarkers}
         zones={v.mapZones}
         onZoneClick={v.fcPickZone}
         onMapClick={v.dropPin}

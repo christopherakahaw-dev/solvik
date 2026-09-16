@@ -11,16 +11,17 @@ import { acceptFix, alongMAtTime, coordAt, stepAtTime, timeAtAlongM, STALE_FIX_M
 import { metresBetween } from "../lib/geometry";
 import {
   KEYS, loadStored, store, rememberSearch, recentSearches, clearSearches,
-  loadReadAlerts, markAlertsRead, alertId,
+  loadReadAlerts, markAlertsRead, alertId, loadSavedPlaces, saveSavedPlaces,
+  savedPlaceDetail, loadPreferences, clearAllUserData,
 } from "../lib/storage";
 
 const ONBOARDED_KEY = KEYS.onboarded;
-const PLACES_KEY = KEYS.places;
 const COMMUTES_KEY = KEYS.commutes;
+const initialPreferences = loadPreferences();
 
-// Used until the browser gives us a real fix: Blk 726 Yishun St 71, the
-// starting point the prototype was designed around.
-const ORIGIN_FALLBACK = [1.4294, 103.835];
+// A neutral Singapore-wide fallback. If the user has explicitly saved a
+// verified Home, that is a better local-only origin until they request GPS.
+const ORIGIN_FALLBACK = [1.3521, 103.8198];
 
 // How far the traveller has to move before the journey is worth re-planning,
 // and before the map follows them rather than holding still.
@@ -38,7 +39,8 @@ export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 export class AppLogic extends Component {
   state = {
     savedList: loadStored(COMMUTES_KEY, []),
-    ...loadStored(PLACES_KEY, { plHome: "", plWork: "", plSchool: "" }),
+    savedPlaces: loadSavedPlaces(),
+    routingPreferences: initialPreferences,
     addEdit: null, placesOpen: false,
     addOpen: false, addFrom: "home", addTo: "work", addDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
     addMode: "Comfort", addMins: 462, fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
@@ -46,7 +48,7 @@ export class AppLogic extends Component {
     navPage: 0, stepsDrag: false, pin: null,
     screen: typeof localStorage !== "undefined" && localStorage.getItem(ONBOARDED_KEY) ? "map" : "intro",
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
-    query: "", dest: null, searchOpen: false, tripMode: "fast", tripRoute: 0,
+    query: "", dest: null, searchOpen: false, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
@@ -61,11 +63,11 @@ export class AppLogic extends Component {
     readAlerts: loadReadAlerts(),
     crowd: { stations: [], slots: [], at: null, pending: false, error: null },
     faults: { items: [], pending: false, error: null },
-    stop: { data: null, pending: false, error: null },
+    stop: { data: null, pending: false, error: null, requested: false },
   };
 
   currentOrigin() {
-    return this.state.userLoc || ORIGIN_FALLBACK;
+    return this.state.userLoc || this.state.savedPlaces?.home?.ll || ORIGIN_FALLBACK;
   }
 
   // Centre the map on the real position and adopt it as the trip origin. Every
@@ -135,10 +137,11 @@ export class AppLogic extends Component {
   addCommuteVals(s) {
     // Only places the user actually told us about, plus anything they've
     // searched for in this sheet. Nothing invented.
+    const savedPlaces = s.savedPlaces || {};
     const PLACES = [
-      s.plHome && { id: "home", label: "Home", place: s.plHome },
-      s.plWork && { id: "work", label: "Work", place: s.plWork },
-      s.plSchool && { id: "school", label: "School", place: s.plSchool },
+      savedPlaces.home && { id: "home", label: "Home", place: savedPlaceDetail(savedPlaces.home), ll: savedPlaces.home.ll },
+      savedPlaces.work && { id: "work", label: "Work", place: savedPlaceDetail(savedPlaces.work), ll: savedPlaces.work.ll },
+      savedPlaces.school && { id: "school", label: "School", place: savedPlaceDetail(savedPlaces.school), ll: savedPlaces.school.ll },
     ].filter(Boolean).concat(s.addExtra || []);
     const addSearch = s.addSearchResults || { items: [], pending: false, error: null, query: "" };
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -283,17 +286,30 @@ export class AppLogic extends Component {
       placesOpen: !!s.placesOpen,
       openPlaces: () => this.setState({ placesOpen: true }),
       closePlaces: () => this.setState({ placesOpen: false }),
-      savePlaces: () => { this.setState({ placesOpen: false }); this.flash("Places saved · " + ((s.plHome || "Yishun") + " → " + (s.plWork || "Raffles Place"))); },
+      savePlaces: () => {
+        this.setState({ placesOpen: false });
+        const names = [savedPlaces.home?.name, savedPlaces.work?.name, savedPlaces.school?.name].filter(Boolean);
+        this.flash(names.length ? "Saved on this device · " + names.join(" · ") : "No saved places");
+      },
       placeRows: [
-        { key: "plHome", label: "Home", short: "Home", icon: "house", placeholder: "Block, street or MRT stop" },
-        { key: "plWork", label: "Work", short: "Work", icon: "briefcase", placeholder: "Office, building or area" },
-        { key: "plSchool", label: "School or campus", short: "School", icon: "graduation-cap", placeholder: "Optional" },
+        { key: "home", label: "Home", short: "Home", icon: "house", placeholder: "Block, street or MRT stop" },
+        { key: "work", label: "Work", short: "Work", icon: "briefcase", placeholder: "Office, building or area" },
+        { key: "school", label: "School or campus", short: "School", icon: "graduation-cap", placeholder: "Optional" },
       ].map((p) => ({
         label: p.label, short: p.short, icon: p.icon, placeholder: p.placeholder,
-        value: s[p.key] || "",
-        shown: (s[p.key] || "").trim() || "Add",
-        set: (v) => this.setState({ [p.key]: typeof v === "string" ? v : v && v.target ? v.target.value : "" }),
+        value: savedPlaces[p.key] || null,
+        shown: savedPlaces[p.key]?.name || "Add",
+        set: (place) => this.setState({ savedPlaces: { ...(this.state.savedPlaces || {}), [p.key]: place ? { ...place, id: p.key } : null } }),
       })),
+      showSavedPlaces: s.routingPreferences?.showSavedPlaces !== false,
+      toggleSavedPlaces: () => this.setState({
+        routingPreferences: { ...(s.routingPreferences || {}), showSavedPlaces: s.routingPreferences?.showSavedPlaces === false },
+      }),
+      clearAllData: () => {
+        if (typeof window !== "undefined" && !window.confirm("Erase all Solvik data saved in this browser? This cannot be undone.")) return;
+        clearAllUserData();
+        if (typeof window !== "undefined") window.location.reload();
+      },
       saveCommute: () => {
         if (invalid) return;
         const entry = { from, to, days: days.slice(), mins, mode };
@@ -452,9 +468,8 @@ export class AppLogic extends Component {
     if (s.fcSlot !== prevState.fcSlot) this.loadCrowding(s.crowd.slots[s.fcSlot] || null);
 
     if (s.savedList !== prevState.savedList) store(COMMUTES_KEY, s.savedList);
-    if (s.plHome !== prevState.plHome || s.plWork !== prevState.plWork || s.plSchool !== prevState.plSchool) {
-      store(PLACES_KEY, { plHome: s.plHome, plWork: s.plWork, plSchool: s.plSchool });
-    }
+    if (s.savedPlaces !== prevState.savedPlaces) saveSavedPlaces(s.savedPlaces);
+    if (s.routingPreferences !== prevState.routingPreferences) store(KEYS.preferences, s.routingPreferences);
 
     // Arrivals are polled only while there are options on screen to show them.
     if (s.trips.options !== prevState.trips.options) {
@@ -463,9 +478,10 @@ export class AppLogic extends Component {
     }
     if (!s.dest && prevState.dest) this.stopArrivalsPoll();
 
-    // The map and turn-by-turn both show where you are, so both watch.
-    const tracks = s.screen === "map" || s.screen === "nav";
-    const tracked = prevState.screen === "map" || prevState.screen === "nav";
+    // Continuous location is needed only during active turn-by-turn. The map
+    // requests a one-off fix only after the user presses its locate control.
+    const tracks = s.screen === "nav";
+    const tracked = prevState.screen === "nav";
     if (tracks && !tracked) this.startTracking();
     if (!tracks && tracked) this.stopTracking();
   }
@@ -473,13 +489,8 @@ export class AppLogic extends Component {
     this.t0 = Date.now();
     this.iv = setInterval(() => this.setState({ tick: Date.now() }), 1000);
     if (typeof document !== "undefined") document.addEventListener("visibilitychange", this.handleVisibilityChange);
-    if (this.state.screen === "map") {
-      this.requestCurrentLocation().catch(() => {});
-      this.startTracking();
-    }
     this.loadFaults();
     this.loadCrowding();
-    this.findNearestStop();
   }
   componentWillUnmount() {
     clearInterval(this.iv);
@@ -778,15 +789,15 @@ export class AppLogic extends Component {
 
   // Resolves the stop a report is filed against from the real position.
   findNearestStop = () => {
-    this.setState((st) => ({ stop: { ...st.stop, pending: true, error: null } }));
+    this.setState((st) => ({ stop: { ...st.stop, pending: true, error: null, requested: true } }));
     getPosition()
       .then((fix) => {
         this.applyFix(fix);
         return getNearestStop(fix.coords[0], fix.coords[1]);
       })
-      .then((data) => this.setState({ stop: { data, pending: false, error: null } }))
+      .then((data) => this.setState({ stop: { data, pending: false, error: null, requested: true } }))
       .catch((err) =>
-        this.setState({ stop: { data: null, pending: false, error: messageForError(err && err.code) || String(err.message || err) } })
+        this.setState({ stop: { data: null, pending: false, error: messageForError(err && err.code) || String(err.message || err), requested: true } })
       );
   };
 
@@ -820,41 +831,34 @@ export class AppLogic extends Component {
     const roles = s.introRoles || [];
     const has = (id) => roles.indexOf(id) >= 0;
     const ROLES = [
-      { id: "commuter", label: "Daily commuter", sub: "Same trip most weekdays", icon: "train-front" },
-      { id: "student", label: "Student", sub: "Campus trips, concession fares", icon: "graduation-cap" },
-      { id: "wheelchair", label: "Wheelchair user", sub: "Lifts and level boarding only", icon: "accessibility" },
-      { id: "pram", label: "Travelling with a pram", sub: "Avoid stairs and tight gantries", icon: "baby" },
-      { id: "senior", label: "Senior", sub: "Longer buffers, a seat matters", icon: "heart-handshake" },
+      { id: "commuter", label: "Routine commute", sub: "Same trip most weekdays", icon: "train-front" },
+      { id: "student", label: "Student fares", sub: "Show concession-aware options", icon: "graduation-cap" },
+      { id: "stepFree", label: "Step-free routes", sub: "Prioritise lifts and level boarding", icon: "accessibility" },
+      { id: "pram", label: "More space for a pram", sub: "Avoid stairs and tight gantries", icon: "baby" },
+      { id: "comfort", label: "More time and comfort", sub: "Longer buffers and fewer changes", icon: "heart-handshake" },
     ];
-    const stepFree = has("wheelchair") || has("pram");
+    const stepFree = has("stepFree") || has("pram");
     const wantsSchool = has("student");
     const rolePill = (on) =>
       "display:flex;align-items:center;gap:12px;padding:14px 15px;border-radius:var(--radius-card);cursor:pointer;font:var(--font-body);transition:background .15s,border-color .15s;" +
       (on ? "background:var(--accent-soft);border:1px solid var(--accent);color:var(--text-strong);" : "background:var(--surface-card);border:1px solid var(--border-card);color:var(--text-strong);");
-    const sug = (field, list) =>
-      list.map((label) => ({
-        label,
-        pick: () => this.setState({ [field]: label }),
-        style: "padding:8px 13px;border-radius:999px;cursor:pointer;white-space:nowrap;font:var(--weight-bold) 12px/1 var(--font-body);" +
-          (s[field] === label ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);"),
-      }));
     const places = [
-      { key: "introHome", label: "Home", placeholder: "Block, street or MRT stop", icon: "house", sugg: ["Yishun", "Sengkang", "Bukit Batok"] },
-      { key: "introWork", label: wantsSchool ? "Work or internship" : "Work", placeholder: "Office, building or area", icon: "briefcase", sugg: ["Raffles Place", "Changi Business Park", "Jurong East"] },
-    ].concat(wantsSchool ? [{ key: "introSchool", label: "School or campus", placeholder: "Campus or faculty", icon: "graduation-cap", sugg: ["NTU", "NUS Kent Ridge", "SMU"] }] : []);
-    const filled = places.filter((p) => (s[p.key] || "").trim()).length;
+      { key: "introHomePlace", id: "home", label: "Home", placeholder: "Block, street or MRT stop", icon: "house", sugg: ["Yishun", "Sengkang", "Bukit Batok"] },
+      { key: "introWorkPlace", id: "work", label: wantsSchool ? "Work or internship" : "Work", placeholder: "Office, building or area", icon: "briefcase", sugg: ["Raffles Place", "Changi Business Park", "Jurong East"] },
+    ].concat(wantsSchool ? [{ key: "introSchoolPlace", id: "school", label: "School or campus", placeholder: "Campus or faculty", icon: "graduation-cap", sugg: ["NTU", "NUS Kent Ridge", "SMU"] }] : []);
+    const filled = places.filter((p) => s[p.key]?.verified).length;
     const total = 4;
-    const homeLabel = (s.introHome || "").trim() || "Yishun";
-    const workLabel = (s.introWork || "").trim() || "Raffles Place";
+    const homeLabel = s.introHomePlace?.name;
+    const workLabel = s.introWorkPlace?.name;
     const summary = [
-      { text: "Watching " + homeLabel + " → " + workLabel + ", with a leave-by alert 25 min ahead." },
+      { text: homeLabel && workLabel ? "Watching " + homeLabel + " → " + workLabel + ", with a leave-by alert 25 min ahead." : "You can add or verify Home and Work later in Plan." },
       { text: stepFree
         ? "Step-free routing is on. Lifts, level boarding and wider gantries only — lift faults reroute you automatically."
-        : has("senior")
+        : has("comfort")
         ? "Comfort routes come first, with longer transfer buffers and seat odds on every option."
         : "Fastest routes come first, with crowding shown before you board." },
-      { text: wantsSchool && (s.introSchool || "").trim()
-        ? "Campus trips to " + (s.introSchool || "").trim() + " are saved, including term-time weekday mornings."
+      { text: wantsSchool && s.introSchoolPlace?.name
+        ? "Campus trips to " + s.introSchoolPlace.name + " are saved, including term-time weekday mornings."
         : "Crowding on your lines is checked every few minutes while you travel." },
       { text: "Reports you post at your stop earn points towards fare vouchers." },
     ];
@@ -879,25 +883,37 @@ export class AppLogic extends Component {
         toggle: () => this.setState({ introRoles: has(r.id) ? roles.filter((x) => x !== r.id) : roles.concat([r.id]) }),
       })),
       introPlaces: places.map((p) => ({
-        label: p.label, placeholder: p.placeholder, icon: p.icon, value: s[p.key] || "",
-        set: (v) => this.setState({ [p.key]: typeof v === "string" ? v : v && v.target ? v.target.value : "" }),
-        suggestions: sug(p.key, p.sugg),
+        label: p.label, placeholder: p.placeholder, icon: p.icon, value: s[p.key] || null,
+        set: (place) => this.setState({ [p.key]: place ? { ...place, id: p.id } : null }),
+        suggestions: p.sugg,
       })),
-      introSummaryTitle: "Solvik is set up for " + (stepFree ? "step-free travel" : has("student") ? "student travel" : has("senior") ? "a calmer commute" : has("commuter") ? "your daily commute" : "your commute"),
+      introSummaryTitle: "Solvik is set up for " + (stepFree ? "step-free travel" : has("student") ? "student travel" : has("comfort") ? "a calmer commute" : has("commuter") ? "your daily commute" : "your commute"),
       introSummary: summary,
       introCta: ["Set up in a minute", roles.length ? "Next · " + roles.length + " selected" : "Next", filled ? "Next · " + filled + " saved" : "Next", "Start using Solvik"][step],
       introNext: () => {
         if (step < total - 1) return this.setState({ introStep: step + 1 });
+        const routingPreferences = {
+          ...(s.routingPreferences || {}),
+          stepFree,
+          lessWalking: stepFree || has("comfort"),
+          avoidCrowds: has("comfort"),
+          studentFare: has("student"),
+          routineCommute: has("commuter"),
+        };
         this.setState({
           screen: "map", introStep: 0,
-          plHome: (s.introHome || "").trim() || "Yishun",
-          plWork: (s.introWork || "").trim() || "Raffles Place",
-          plSchool: (s.introSchool || "").trim(),
-          mode: stepFree ? "silver" : has("senior") ? "comfort" : "rush",
-          tripMode: stepFree ? "step" : "fast",
+          savedPlaces: {
+            ...(s.savedPlaces || {}),
+            home: s.introHomePlace ? { ...s.introHomePlace, id: "home" } : s.savedPlaces?.home || null,
+            work: s.introWorkPlace ? { ...s.introWorkPlace, id: "work" } : s.savedPlaces?.work || null,
+            school: s.introSchoolPlace ? { ...s.introSchoolPlace, id: "school" } : s.savedPlaces?.school || null,
+          },
+          routingPreferences,
+          mode: stepFree ? "silver" : has("comfort") ? "comfort" : "rush",
+          tripMode: stepFree ? "step" : has("comfort") ? "quiet" : "fast",
         });
         if (typeof localStorage !== "undefined") localStorage.setItem(ONBOARDED_KEY, "1");
-        this.flash(stepFree ? "Step-free routing on · watching " + homeLabel + " → " + workLabel : "Watching " + homeLabel + " → " + workLabel);
+        this.flash(homeLabel && workLabel ? (stepFree ? "Step-free routing on · watching " + homeLabel + " → " + workLabel : "Watching " + homeLabel + " → " + workLabel) : "Setup saved on this device");
       },
       introBack: () => this.setState({ introStep: Math.max(0, step - 1) }),
       introSkip: () => {
@@ -1078,15 +1094,16 @@ export class AppLogic extends Component {
     });
 
     const ORIGIN = this.currentOrigin();
+    const MAP_ORIGIN = s.userLoc || ORIGIN_FALLBACK;
     // The dot follows every fix; the viewport follows real movement only. GPS
     // wander of a few metres would otherwise pan the map continuously under
     // anyone trying to read it.
     if (
       !this._mapCenter ||
       (!this._mapCenterReal && s.userLoc) ||
-      metresBetween(this._mapCenter, ORIGIN) > MAP_FOLLOW_M
+      metresBetween(this._mapCenter, MAP_ORIGIN) > MAP_FOLLOW_M
     ) {
-      this._mapCenter = ORIGIN;
+      this._mapCenter = MAP_ORIGIN;
       this._mapCenterReal = !!s.userLoc;
     }
     const q = s.query.trim().toLowerCase();
@@ -1282,6 +1299,9 @@ export class AppLogic extends Component {
       searchFooter: "Results from OneMap · Singapore Land Authority",
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
       destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: this._mapCenter,
+      savedPlaceMarkers: s.routingPreferences?.showSavedPlaces === false
+        ? []
+        : ["home", "work", "school"].map((id) => s.savedPlaces?.[id]).filter((place) => place?.verified && Array.isArray(place.ll)),
       // The dot is drawn only where the device actually reported being — the
       // fallback origin is good enough to plan from, not to point at.
       userMarker: s.userLoc || null,
@@ -1450,12 +1470,12 @@ export class AppLogic extends Component {
         this.setState({ navRepOpen: false, nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null, points: s.points + t.pts });
         this.flash(t.label + " posted · +" + t.pts + " points");
       },
-      locEyebrow: s.stop.data ? "Live at your stop" : s.stop.error ? "No stop found" : "Finding your stop",
-      locStopName: s.stop.data ? s.stop.data.name : s.stop.error ? "Location unavailable" : "Locating…",
+      locEyebrow: s.stop.data ? "Live at your stop" : s.stop.requested ? (s.stop.error ? "No stop found" : "Finding your stop") : "Location is off",
+      locStopName: s.stop.data ? s.stop.data.name : s.stop.error ? "Location unavailable" : s.stop.pending ? "Locating…" : "Use your location",
       locDetail: s.stop.data
         ? `Stop ${s.stop.data.code} · ${Math.round(s.stop.data.distanceM)} m away · reports stay live 30 min`
-        : s.stop.error || "Using your location to pick the stop you can report on.",
-      locRecheckLabel: s.stop.pending ? "Locating" : "Recheck",
+        : s.stop.error || (s.stop.requested ? "Using your location to pick the stop you can report on." : "Solvik will ask for a one-time location fix to find the nearest stop."),
+      locRecheckLabel: s.stop.pending ? "Locating" : s.stop.requested ? "Recheck" : "Use location",
       locRecheck: () => this.findNearestStop(),
       reportStopReady: !!s.stop.data,
       hasPhoto: !!s.photoUrl, noPhoto: !s.photoUrl,

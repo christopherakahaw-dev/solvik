@@ -44,9 +44,12 @@ HTTPS URL, but not over a plain-HTTP LAN address.
 
 ### How position tracking behaves
 
-The map and turn-by-turn both watch the device's position continuously. While a
-trip is under way, progress along the route drives the countdown and the current
-step — and only fixes worth believing move it:
+Solvik does not request location during onboarding or when the map first opens.
+The map asks for a one-off fix only when the user taps its locate button, and the
+Report tab asks only when the user chooses to find their nearest stop. Continuous
+tracking starts only after the user begins turn-by-turn navigation. While a trip
+is under way, progress along the route drives the countdown and the current step
+— and only fixes worth believing move it:
 
 - a fix vaguer than ~150 m is ignored;
 - a fix more than ~250 m from the route line counts as off-route, and progress
@@ -91,6 +94,15 @@ Trains have no arrival feed — DataMall publishes crowding for rail, not
 timings — so a rail leg shows how busy the platform is rather than a countdown.
 Where bus times are missing, the card says which kind of missing it is (no key,
 unknown stop, nothing running) instead of leaving a gap.
+
+### Saved-place privacy
+
+Home, Work, School, route preferences, watched commutes and recent destinations
+are stored only in the current browser. OneMap receives search text while the
+user searches and the coordinates needed for a route the user requests; these
+private API responses are not shared-cacheable. The Plan screen lets the user
+hide saved-place markers, remove individual places, or erase all Solvik data
+from the device. Solvik ships without analytics or telemetry.
 
 Ranking caveats worth knowing: "Step-free" prefers wheelchair-accessible
 buses and short walks but cannot guarantee lift availability; "Bike + rail"

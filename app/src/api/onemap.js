@@ -3,8 +3,13 @@
 // callers can fall back to illustrative data when live keys aren't wired up
 // yet — see src/lib/withFallback.js.
 
-export async function searchPlaces(query) {
-  const res = await fetch(`/api/onemap-search?q=${encodeURIComponent(query)}`);
+export async function searchPlaces(query, { signal } = {}) {
+  const res = await fetch("/api/onemap-search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+    signal,
+  });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "OneMap search failed");
   return data.results;
@@ -12,27 +17,27 @@ export async function searchPlaces(query) {
 
 // start/end: [lat, lng]
 export async function getPublicTransportRoute(start, end, { date, time, mode = "TRANSIT" } = {}) {
-  const params = new URLSearchParams({
+  const body = {
     start: `${start[0]},${start[1]}`,
     end: `${end[0]},${end[1]}`,
     routeType: "pt",
     mode,
-  });
-  if (date) params.set("date", date);
-  if (time) params.set("time", time);
-  const res = await fetch(`/api/onemap-route?${params.toString()}`);
+  };
+  if (date) body.date = date;
+  if (time) body.time = time;
+  const res = await fetch("/api/onemap-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "OneMap routing failed");
   return data;
 }
 
 export async function getWalkingRoute(start, end) {
-  const params = new URLSearchParams({
+  const body = {
     start: `${start[0]},${start[1]}`,
     end: `${end[0]},${end[1]}`,
     routeType: "walk",
-  });
-  const res = await fetch(`/api/onemap-route?${params.toString()}`);
+  };
+  const res = await fetch("/api/onemap-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "OneMap routing failed");
   return data;

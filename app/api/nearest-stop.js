@@ -4,7 +4,8 @@
 import { nearestStop } from "./_lib/busStops.js";
 
 export default async function handler(req, res) {
-  const q = req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
+  res.setHeader("Cache-Control", "private, no-store");
+  const q = req.body && typeof req.body === "object" ? req.body : req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
   const lat = Number(q.lat);
   const lng = Number(q.lng);
   if (!isFinite(lat) || !isFinite(lng)) {
