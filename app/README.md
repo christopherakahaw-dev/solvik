@@ -270,6 +270,27 @@ npm run diagnose -- --from 1.4294,103.8350 --to 1.3009,103.8559
 npm run diagnose -- --coverage
 ```
 
+### Station coordinates
+
+LTA's crowd feed identifies stations by code only (`NS17`), so each one needs a
+position before it can be drawn. Those positions live in
+`api/_lib/stations.json`, resolved once through OneMap by:
+
+```bash
+npm run stations
+```
+
+Run it from `app/` with your `.env` in place, then commit the file. It is
+deliberately patient — one search at a time, with retries — because it runs on a
+laptop rather than inside a request.
+
+This matters: resolving ~224 codes live inside one request was both slow and
+unreliable, and a probe against a real deployment found **218 of 224 stations
+being dropped**, which showed on the map as six crowding circles instead of a
+network. Station geography is stable reference data, so caching it is fair;
+crowd levels never are, and are still read live on every request. Codes missing
+from the file still fall back to a live search.
+
 `--coverage` (also at `/api/coverage`) answers a different question: how many
 stations LTA's crowd feed actually publishes, per line, and how many of those
 *we* then fail to place on the map. `resolveStations()` drops any code it can't
