@@ -27,6 +27,7 @@ export function OneMapCanvas({
   route,
   marker,
   markerAccuracy,
+  origin,
   dest,
   pin,
   savedPlaces,
@@ -156,6 +157,17 @@ export function OneMapCanvas({
       const p = L.circleMarker(pin, { radius: 8, color: "#fff", weight: 3, fillColor: rust, fillOpacity: 1 }).addTo(map);
       layersRef.current.push(halo, p);
     }
+    if (isLL(origin)) {
+      const start = L.circleMarker(origin, {
+        radius: 8,
+        color: "#fff",
+        weight: 3,
+        fillColor: "#201e1d",
+        fillOpacity: 1,
+      }).addTo(map);
+      start.bindTooltip("Start", { direction: "top", offset: [0, -8] });
+      layersRef.current.push(start);
+    }
     if (isLL(dest)) {
       const d = L.circleMarker(dest, { radius: 9, color: "#fff", weight: 3, fillColor: green, fillOpacity: 1 }).addTo(map);
       layersRef.current.push(d);
@@ -218,7 +230,7 @@ export function OneMapCanvas({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(safeRoute), JSON.stringify(marker), markerAccuracy, JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeSavedPlaces), JSON.stringify(safeZones)]);
+  }, [JSON.stringify(safeRoute), JSON.stringify(marker), markerAccuracy, JSON.stringify(origin), JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeSavedPlaces), JSON.stringify(safeZones)]);
 
   const lastTokenRef = useRef(recenterToken);
   useEffect(() => {

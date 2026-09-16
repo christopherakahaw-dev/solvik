@@ -42,14 +42,21 @@ The locate button uses the browser's own geolocation, which needs no keys but
 does require a secure context — it works on `localhost` and on the deployed
 HTTPS URL, but not over a plain-HTTP LAN address.
 
+The map's **From / To** planner can route between any two OneMap places. The
+starting point can be searched directly, selected from a verified Home, Work or
+School shortcut, or set to the device location with an explicit tap. A searched
+starting point is kept only for the current session; it is not added to saved
+places automatically.
+
 ### How position tracking behaves
 
-Solvik does not request location during onboarding or when the map first opens.
-The map asks for a one-off fix only when the user taps its locate button, and the
-Report tab asks only when the user chooses to find their nearest stop. Continuous
-tracking starts only after the user begins turn-by-turn navigation. While a trip
-is under way, progress along the route drives the countdown and the current step
-— and only fixes worth believing move it:
+Solvik does not request location during onboarding, when the map first opens, or
+when the user searches for a destination. The map asks for a one-off fix only
+when the user taps **My location** or its locate button, and the Report tab asks
+only when the user chooses to find their nearest stop. Continuous tracking
+starts only after the user begins turn-by-turn navigation. While a trip is under
+way, progress along the route drives the countdown and the current step — and
+only fixes worth believing move it:
 
 - a fix vaguer than ~150 m is ignored;
 - a fix more than ~250 m from the route line counts as off-route, and progress
@@ -87,7 +94,8 @@ invented data.
 | "Less crowded" ranking | LTA crowd density (rail) and bus loading |
 | Service alerts | LTA train service alerts |
 | Nearest stop for reports | LTA bus stops, via `/api/nearest-stop` |
-| Your position and trip origin | Browser geolocation |
+| Your position | Browser geolocation, only after an explicit location action or during navigation |
+| Trip origin | A searched OneMap place, a verified saved place, or an already-authorised device position |
 | Your places, watched commutes, recent destinations and read alerts | Your own input, saved in the browser |
 | **Points, vouchers, nearby-reports feed** | **Sample data** — an account/social service, which neither API provides. Labelled as such in the UI. |
 
@@ -125,10 +133,12 @@ unknown stop, nothing running) instead of leaving a gap.
 
 Home, Work, School, route preferences, watched commutes and recent destinations
 are stored only in the current browser. OneMap receives search text while the
-user searches and the coordinates needed for a route the user requests; these
-private API responses are not shared-cacheable. The Plan screen lets the user
-hide saved-place markers, remove individual places, or erase all Solvik data
-from the device. Solvik ships without analytics or telemetry.
+user searches and the coordinates needed for a route the user requests; searched
+route origins are not persisted, and these private API responses are not
+shared-cacheable. Choosing a destination never triggers location permission on
+its own. The Plan screen lets the user hide saved-place markers, remove
+individual places, or erase all Solvik data from the device. Solvik ships
+without analytics or telemetry.
 
 Ranking caveats worth knowing: "Step-free" prefers wheelchair-accessible
 buses and short walks but cannot guarantee lift availability; "Bike + rail"

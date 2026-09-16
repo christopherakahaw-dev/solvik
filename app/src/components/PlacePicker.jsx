@@ -2,13 +2,26 @@ import { useEffect, useRef, useState } from "react";
 import { Icon, SearchField } from "../design-system";
 import { searchPlaces } from "../api/onemap";
 
-export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, suggestions = [] }) {
+export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, suggestions = [], showDetails = true }) {
   const [query, setQuery] = useState(value?.name || "");
   const [results, setResults] = useState([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(null);
   const [open, setOpen] = useState(false);
   const requestRef = useRef(null);
+  const previousValueNameRef = useRef(value?.name || "");
+
+  // Saved-place shortcuts can update this picker from outside. Keep the text
+  // in sync without erasing the first character when a user starts editing an
+  // existing selection (that edit intentionally clears `value`).
+  useEffect(() => {
+    const nextName = value?.name || "";
+    const previousName = previousValueNameRef.current;
+    if (nextName !== previousName) {
+      setQuery((current) => nextName || (current === previousName ? "" : current));
+      previousValueNameRef.current = nextName;
+    }
+  }, [value?.name]);
 
   useEffect(() => {
     if (requestRef.current) requestRef.current.abort();
@@ -87,7 +100,7 @@ export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, su
         aria-autocomplete="list"
       />
 
-      {value && (
+      {value && showDetails && (
         <div style={{ display: "flex", alignItems: "flex-start", gap: 7, marginTop: 7, font: "var(--type-caption)", color: value.verified ? "var(--text-muted)" : "var(--status-fault)" }}>
           <Icon name={value.verified ? "check" : "triangle-alert"} size={13} style={{ flex: "none", marginTop: 1 }} />
           <span style={{ textWrap: "pretty" }}>
@@ -114,7 +127,7 @@ export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, su
       )}
 
       {open && !value && query.trim().length >= 2 && (
-        <div role="listbox" style={{ position: "relative", zIndex: 8, marginTop: 7, maxHeight: 220, overflowY: "auto", background: "var(--surface-card)", border: "1px solid var(--border-card)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-raised)" }}>
+        <div role="listbox" style={{ position: "absolute", top: "calc(100% + 7px)", left: 0, right: 0, zIndex: 40, maxHeight: 260, overflowY: "auto", background: "var(--surface-card)", border: "1px solid var(--border-card)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-raised)" }}>
           {pending && <div style={{ padding: 13, font: "var(--type-caption)", color: "var(--text-muted)" }}>Searching OneMap…</div>}
           {!pending && error && <div style={{ padding: 13, font: "var(--type-caption)", color: "var(--status-fault)" }}>{error}</div>}
           {!pending && !error && results.length === 0 && (

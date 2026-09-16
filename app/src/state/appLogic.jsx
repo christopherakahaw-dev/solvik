@@ -9,6 +9,7 @@ import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
 import { acceptFix, alongMAtTime, coordAt, stepAtTime, timeAtAlongM, STALE_FIX_MS } from "../lib/navProgress";
 import { metresBetween } from "../lib/geometry";
+import { resolveRouteOrigin } from "../lib/routeOrigin";
 import {
   KEYS, loadStored, store, rememberSearch, recentSearches, clearSearches,
   loadReadAlerts, markAlertsRead, alertId, loadSavedPlaces, saveSavedPlaces,
@@ -48,7 +49,7 @@ export class AppLogic extends Component {
     navPage: 0, stepsDrag: false, pin: null,
     screen: typeof localStorage !== "undefined" && localStorage.getItem(ONBOARDED_KEY) ? "map" : "intro",
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
-    query: "", dest: null, searchOpen: false, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
+    query: "", dest: null, routeOrigin: null, searchOpen: false, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
@@ -66,8 +67,16 @@ export class AppLogic extends Component {
     stop: { data: null, pending: false, error: null, requested: false },
   };
 
+  effectiveRouteOrigin() {
+    return resolveRouteOrigin({
+      selected: this.state.routeOrigin,
+      userLoc: this.state.userLoc,
+      home: this.state.savedPlaces?.home,
+    });
+  }
+
   currentOrigin() {
-    return this.state.userLoc || this.state.savedPlaces?.home?.ll || ORIGIN_FALLBACK;
+    return this.effectiveRouteOrigin()?.ll || ORIGIN_FALLBACK;
   }
 
   // Centre the map on the real position and adopt it as the trip origin. Every
@@ -460,7 +469,7 @@ export class AppLogic extends Component {
     if (
       s.dest &&
       s.screen !== "nav" &&
-      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || this.originDrifted())
+      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.routeOrigin !== prevState.routeOrigin || this.originDrifted())
     ) {
       this.loadTripOptions();
     }
@@ -698,7 +707,7 @@ export class AppLogic extends Component {
   // Has the position moved far enough from the one the current options were
   // planned from to be worth planning again? A few metres of GPS wander is not.
   originDrifted = () => {
-    const here = this.state.userLoc;
+    const here = this.effectiveRouteOrigin()?.ll;
     if (!here) return false;
     if (!this._planOrigin) return true;
     return metresBetween(this._planOrigin, here) > REPLAN_DRIFT_M;
@@ -709,6 +718,11 @@ export class AppLogic extends Component {
   loadTripOptions = () => {
     const { dest, tripMode } = this.state;
     if (!dest || !dest.ll) return;
+    const resolvedOrigin = this.effectiveRouteOrigin();
+    if (!resolvedOrigin) {
+      this.setState({ trips: { key: null, options: [], pending: false, error: "Choose a starting place or use your location." } });
+      return;
+    }
     const request = (origin) => {
       const key = `${dest.name}|${tripMode}|${origin.join(",")}`;
       if (this.state.trips.key === key && (this.state.trips.pending || this.state.trips.options.length)) {
@@ -718,21 +732,15 @@ export class AppLogic extends Component {
       this.setState({ trips: { key, options: [], pending: true, error: null } });
       return getTripOptions(origin, dest.ll, tripMode, dest.name)
       .then((options) => {
-        if (this.state.dest !== dest || this.state.tripMode !== tripMode) return;
+        if (this.state.dest !== dest || this.state.tripMode !== tripMode || this.state.trips.key !== key) return;
         this.setState({ trips: { key, options, pending: false, error: null }, tripRoute: 0 });
       })
       .catch((err) => {
-        if (this.state.dest !== dest) return;
+        if (this.state.dest !== dest || this.state.trips.key !== key) return;
         this.setState({ trips: { key, options: [], pending: false, error: String(err.message || err) } });
       });
     };
-
-    (this.state.userLoc ? Promise.resolve(this.state.userLoc) : this.requestCurrentLocation())
-      .then(request)
-      .catch((err) => {
-        if (this.state.dest !== dest) return;
-        this.setState({ trips: { key: null, options: [], pending: false, error: messageForError(err && err.code) } });
-      });
+    request(resolvedOrigin.ll);
   };
 
   // Live platform crowding, optionally for a forecast slot.
@@ -1093,8 +1101,9 @@ export class AppLogic extends Component {
       };
     });
 
-    const ORIGIN = this.currentOrigin();
-    const MAP_ORIGIN = s.userLoc || ORIGIN_FALLBACK;
+    const resolvedOrigin = this.effectiveRouteOrigin();
+    const ORIGIN = resolvedOrigin?.ll || ORIGIN_FALLBACK;
+    const MAP_ORIGIN = s.routeOrigin?.ll || s.userLoc || (resolvedOrigin?.kind === "home" ? resolvedOrigin.ll : ORIGIN_FALLBACK);
     // The dot follows every fix; the viewport follows real movement only. GPS
     // wander of a few metres would otherwise pan the map continuously under
     // anyone trying to read it.
@@ -1104,7 +1113,7 @@ export class AppLogic extends Component {
       metresBetween(this._mapCenter, MAP_ORIGIN) > MAP_FOLLOW_M
     ) {
       this._mapCenter = MAP_ORIGIN;
-      this._mapCenterReal = !!s.userLoc;
+      this._mapCenterReal = !!s.userLoc && !s.routeOrigin;
     }
     const q = s.query.trim().toLowerCase();
     // Only ever live OneMap results.
@@ -1297,8 +1306,39 @@ export class AppLogic extends Component {
       searchEmpty: !s.searchPending && !s.searchError && results.length === 0,
       searchError: s.searchError || null,
       searchFooter: "Results from OneMap · Singapore Land Authority",
+      routeOriginPlace: s.routeOrigin || null,
+      routeOriginName: resolvedOrigin?.name || "Choose a starting place",
+      routeOriginPlaceholder: resolvedOrigin ? `From · ${resolvedOrigin.name}` : "From · Search a starting place",
+      setRouteOrigin: (place) => this.setState({
+        routeOrigin: place ? { ...place, id: place.id || "custom" } : null,
+        tripRoute: 0,
+        trips: { key: null, options: [], pending: false, error: null },
+      }),
+      originPresets: [
+        {
+          id: "location",
+          label: s.locating ? "Locating…" : "My location",
+          icon: "locate-fixed",
+          active: !s.routeOrigin && !!s.userLoc,
+          disabled: !!s.locating,
+          pick: () => this.requestCurrentLocation(true, true)
+            .then(() => this.setState({ routeOrigin: null, trips: { key: null, options: [], pending: false, error: null } }))
+            .catch(() => {}),
+        },
+        ...["home", "work", "school"]
+          .map((id) => s.savedPlaces?.[id])
+          .filter((place) => place?.verified && Array.isArray(place.ll))
+          .map((place) => ({
+            id: place.id,
+            label: { home: "Home", work: "Work", school: "School" }[place.id],
+            icon: { home: "house", work: "briefcase", school: "graduation-cap" }[place.id],
+            active: s.routeOrigin?.id === place.id || (!s.routeOrigin && !s.userLoc && place.id === "home"),
+            disabled: false,
+            pick: () => this.setState({ routeOrigin: place, trips: { key: null, options: [], pending: false, error: null } }),
+          })),
+      ],
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
-      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, mapCenter: this._mapCenter,
+      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, routeOriginCoord: s.routeOrigin?.ll || null, mapCenter: this._mapCenter,
       savedPlaceMarkers: s.routingPreferences?.showSavedPlaces === false
         ? []
         : ["home", "work", "school"].map((id) => s.savedPlaces?.[id]).filter((place) => place?.verified && Array.isArray(place.ll)),
