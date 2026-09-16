@@ -1,6 +1,5 @@
 import { Icon, IconButton, SearchField, Card, Tag, Button } from "../design-system";
 import { OneMapCanvas } from "../components/OneMapCanvas";
-import { PlacePicker } from "../components/PlacePicker";
 import { styleText } from "../lib/styleText";
 
 export function MapScreen({ v }) {
@@ -33,54 +32,15 @@ export function MapScreen({ v }) {
 
         {v.mapSearch && (
           <div style={{ pointerEvents: "auto", display: "flex", alignItems: "flex-start", gap: 10 }}>
-            <div style={{ flex: 1, minWidth: 0, padding: 8, borderRadius: 24, background: "var(--surface-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
-              <PlacePicker
-                value={v.routeOriginPlace}
-                placeholder={v.routeOriginPlaceholder}
-                icon="circle-dot"
-                onChange={v.setRouteOrigin}
-                showDetails={false}
-              />
-              <div style={{ height: 1, margin: "5px 14px", background: "var(--border-card)" }} />
-              <div
-                onFocusCapture={v.openSearch}
-                onBlurCapture={v.closeSearch}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") v.dismissSearch();
-                }}
-              >
-                <SearchField value={v.query} placeholder="To · Search address, stop or area" icon="map-pin" onChange={v.setQuery} onClear={v.clearQuery} />
-              </div>
-              <div style={{ display: "flex", gap: 7, padding: "9px 2px 1px", overflowX: "auto", scrollbarWidth: "none" }}>
-                {v.originPresets.map((preset) => (
-                  <button
-                    type="button"
-                    key={preset.id}
-                    onClick={preset.pick}
-                    disabled={preset.disabled}
-                    aria-pressed={preset.active}
-                    style={{
-                      flex: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      minHeight: 32,
-                      padding: "7px 11px",
-                      borderRadius: 999,
-                      border: `1px solid ${preset.active ? "var(--accent)" : "var(--border-card)"}`,
-                      background: preset.active ? "var(--accent-soft)" : "var(--surface-card)",
-                      color: preset.active ? "var(--text-accent)" : "var(--text-body)",
-                      font: "var(--weight-bold) 12px/1 var(--font-body)",
-                      cursor: preset.disabled ? "wait" : "pointer",
-                      opacity: preset.disabled ? 0.65 : 1,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    <Icon name={preset.icon} size={14} />
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
+            <div
+              onFocusCapture={v.openSearch}
+              onBlurCapture={v.closeSearch}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") v.dismissSearch();
+              }}
+              style={{ flex: 1, minWidth: 0, borderRadius: "var(--radius-pill,999px)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}
+            >
+              <SearchField value={v.query} placeholder={v.searchPlaceholder} icon="search" onChange={v.setQuery} onClear={v.clearQuery} />
             </div>
             <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
               <button onClick={v.fcToggleAlerts} aria-label="Alerts" title="Alerts" style={styleText(v.fcBellStyle)}>
@@ -166,9 +126,32 @@ export function MapScreen({ v }) {
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 12, paddingBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
-                    <Icon name="circle-dot" size={13} />
-                    From {v.routeOriginName}
+                  <div style={{ width: "min(100%, 360px)", marginBottom: 8 }}>
+                    <SearchField
+                      value={v.routeOriginInput}
+                      placeholder="Current location"
+                      icon="circle-dot"
+                      onChange={v.setQuery}
+                      onClear={v.clearQuery}
+                      onFocus={(e) => {
+                        v.openOriginSearch();
+                        e.target.select();
+                      }}
+                      style={{ height: 44 }}
+                    />
+                    {v.searchTarget === "origin" && v.showResults && (
+                      <Card tone="plain" style={{ marginTop: 6, boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+                        {v.searchPending && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--text-muted)" }}>Searching…</div>}
+                        {!v.searchPending && v.searchError && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--status-fault)" }}>{v.searchError}</div>}
+                        {!v.searchPending && !v.searchError && v.searchEmpty && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--text-muted)" }}>No starting place found.</div>}
+                        {v.results.map((p, i) => (
+                          <button key={i} onClick={p.pick} style={{ display: "block", width: "100%", padding: "10px 0", textAlign: "left", background: "none", border: 0, borderBottom: "1px solid var(--border-card)", cursor: "pointer" }}>
+                            <div style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>{p.name}</div>
+                            <div style={{ marginTop: 3, font: "var(--type-caption)", color: "var(--text-muted)" }}>{p.detail}</div>
+                          </button>
+                        ))}
+                      </Card>
+                    )}
                   </div>
                   <div style={{ font: "var(--type-heading)", letterSpacing: "var(--tracking-heading)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.destName}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>

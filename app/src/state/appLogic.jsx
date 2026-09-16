@@ -49,8 +49,8 @@ export class AppLogic extends Component {
     navPage: 0, stepsDrag: false, pin: null,
     screen: typeof localStorage !== "undefined" && localStorage.getItem(ONBOARDED_KEY) ? "map" : "intro",
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
-    query: "", dest: null, routeOrigin: null, searchOpen: false, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
-    userLoc: null, userAccuracy: null, userFixAt: null, locating: false, recenterToken: 0,
+    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
+    userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
     // Remote data, each held with its own pending/error so screens can say
@@ -468,8 +468,9 @@ export class AppLogic extends Component {
     const s = this.state;
     if (
       s.dest &&
+      !s.routeLocationPending &&
       s.screen !== "nav" &&
-      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.routeOrigin !== prevState.routeOrigin || this.originDrifted())
+      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.routeOrigin !== prevState.routeOrigin || s.routeLocationPending !== prevState.routeLocationPending || this.originDrifted())
     ) {
       this.loadTripOptions();
     }
@@ -686,6 +687,7 @@ export class AppLogic extends Component {
   };
 
   chooseDest = (dest, extra) => {
+    const needCurrentLocation = !!dest && !this.state.routeOrigin && !this.state.userLoc;
     this.setState({
       dest: dest || null,
       tripRoute: 0,
@@ -694,6 +696,7 @@ export class AppLogic extends Component {
       liveResults: null,
       searchOpen: false,
       searchPending: false,
+      routeLocationPending: needCurrentLocation,
       trips: { key: null, options: [], pending: !!dest, error: null },
       arrivals: {},
       ...(extra || {}),
@@ -701,7 +704,14 @@ export class AppLogic extends Component {
     // The first card is selected for you, so its breakdown is already open —
     // count it as "seen" rather than scrolling the sheet on arrival.
     this._detailsFor = 0;
-    if (dest) this.rememberSearch(dest);
+    if (dest) {
+      this.rememberSearch(dest);
+      if (needCurrentLocation) {
+        this.requestCurrentLocation(false, false)
+          .then(() => this.setState({ routeLocationPending: false }))
+          .catch(() => this.setState({ routeLocationPending: false }));
+      }
+    }
   };
 
   // Has the position moved far enough from the one the current options were
@@ -1122,7 +1132,9 @@ export class AppLogic extends Component {
       ...p,
       // Clearing the query here is what stops the panel reopening when the
       // user comes back via "Change".
-      pick: () => this.chooseDest(p),
+      pick: () => s.searchTarget === "origin"
+        ? this.setState({ routeOrigin: { ...p, id: p.id || "custom" }, searchTarget: "dest", query: "", searchOpen: false, liveResults: null, searchPending: false, trips: { key: null, options: [], pending: false, error: null } })
+        : this.chooseDest(p),
     }));
 
     const dest = s.dest;
@@ -1284,20 +1296,28 @@ export class AppLogic extends Component {
       isMap: sc === "map", mapSearch: !s.dest, mapRoute: !!s.dest,
       // The panel stays shut until there is a real query to answer — focusing
       // the field no longer surfaces the built-in place list.
-      showResults: !s.dest && q.length >= 2,
+      showResults: (!s.dest || s.searchTarget === "origin") && q.length >= 2,
       // Your own history, shown only when you open an empty search box — it
       // disappears the moment you start typing.
-      showRecents: !s.dest && !!s.searchOpen && q.length < 2 && (s.recents || []).length > 0,
+      showRecents: s.searchTarget === "dest" && !s.dest && !!s.searchOpen && q.length < 2 && (s.recents || []).length > 0,
       recents: (s.recents || []).map((r) => ({
         name: r.name,
         detail: r.detail || "Recent destination",
         pick: () => this.chooseDest({ name: r.name, detail: r.detail || "", ll: r.ll, kind: r.kind || "Recent" }),
       })),
       clearRecents: () => this.setState({ recents: clearSearches() }),
-      openSearch: () => this.setState({ searchOpen: true }),
+      openSearch: () => this.setState({ searchOpen: true, searchTarget: "dest" }),
+      openOriginSearch: () => this.setState({
+        searchOpen: true,
+        searchTarget: "origin",
+        query: resolvedOrigin?.name || "",
+        liveResults: null,
+        searchPending: false,
+      }),
       closeSearch: () => { if (this.bt) clearTimeout(this.bt); this.bt = setTimeout(() => this.setState({ searchOpen: false }), 160); },
-      dismissSearch: () => this.setState({ query: "", searchOpen: false, liveResults: null, searchPending: false }),
+      dismissSearch: () => this.setState({ query: "", searchOpen: false, searchTarget: "dest", liveResults: null, searchPending: false }),
       query: s.query,
+      searchTarget: s.searchTarget,
       setQuery: (val) => this.setState({ query: val }),
       clearQuery: () => this.setState({ query: "", liveResults: null, searchPending: false }),
       results,
@@ -1307,13 +1327,9 @@ export class AppLogic extends Component {
       searchError: s.searchError || null,
       searchFooter: "Results from OneMap · Singapore Land Authority",
       routeOriginPlace: s.routeOrigin || null,
-      routeOriginName: resolvedOrigin?.name || "Choose a starting place",
-      routeOriginPlaceholder: resolvedOrigin ? `From · ${resolvedOrigin.name}` : "From · Search a starting place",
-      setRouteOrigin: (place) => this.setState({
-        routeOrigin: place ? { ...place, id: place.id || "custom" } : null,
-        tripRoute: 0,
-        trips: { key: null, options: [], pending: false, error: null },
-      }),
+      routeOriginName: resolvedOrigin?.name || "Current location",
+      routeOriginInput: s.searchTarget === "origin" ? s.query : (resolvedOrigin?.name || "Current location"),
+      searchPlaceholder: s.searchTarget === "origin" ? "Search starting place" : "Search address, stop or area",
       originPresets: [
         {
           id: "location",
