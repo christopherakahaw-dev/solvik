@@ -53,7 +53,7 @@ export function MapScreen({ v }) {
         )}
 
         {v.showRecents && (
-          <div style={{ pointerEvents: "auto", marginTop: -5, borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+          <div style={{ position: "absolute", top: 62, left: 14, right: 14, zIndex: 30, pointerEvents: "auto", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
             <Card tone="plain">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>Recent</div>
@@ -81,7 +81,7 @@ export function MapScreen({ v }) {
         )}
 
         {v.showResults && (
-          <div style={{ pointerEvents: "auto", overflowY: "auto", maxHeight: 560, marginTop: -5, borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+          <div style={{ position: "absolute", top: 62, left: 14, right: 14, zIndex: 30, pointerEvents: "auto", overflowY: "auto", maxHeight: 560, borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
             <Card tone="plain">
               <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>{v.resultsLabel}</div>
               {v.searchPending && (
