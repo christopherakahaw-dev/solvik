@@ -1,25 +1,115 @@
-# CODING AGENTS: READ THIS FIRST
+# Solvik
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+**A Singapore transit companion that tells you when to leave, warns you before
+the crush, and never makes a number up.**
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+Live: <https://app-three-eta-97.vercel.app/> · Source for the app itself:
+[`app/`](app) · Full technical notes: [`app/README.md`](app/README.md)
 
-## What you should do — IMPORTANT
+Plan a journey on a live OneMap map, see every leg of it — how far you walk,
+where you board, how many stops you ride, when the next bus actually leaves —
+then follow it turn by turn. Solvik learns the trips you repeat, works out when
+you need to leave, and tells you when a station on your way is forecast to be
+crowded at the time you'd be standing in it.
 
-**Read the chat transcripts first.** There are 5 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+## What makes it different
 
-**Read `project/Onward.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+**It never invents data.** Every figure comes from OneMap or LTA DataMall. When
+a feed is missing, slow or silent, the app says which one and why — "No 410
+arrivals right now", "LTA publishes no crowd forecast for the stations on this
+trip" — instead of showing a plausible number. The only sample data left is the
+points wallet and the reports feed, and both are labelled *Sample data* on
+screen.
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+**The crowd warning is a join, not a prediction.** LTA publishes a same-day
+forecast in 30-minute intervals per station. Solvik plans your journey, works
+out which interval you'd reach each station in, and reads it. No model, no
+training data, no "risk engine" — and never a claim finer than the feed's own
+resolution: *"Busy at Bishan from 08:30"*, never *"in 15 minutes"*.
 
-## About the design files
+**It learns your commutes from trips you actually took.** Start the same route a
+few mornings running and it appears on the Today tab by itself, with the
+evidence that justified it and an Undo. Four or more journeys, three of them
+finished, consistent days, a 45-minute time spread, seen in the last three
+weeks — a deliberately high bar, because a wrong commute means wrong alerts.
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+**Everything it learns stays on your device.** Only deliberate actions are
+recorded — a route you started, a destination you chose — never a background
+trace of where your phone has been. No endpoint receives any of it, trips older
+than 90 days fall away on their own, and one tap forgets all of it. Your API
+keys stay server-side and never reach the browser.
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+## Try it
 
-## Bundle contents
+```bash
+cd app
+npm install
+npm run dev
+```
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `Commute app UI mockups` project files (HTML prototypes, assets, components)
+Add `ONEMAP_EMAIL` + `ONEMAP_PASSWORD` (or `ONEMAP_TOKEN`) and
+`LTA_ACCOUNT_KEY` to `app/.env` — both free, see
+[`app/.env.example`](app/.env.example). Without them the UI loads and reports
+every panel as unavailable, which is the honest behaviour rather than a
+fallback.
+
+## What's live
+
+| | Source |
+| --- | --- |
+| Journey options, legs, fares, geometry, turn-by-turn steps | OneMap public-transport routing |
+| Next bus times per bus leg, refreshed every 30 s | LTA bus arrivals |
+| Station crowding, now and forecast, and the "Less crowded" ranking | LTA platform crowd density |
+| Service alerts, matched to the lines you use | LTA train service alerts |
+| Nearest stop for a report | LTA bus stops |
+| Where you are, and progress along the route | Browser geolocation |
+| Points, vouchers, nearby reports | **Sample data** — needs an account service neither API provides |
+
+## How it's built
+
+React + Vite, no framework beyond that. The map is Leaflet over OneMap's own
+raster tiles, falling back to OpenStreetMap if they fail.
+
+Ten serverless functions in [`app/api/`](app/api) hold the credentials and do
+the joining work — ranking journeys, attaching crowd levels and bus arrivals to
+the legs that need them, resolving station codes to positions. The browser only
+ever talks to those. `npm run dev` runs them locally too, so the whole thing
+works without deploying anywhere.
+
+The interesting logic is pulled out into pure modules that can be tested without
+a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
+(journeys → a commute), `navProgress.js` (GPS → how far along you are),
+`tripDetail.js` (an itinerary → the step-by-step card). **73 tests** run against
+recorded API responses, so every parser is checked without touching the network.
+
+Two diagnostics ship with it, both safe to paste into an issue because neither
+prints a secret: `/api/diagnostics` reports exactly what OneMap did with a
+routing request, and `/api/coverage` reports how much of the network LTA's crowd
+feed covers — separating LTA's gaps from our own, which is how a bug that lost
+218 of 224 stations got found.
+
+## What it doesn't do
+
+Named here rather than left to be discovered:
+
+- **No accounts and no backend of our own.** Everything is device-local, which
+  is why the points wallet is sample data.
+- **No alerts while the app is closed.** A web page can't be woken without a
+  push subscription server; the app says so rather than implying a push that
+  won't arrive.
+- **No train arrival times.** DataMall publishes crowding for rail, not
+  timings, so rail legs show how busy the platform is instead of a countdown.
+- **Singapore only**, by design — it is built on two Singapore data sources.
+
+## Repository
+
+```
+app/        the application: React front end, serverless API, tests
+project/    the original HTML design prototypes
+chats/      the design conversations they came out of
+```
+
+Solvik was designed in [Claude Design](https://claude.ai/design) as an HTML
+prototype, then implemented for real against live transit APIs — the prototypes
+and the conversations behind them are kept here so the path from design to
+working app is legible.
