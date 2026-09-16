@@ -11,6 +11,7 @@ export function MapScreen({ v }) {
         route={v.routeCoords}
         marker={v.userMarker}
         markerAccuracy={v.userAccuracy}
+        origin={v.routeOriginCoord}
         dest={v.destCoord}
         pin={v.pinCoord}
         savedPlaces={v.savedPlaceMarkers}
@@ -39,7 +40,7 @@ export function MapScreen({ v }) {
               }}
               style={{ flex: 1, minWidth: 0, borderRadius: "var(--radius-pill,999px)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}
             >
-              <SearchField value={v.query} placeholder="Search address, stop or area" icon="search" onChange={v.setQuery} onClear={v.clearQuery} />
+              <SearchField value={v.query} placeholder={v.searchPlaceholder} icon="search" onChange={v.setQuery} onClear={v.clearQuery} />
             </div>
             <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
               <button onClick={v.fcToggleAlerts} aria-label="Alerts" title="Alerts" style={styleText(v.fcBellStyle)}>
@@ -54,7 +55,7 @@ export function MapScreen({ v }) {
         )}
 
         {v.showRecents && (
-          <div style={{ position: "absolute", top: 62, left: 14, right: 14, zIndex: 30, pointerEvents: "auto", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+          <div style={{ position: "absolute", top: 183, left: 14, right: 14, zIndex: 30, pointerEvents: "auto", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
             <Card tone="plain">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>Recent</div>
@@ -82,7 +83,7 @@ export function MapScreen({ v }) {
         )}
 
         {v.showResults && (
-          <div style={{ position: "absolute", top: 62, left: 14, right: 14, zIndex: 30, pointerEvents: "auto", overflowY: "auto", maxHeight: 560, borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+          <div style={{ position: "absolute", top: 183, left: 14, right: 14, zIndex: 30, pointerEvents: "auto", overflowY: "auto", maxHeight: "calc(100vh - 280px)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
             <Card tone="plain">
               <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>{v.resultsLabel}</div>
               {v.searchPending && (
@@ -125,6 +126,33 @@ export function MapScreen({ v }) {
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 12, paddingBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                 <div style={{ minWidth: 0 }}>
+                  <div style={{ width: "min(100%, 360px)", marginBottom: 8 }}>
+                    <SearchField
+                      value={v.routeOriginInput}
+                      placeholder="Current location"
+                      icon="circle-dot"
+                      onChange={v.setQuery}
+                      onClear={v.clearQuery}
+                      onFocus={(e) => {
+                        v.openOriginSearch();
+                        e.target.select();
+                      }}
+                      style={{ height: 44 }}
+                    />
+                    {v.searchTarget === "origin" && v.showResults && (
+                      <Card tone="plain" style={{ marginTop: 6, boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}>
+                        {v.searchPending && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--text-muted)" }}>Searching…</div>}
+                        {!v.searchPending && v.searchError && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--status-fault)" }}>{v.searchError}</div>}
+                        {!v.searchPending && !v.searchError && v.searchEmpty && <div style={{ padding: "8px 0", font: "var(--type-caption)", color: "var(--text-muted)" }}>No starting place found.</div>}
+                        {v.results.map((p, i) => (
+                          <button key={i} onClick={p.pick} style={{ display: "block", width: "100%", padding: "10px 0", textAlign: "left", background: "none", border: 0, borderBottom: "1px solid var(--border-card)", cursor: "pointer" }}>
+                            <div style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>{p.name}</div>
+                            <div style={{ marginTop: 3, font: "var(--type-caption)", color: "var(--text-muted)" }}>{p.detail}</div>
+                          </button>
+                        ))}
+                      </Card>
+                    )}
+                  </div>
                   <div style={{ font: "var(--type-heading)", letterSpacing: "var(--tracking-heading)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.destName}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
                     <Icon name="map-pin" size={14} />
