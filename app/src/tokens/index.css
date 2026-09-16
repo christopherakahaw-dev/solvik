@@ -48,9 +48,9 @@ a:hover { color: var(--text-link-hover); }
 /* The "you are here" dot: a small solid marker with a halo that breathes, so
    it reads at a glance without covering the map under it. */
 @keyframes sv-locate-pulse {
-  0% { transform: scale(.65); opacity: .55; }
-  70% { transform: scale(2.4); opacity: 0; }
-  100% { transform: scale(2.4); opacity: 0; }
+  0% { transform: scale(1); opacity: .55; }
+  70% { transform: scale(2.6); opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
 }
 .sv-locate {
   position: relative;
