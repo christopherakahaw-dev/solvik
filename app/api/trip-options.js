@@ -2,6 +2,8 @@
 // parameters suited to the chosen mode, enriches them with live LTA crowding
 // and accessibility, ranks them by what the mode actually promises, and
 // returns at most three cards in the shape the UI already renders.
+import { serveRecorded } from "./_lib/demo.js";
+import { recordedRoute } from "./_lib/recorded/index.js";
 import { oneMapRoute } from "./_lib/onemap.js";
 import { ltaFetch, crowdLevelFrom } from "./_lib/lta.js";
 import { nextBuses } from "./_lib/arrivals.js";
@@ -209,6 +211,14 @@ export default async function handler(req, res) {
       res.status(200).json({ mode, options: [] });
       return;
     }
+    // Recorded itineraries go through exactly the same mapping as live ones,
+    // so a demo shows the real card, marked as recorded.
+    const recorded = (recordedRoute.plan.itineraries || [])
+      .map((itin) => normalizeItinerary(itin, destName))
+      .filter(Boolean)
+      .slice(0, 3)
+      .map((opt) => ({ ...opt, crowdLevel: opt.crowdLevel || "moderate", note: noteFor(opt) }));
+    if (serveRecorded(res, { mode, options: tagsFor(recorded, spec.tag) })) return;
     res.status(msg.includes("not configured") || msg.includes("credentials") ? 501 : 502).json({ error: msg });
   }
 }

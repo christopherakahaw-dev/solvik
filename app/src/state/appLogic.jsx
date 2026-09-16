@@ -7,7 +7,7 @@ import { getNearestStop } from "../api/stop";
 import { getArrivals } from "../api/arrivals";
 import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { commuteOutlook, outlookCodes } from "../lib/outlook";
-import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary } from "../lib/journeys";
+import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary, seedSampleJourneys } from "../lib/journeys";
 import { inferCommutes, commuteFromPattern, evidenceLine } from "../lib/patterns";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
 import { getForecast } from "../api/forecast";
@@ -44,6 +44,16 @@ const LEAVE_ALERT_LEAD_MINS = 10;
 // service worker here, so nothing is checked while it is closed — the catch-up
 // line on reopening is the honest substitute.
 const ALERT_POLL_MS = 3 * 60 * 1000;
+
+// Demo builds get two extra affordances: recorded answers when a live call
+// fails, and a way to seed the memory. Off unless VITE_DEMO_MODE says so.
+const DEMO_MODE = (() => {
+  try {
+    return String(import.meta.env.VITE_DEMO_MODE || "").toLowerCase() === "1";
+  } catch {
+    return false;
+  }
+})();
 
 // Ported from the Onward.dc.html prototype's embedded view-model script,
 // almost verbatim. Every screen's render() calls `this.renderVals()` and
@@ -423,6 +433,16 @@ export class AppLogic extends Component {
     this.flash("Forgotten · Solvik won't add this again");
   };
 
+  // Demo builds only: four weekday mornings between two real stations, so the
+  // learned-commute card can be shown in seconds rather than over a fortnight.
+  seedSampleTrips = () => {
+    const journeys = seedSampleJourneys(
+      { name: "Yishun", ll: [1.42945, 103.83513] },
+      { name: "Raffles Place", ll: [1.28406, 103.85152] }
+    );
+    this.setState({ journeys }, this.reviewPatterns);
+  };
+
   forgetEverything = () => {
     clearJourneys();
     store(KEYS.patternsRejected, []);
@@ -731,6 +751,8 @@ export class AppLogic extends Component {
       })(),
       memoryNote: "Kept only in this browser and never sent anywhere. Trips older than 90 days fall away on their own.",
       forgetEverything: this.forgetEverything,
+      canSeedTrips: DEMO_MODE && !(s.journeys || []).length,
+      seedSampleTrips: this.seedSampleTrips,
       // The card shown when a commute has just been learned.
       justAdded: (() => {
         const mark = s.justAdded;
@@ -1224,7 +1246,7 @@ export class AppLogic extends Component {
       return getTripOptions(origin, dest.ll, tripMode, dest.name)
       .then((options) => {
         if (this.state.dest !== dest || this.state.tripMode !== tripMode || this.state.trips.key !== key) return;
-        this.setState({ trips: { key, options, pending: false, error: null }, tripRoute: 0 });
+        this.setState({ trips: { key, options, pending: false, error: null, recorded: !!options.recorded }, tripRoute: 0 });
       })
       .catch((err) => {
         if (this.state.dest !== dest || this.state.trips.key !== key) return;
@@ -1913,6 +1935,16 @@ export class AppLogic extends Component {
         bike: "A cycling route end to end, from OneMap's cycling network.",
       }[s.tripMode],
       tripOptions,
+      // Demo mode may serve recorded answers when a live call fails. Whenever
+      // it does, the screen says so — recorded data is never shown as live.
+      recordedNotice: (() => {
+        const sources = [
+          trips.recorded ? "routes" : null,
+          s.crowd && s.crowd.recorded ? "crowding" : null,
+          s.outlook && s.outlook.forecast && s.outlook.forecast.recorded ? "forecast" : null,
+        ].filter(Boolean);
+        return sources.length ? `Recorded ${sources.join(" and ")} — the live service didn't answer` : "";
+      })(),
       tripsPending: !!trips.pending,
       tripsError: trips.error || null,
       // Only after a request has actually resolved — the initial state is not "empty".

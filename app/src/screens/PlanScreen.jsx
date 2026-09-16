@@ -7,6 +7,12 @@ export function PlanScreen({ v }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
       <div style={{ padding: "0 4px" }}>
         <div style={{ font: "var(--weight-heavy) 22px/1.2 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", textWrap: "pretty" }}>{v.planGreeting}</div>
+        {v.recordedNotice && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 7, padding: "6px 10px", borderRadius: 999, background: "var(--sand-100,rgba(32,30,29,.05))", font: "var(--weight-semibold) 11.5px/1.2 var(--font-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
+            <Icon name="circle-dot-dashed" size={13} />
+            {v.recordedNotice}
+          </div>
+        )}
         {v.alertCatchUpLine && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, font: "var(--type-caption)", color: "var(--status-fault)", textWrap: "pretty" }}>
             <Icon name="triangle-alert" size={13} />
@@ -171,13 +177,18 @@ export function PlanScreen({ v }) {
             </div>
           )}
           <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.memoryNote}</div>
-          {v.memoryCount > 0 && (
-            <div style={{ marginTop: 13 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 13, flexWrap: "wrap" }}>
+            {v.memoryCount > 0 && (
               <Button variant="secondary" size="sm" iconLeft="trash-2" onClick={v.forgetEverything}>
                 Forget everything
               </Button>
-            </div>
-          )}
+            )}
+            {v.canSeedTrips && (
+              <Button variant="secondary" size="sm" iconLeft="sparkles" onClick={v.seedSampleTrips}>
+                Add a week of sample trips
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

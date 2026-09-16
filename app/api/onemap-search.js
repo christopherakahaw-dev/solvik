@@ -1,5 +1,7 @@
 // Proxies OneMap's address/postal-code/building search so the browser never
 // talks to onemap.gov.sg directly. Search does not require an API token.
+import { serveRecorded } from "./_lib/demo.js";
+import { recordedSearch } from "./_lib/recorded/index.js";
 import { oneMapSearch } from "./_lib/onemap.js";
 
 export default async function handler(req, res) {
@@ -17,6 +19,11 @@ export default async function handler(req, res) {
     const results = await oneMapSearch(normalized);
     res.status(200).json({ results });
   } catch (err) {
+    // Match the recorded places against what was typed, so a demo search for
+    // "bishan" doesn't answer with the whole list.
+    const needle = normalized.toLowerCase();
+    const matches = recordedSearch.filter((r) => `${r.name} ${r.address}`.toLowerCase().includes(needle));
+    if (serveRecorded(res, { results: matches.length ? matches : recordedSearch })) return;
     res.status(502).json({ error: String(err && err.message ? err.message : err) });
   }
 }

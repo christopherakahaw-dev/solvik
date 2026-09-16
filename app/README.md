@@ -175,6 +175,32 @@ location.reload();
 (Pick days that are actually weekdays — a Sunday trip forms a weekend pattern,
 which is kept separate on purpose.)
 
+### Demo mode
+
+Live data is the point of this app, which makes it fragile in exactly one
+situation: a stage, a short slot, and a network nobody controls. Demo mode
+covers that, and nothing else:
+
+```bash
+DEMO_MODE=1 VITE_DEMO_MODE=1 npm run dev
+```
+
+With it on, a live call that **fails** is answered from recorded data —
+`api/_lib/recorded/`, including the same route recording the parser tests run
+against — instead of an error. Search, route cards with their step breakdown,
+bus arrivals, station crowding, the forecast and service alerts all keep
+working with every upstream unreachable. It also offers a **week of sample
+trips** button in the memory panel, so the learned-commute card can be shown
+in seconds.
+
+Two rules keep it honest:
+
+- **It never pretends.** Every screen showing recorded data says so — *"Recorded
+  routes and crowding — the live service didn't answer"* — and a successful live
+  call is always preferred over the recording.
+- **It is off unless asked for.** Without the flags the app behaves exactly as
+  before: a failed call reports what failed, and nothing is substituted.
+
 ### Saved-place privacy
 
 Home, Work, School, route preferences, watched commutes and recent destinations

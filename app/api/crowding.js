@@ -1,6 +1,8 @@
 // Live platform crowding per MRT station, plus the same-day forecast that
 // drives the time scrubber. Joins LTA's crowd levels (which identify stations
 // only by code) with OneMap coordinates.
+import { serveRecorded } from "./_lib/demo.js";
+import { recordedForecast, recordedStations } from "./_lib/recorded/index.js";
 import { realtimeLevels, forecastIndex, PCT } from "./_lib/crowd.js";
 import { resolveStations } from "./_lib/stations.js";
 
@@ -46,6 +48,16 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
     res.status(200).json({ at, slots, stations });
   } catch (err) {
+    const fc = recordedForecast();
+    const at = q.at && fc.slots.includes(q.at) ? q.at : null;
+    if (serveRecorded(res, {
+      at,
+      slots: fc.slots,
+      stations: recordedStations.map((st) => {
+        const level = (at && fc.series[st.code] && fc.series[st.code][at]) || st.level;
+        return { ...st, level, pct: PCT[level] || PCT.light };
+      }),
+    })) return;
     const msg = String(err && err.message ? err.message : err);
     res.status(msg.includes("not configured") ? 501 : 502).json({ error: msg });
   }

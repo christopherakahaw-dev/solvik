@@ -94,3 +94,33 @@ export function journeySummary(list) {
     lines: [...new Set(started.flatMap((j) => j.legs))].sort(),
   };
 }
+
+// A week of sample trips, for showing the memory working without waiting a
+// week for it. Only reachable in a demo build (VITE_DEMO_MODE), and clearly
+// labelled in the UI — these are made up, which is why they are kept behind a
+// flag rather than offered to everyone.
+export function seedSampleJourneys(from, to, now = Date.now()) {
+  const past = [];
+  const cursor = new Date(now);
+  while (past.length < 4) {
+    cursor.setDate(cursor.getDate() - 1);
+    const weekday = cursor.getDay() !== 0 && cursor.getDay() !== 6;
+    if (!weekday) continue;
+    const at = new Date(cursor);
+    at.setHours(8, 4 + past.length * 3, 0, 0);
+    past.push({
+      id: `sample${past.length}`,
+      at: at.getTime(),
+      fromLL: from.ll,
+      fromName: from.name,
+      toLL: to.ll,
+      toName: to.name,
+      mode: "Comfort",
+      legs: ["NSL"],
+      started: true,
+      completed: true,
+      sample: true,
+    });
+  }
+  return saveJourneys([...past, ...loadJourneys(now)], now);
+}

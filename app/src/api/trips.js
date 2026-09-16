@@ -37,5 +37,5 @@ export async function getTripOptions(from, to, mode, destName) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Couldn't plan this trip");
-  return data.options || [];
+  return Object.assign(data.options || [], { recorded: !!data.recorded });
 }
