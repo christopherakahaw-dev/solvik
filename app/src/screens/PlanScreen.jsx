@@ -1,13 +1,10 @@
 import { Icon, IconButton, Button, SectionLabel, SearchField, Tag } from "../design-system";
 import { styleText } from "../lib/styleText";
+import { PlacePicker } from "../components/PlacePicker";
 
 export function PlanScreen({ v }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
-      <div style={{ padding: "0 4px" }}>
-        <div style={{ font: "var(--weight-heavy) 22px/1.2 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", textWrap: "pretty" }}>{v.planGreeting}</div>
-      </div>
-
       {v.planHasNext && (
         <div style={{ position: "relative", overflow: "hidden", background: "var(--surface-dark)", color: "var(--text-on-dark)", borderRadius: "var(--radius-card)", padding: 20, boxShadow: "var(--shadow-card)", animation: "sv-rise 420ms cubic-bezier(.16,1,.3,1) both" }}>
           <div style={{ position: "absolute", right: -46, top: -58, width: 180, height: 180, borderRadius: 999, background: "rgba(255,255,255,.05)" }} />
@@ -29,46 +26,13 @@ export function PlanScreen({ v }) {
             </Button>
             <button onClick={v.watchNext} style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 16px", height: 44, borderRadius: 999, cursor: "pointer", background: "rgba(255,255,255,.14)", border: "none", color: "var(--text-on-dark)", font: "var(--weight-bold) 14px/1 var(--font-body)" }}>
               <Icon name="bell" size={16} />
-              {v.watchNextLabel}
+              Alert me
             </button>
-            {v.planNextCrowd && (
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "0 13px", height: 44, borderRadius: 999, background: "rgba(255,255,255,.09)", font: "var(--weight-bold) 12px/1 var(--font-body)" }}>
-                <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--crowd-" + (v.planNextCrowdLevel || "light") + ")" }} />
-                {v.planNextCrowd}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {v.fgHas && (
-        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-soft)", color: v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--text-accent)" }}>
-              <Icon name="chart-no-axes-column-increasing" size={15} />
-            </span>
-            <SectionLabel>Network forecast</SectionLabel>
-          </div>
-          <div style={{ font: "var(--weight-heavy) 17px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 11, textWrap: "pretty" }}>{v.fgTitle}</div>
-          {v.fgDetail && (
-            <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.fgDetail}</div>
-          )}
-          {v.fgAlerts.map((a, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 9 }}>
-              <span style={{ flex: "none", padding: "3px 8px", borderRadius: 999, background: "var(--status-warn)", color: "#fff", font: "var(--weight-heavy) 11px/1.3 var(--font-body)" }}>{a.line}</span>
-              <span style={{ font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>{a.title}</span>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "0 13px", height: 44, borderRadius: 999, background: "rgba(255,255,255,.09)", font: "var(--weight-bold) 12px/1 var(--font-body)" }}>
+              <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--crowd-moderate)" }} />
+              {v.planNextCrowd}
             </div>
-          ))}
-          {v.fgCoverage && (
-            <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.fgCoverage}</div>
-          )}
-          {v.fgHasAction && (
-            <div style={{ marginTop: 13 }}>
-              <Button variant="secondary" size="md" iconRight="arrow-right" onClick={v.fgAction}>
-                {v.fgActionLabel}
-              </Button>
-            </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -147,26 +111,23 @@ export function PlacesSheet({ v }) {
               </div>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
-              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>These set the Home and Work chips on every commute, and the routes Solvik watches for you. Each one is looked up on OneMap so your commute can be planned from it.</div>
-              <div>
-                <SectionLabel>Your name · optional</SectionLabel>
-                <div style={{ marginTop: 8 }}>
-                  <SearchField value={v.profileName} placeholder="Just for the greeting" icon="user" onChange={v.setProfileName} />
-                </div>
-              </div>
+              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Selected places stay in this browser. Search text goes to OneMap while you search, and place coordinates only when you request a route. Solvik does not keep the search query.</div>
               {v.placeRows.map((p, i) => (
                 <div key={i}>
                   <SectionLabel>{p.label}</SectionLabel>
                   <div style={{ marginTop: 8 }}>
-                    <SearchField value={p.value} placeholder={p.placeholder} icon={p.icon} onChange={p.set} />
+                    <PlacePicker value={p.value} placeholder={p.placeholder} icon={p.icon} onChange={p.set} />
                   </div>
-                  {p.hint && (
-                    <div style={{ marginTop: 7, font: "var(--type-caption)", color: p.hintTone === "warn" ? "var(--status-fault)" : "var(--text-muted)", textWrap: "pretty" }}>
-                      {p.hint}
-                    </div>
-                  )}
                 </div>
               ))}
+              <button type="button" onClick={v.toggleSavedPlaces} aria-pressed={v.showSavedPlaces} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 13px", cursor: "pointer", textAlign: "left", background: "var(--sand-100)", border: "1px solid var(--border-card)", borderRadius: "var(--radius-card)", color: "var(--text-body)" }}>
+                <Icon name={v.showSavedPlaces ? "eye" : "eye-off"} size={17} />
+                <span style={{ flex: 1, font: "var(--type-body-strong)" }}>Show saved places on the map</span>
+                <span style={{ font: "var(--type-caption)", color: "var(--text-muted)" }}>{v.showSavedPlaces ? "On" : "Off"}</span>
+              </button>
+              <Button variant="ghost" size="md" fullWidth iconLeft="trash-2" onClick={v.clearAllData}>
+                Erase all data from this device
+              </Button>
             </div>
             <div style={{ flex: "none", paddingTop: 14 }}>
               <Button size="lg" fullWidth onClick={v.savePlaces}>
@@ -271,13 +232,7 @@ export function AddCommuteSheet({ v }) {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 15px", borderRadius: "var(--radius-card)", background: "var(--accent-soft)" }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: "flex", gap: 6, marginBottom: 2 }}>
-                    {v.addWhenOpts.map((o, i) => (
-                      <button key={i} onClick={o.pick} style={styleText(o.style)}>
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
+                  <div style={{ font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text-muted)" }}>Leave by</div>
                   <div style={{ font: "var(--weight-heavy) 30px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 8 }}>{v.addTime}</div>
                   <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 6, textWrap: "pretty" }}>{v.addArrive}</div>
                 </div>

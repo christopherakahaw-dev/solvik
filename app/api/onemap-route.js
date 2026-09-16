@@ -5,7 +5,8 @@ import { oneMapRoute } from "./_lib/onemap.js";
 // server-side so the OneMap credentials never reach the browser.
 
 export default async function handler(req, res) {
-  const q = req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
+  res.setHeader("Cache-Control", "private, no-store");
+  const q = req.body && typeof req.body === "object" ? req.body : req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
   const { start, end, routeType = "pt", mode = "TRANSIT", date, time, maxWalkDistance, numItineraries } = q;
 
   if (!start || !end) {

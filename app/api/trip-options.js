@@ -155,7 +155,8 @@ async function cycleOption(start, end) {
 }
 
 export default async function handler(req, res) {
-  const q = req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
+  res.setHeader("Cache-Control", "private, no-store");
+  const q = req.body && typeof req.body === "object" ? req.body : req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
   const { from, to, mode = "fast", destName = "", date, time } = q;
   if (!from || !to) {
     res.status(400).json({ error: "Missing from or to (lat,lng)" });
@@ -199,7 +200,6 @@ export default async function handler(req, res) {
     await enrich(normalized);
     const ranked = normalized.sort(spec.rank).slice(0, 3).map((opt) => ({ ...opt, note: noteFor(opt) }));
 
-    res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=60");
     res.status(200).json({ mode, options: tagsFor(ranked, spec.tag) });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);

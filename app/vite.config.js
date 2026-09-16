@@ -25,6 +25,19 @@ function apiDevMiddleware() {
         }
 
         req.query = Object.fromEntries(url.searchParams);
+        if (req.method === 'POST' && String(req.headers['content-type'] || '').includes('application/json')) {
+          try {
+            const chunks = [];
+            for await (const chunk of req) chunks.push(chunk);
+            const body = Buffer.concat(chunks).toString('utf8');
+            req.body = body ? JSON.parse(body) : {};
+          } catch {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+            return;
+          }
+        }
         res.status = (code) => {
           res.statusCode = code;
           return res;

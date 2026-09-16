@@ -5,11 +5,21 @@
 export const KEYS = {
   onboarded: "solvik:onboarded",
   places: "solvik:places",
-  placesExtra: "solvik:placesExtra",
+  preferences: "solvik:preferences",
   commutes: "solvik:commutes",
   searches: "solvik:searches",
   alertsRead: "solvik:alertsRead",
-  profile: "solvik:profile",
+};
+
+export const PLACE_IDS = ["home", "work", "school"];
+
+export const DEFAULT_PREFERENCES = {
+  stepFree: false,
+  lessWalking: false,
+  avoidCrowds: false,
+  studentFare: false,
+  routineCommute: false,
+  showSavedPlaces: true,
 };
 
 export function loadStored(key, fallback) {
@@ -29,6 +39,78 @@ export function store(key, value) {
   } catch {
     // Out of quota or storage denied; the session still works.
   }
+}
+
+function validCoordinates(value) {
+  return Array.isArray(value) && value.length >= 2 && Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]));
+}
+
+// Saved places are deliberately small, provider-neutral records. Search text
+// is never retained; only the result the user explicitly selected is saved.
+export function normalizeSavedPlace(value, id) {
+  if (!value) return null;
+
+  // Version 1 saved only free-form strings. Keep the label so the user does
+  // not lose it, but do not guess coordinates or draw a potentially wrong
+  // home marker until they verify it through search.
+  if (typeof value === "string") {
+    const name = value.trim();
+    return name ? { id, name, address: name, postal: null, ll: null, source: "legacy", verified: false } : null;
+  }
+
+  if (typeof value !== "object") return null;
+  const name = String(value.name || value.label || value.address || "").trim();
+  if (!name) return null;
+  const ll = validCoordinates(value.ll) ? [Number(value.ll[0]), Number(value.ll[1])] : null;
+  return {
+    id,
+    name,
+    address: String(value.address || value.detail || name).trim(),
+    postal: value.postal ? String(value.postal) : null,
+    ll,
+    source: value.source === "onemap" && ll ? "onemap" : "legacy",
+    verified: value.source === "onemap" && !!ll,
+    updatedAt: Number.isFinite(Number(value.updatedAt)) ? Number(value.updatedAt) : undefined,
+  };
+}
+
+export function loadSavedPlaces() {
+  const raw = loadStored(KEYS.places, {});
+  const source = raw && raw.version === 2 && raw.places ? raw.places : {
+    home: raw && raw.plHome,
+    work: raw && raw.plWork,
+    school: raw && raw.plSchool,
+  };
+  return Object.fromEntries(PLACE_IDS.map((id) => [id, normalizeSavedPlace(source && source[id], id)]));
+}
+
+export function saveSavedPlaces(places) {
+  const normalized = Object.fromEntries(PLACE_IDS.map((id) => [id, normalizeSavedPlace(places && places[id], id)]));
+  store(KEYS.places, { version: 2, places: normalized });
+  return normalized;
+}
+
+export function savedPlaceDetail(place) {
+  if (!place) return "";
+  return [place.address || place.name, place.postal].filter(Boolean).join(" · ");
+}
+
+export function loadPreferences() {
+  const raw = loadStored(KEYS.preferences, {});
+  return Object.fromEntries(
+    Object.entries(DEFAULT_PREFERENCES).map(([key, fallback]) => [key, typeof raw?.[key] === "boolean" ? raw[key] : fallback])
+  );
+}
+
+export function clearAllUserData() {
+  if (typeof localStorage === "undefined") return;
+  Object.values(KEYS).forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Storage may be blocked. Clearing what is available is still useful.
+    }
+  });
 }
 
 const MAX_SEARCHES = 8;
@@ -83,56 +165,4 @@ export function alertId(item) {
   let hash = 5381;
   for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
   return `a${hash.toString(36)}`;
-}
-
-const PLACE_KEYS = ["plHome", "plWork", "plSchool"];
-
-// Your places used to be plain text. They now carry a coordinate too, because
-// a commute without one can't be routed — and without a route there are no
-// stations, and without stations there is no forecast. Old saves are migrated
-// on read rather than thrown away; the coordinate fills in when it geocodes.
-export function loadPlaces() {
-  const raw = loadStored(KEYS.places, {});
-  const out = {};
-  PLACE_KEYS.forEach((key) => {
-    const value = raw && raw[key];
-    if (typeof value === "string") out[key] = { text: value, ll: null };
-    else if (value && typeof value === "object") out[key] = { text: value.text || "", ll: Array.isArray(value.ll) ? value.ll : null };
-    else out[key] = { text: "", ll: null };
-  });
-  return out;
-}
-
-export function savePlaces(places) {
-  const out = {};
-  PLACE_KEYS.forEach((key) => {
-    const value = (places && places[key]) || { text: "", ll: null };
-    out[key] = { text: value.text || "", ll: Array.isArray(value.ll) ? value.ll : null };
-  });
-  store(KEYS.places, out);
-  return out;
-}
-
-// Places searched for inside the Add-a-commute sheet. These always had
-// coordinates; they just never survived a reload.
-export function loadPlacesExtra() {
-  return loadStored(KEYS.placesExtra, []).filter((p) => p && p.id && Array.isArray(p.ll));
-}
-
-export function savePlacesExtra(list) {
-  const out = (list || []).filter((p) => p && p.id && Array.isArray(p.ll)).slice(-6);
-  store(KEYS.placesExtra, out);
-  return out;
-}
-
-// Just a name for the greeting, if you want one. Nothing else is stored.
-export function loadProfile() {
-  const raw = loadStored(KEYS.profile, {});
-  return { name: (raw && typeof raw.name === "string" ? raw.name : "").slice(0, 40) };
-}
-
-export function saveProfile(profile) {
-  const out = { name: ((profile && profile.name) || "").slice(0, 40) };
-  store(KEYS.profile, out);
-  return out;
 }
