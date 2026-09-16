@@ -5,6 +5,7 @@ import {
   alertId,
   clearAllUserData,
   loadSavedPlaces,
+  loadStored,
   normalizeSavedPlace,
   saveSavedPlaces,
 } from "../src/lib/storage.js";
@@ -28,6 +29,26 @@ test("alert ids remain stable when the feed timestamp changes", () => {
     time: "09:00",
   };
   assert.equal(alertId(base), alertId({ ...base, time: "09:30" }));
+});
+
+test("invalid coordinates cannot become a verified saved place", () => {
+  for (const ll of [[null, null], ["", ""], [91, 103], [1, 181], ["bad", 103]]) {
+    const place = normalizeSavedPlace({ name: "Invalid", source: "onemap", ll }, "home");
+    assert.equal(place.verified, false);
+    assert.equal(place.ll, null);
+  }
+});
+
+test("malformed stored collections fall back without crashing the app", () => {
+  const previous = globalThis.localStorage;
+  globalThis.localStorage = memoryStorage({ [KEYS.searches]: "{}", [KEYS.journeys]: "null" });
+  try {
+    assert.deepEqual(loadStored(KEYS.searches, []), []);
+    assert.deepEqual(loadStored(KEYS.journeys, []), []);
+  } finally {
+    if (previous === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous;
+  }
 });
 
 test("legacy place strings remain visible but are not treated as verified coordinates", () => {

@@ -110,6 +110,7 @@ async function enrich(options) {
 }
 
 function noteFor(opt) {
+  if (opt.walkOnly) return "OneMap returned walking only for this departure. Try another departure time or check transit service hours.";
   const bits = [];
   bits.push(opt.transfers === 0 ? "No transfers" : `${opt.transfers} transfer${opt.transfers === 1 ? "" : "s"}`);
   if (opt.walkSecs) bits.push(`${Math.round(opt.walkSecs / 60)} min on foot`);
@@ -123,6 +124,7 @@ function tagsFor(options, modeTag) {
   const fastest = options.reduce((a, b) => (a.mins <= b.mins ? a : b), options[0]);
   return options.map((opt, i) => {
     let tag = i === 0 ? modeTag : opt === fastest ? "Fastest" : opt === cheapest ? "Cheapest" : opt.transfers === 0 ? "Direct" : "Alternative";
+    if (opt.walkOnly) tag = "Walking only";
     return { ...opt, tag, tagTone: i === 0 ? "soft" : i === 1 ? "outline" : "neutral" };
   });
 }
@@ -214,11 +216,11 @@ export default async function handler(req, res) {
     // Recorded itineraries go through exactly the same mapping as live ones,
     // so a demo shows the real card, marked as recorded.
     const recorded = (recordedRoute.plan.itineraries || [])
-      .map((itin) => normalizeItinerary(itin, destName))
+      .map((itin) => normalizeItinerary(itin, ""))
       .filter(Boolean)
       .slice(0, 3)
-      .map((opt) => ({ ...opt, crowdLevel: opt.crowdLevel || "moderate", note: noteFor(opt) }));
-    if (serveRecorded(res, { mode, options: tagsFor(recorded, spec.tag) })) return;
+      .map((opt) => ({ ...opt, recorded: true, tag: "Recorded example", note: "Sample itinerary from a different journey. Preview only; not directions to your destination." }));
+    if (!spec.cycle && serveRecorded(res, { mode, options: recorded })) return;
     res.status(msg.includes("not configured") || msg.includes("credentials") ? 501 : 502).json({ error: msg });
   }
 }

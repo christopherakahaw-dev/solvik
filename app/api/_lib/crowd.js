@@ -11,6 +11,14 @@ export const FORECAST = ["PCDForecast", "PlatformCrowdDensityForecast"];
 
 export const PCT = { light: 35, moderate: 65, busy: 92 };
 
+// A missing forecast is unknown, never today's live level relabelled as future.
+export function stationsAtForecast(stations, byCode, at) {
+  return stations.map((station) => {
+    const level = byCode.get(station.code)?.[at] || null;
+    return { ...station, level, pct: level ? PCT[level] : null };
+  });
+}
+
 const REALTIME_TTL_MS = 60_000;
 const FORECAST_TTL_MS = 10 * 60_000;
 

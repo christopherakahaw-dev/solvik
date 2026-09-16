@@ -2,6 +2,8 @@
 // Storage can be unavailable (private mode, blocked site data), so a failure to
 // read or write is never allowed to take the session down with it.
 
+import { addressDetail } from "./display.js";
+
 export const KEYS = {
   onboarded: "solvik:onboarded",
   places: "solvik:places",
@@ -28,18 +30,20 @@ export const DEFAULT_PREFERENCES = {
 };
 
 export function loadStored(key, fallback) {
-  if (typeof localStorage === "undefined") return fallback;
   try {
+    if (typeof localStorage === "undefined") return fallback;
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
+    const parsed = raw ? JSON.parse(raw) : fallback;
+    if (Array.isArray(fallback) && !Array.isArray(parsed)) return fallback;
+    return parsed;
   } catch {
     return fallback;
   }
 }
 
 export function store(key, value) {
-  if (typeof localStorage === "undefined") return;
   try {
+    if (typeof localStorage === "undefined") return;
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
     // Out of quota or storage denied; the session still works.
@@ -47,7 +51,7 @@ export function store(key, value) {
 }
 
 function validCoordinates(value) {
-  return Array.isArray(value) && value.length >= 2 && Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]));
+  return Array.isArray(value) && value.length >= 2 && value.slice(0, 2).every((v) => v != null && v !== "" && Number.isFinite(Number(v))) && Math.abs(Number(value[0])) <= 90 && Math.abs(Number(value[1])) <= 180;
 }
 
 // Saved places are deliberately small, provider-neutral records. Search text
@@ -99,7 +103,7 @@ export function saveSavedPlaces(places) {
 
 export function savedPlaceDetail(place) {
   if (!place) return "";
-  return [place.address || place.name, place.postal].filter(Boolean).join(" · ");
+  return addressDetail(place.address || place.name, place.postal);
 }
 
 export function loadPreferences() {

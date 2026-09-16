@@ -2,6 +2,7 @@
 // turn-by-turn steps the UI renders. Kept separate from the endpoint so the
 // mapping can be tested against recorded fixtures without any network.
 import { decodePolyline } from "./polyline.js";
+import { singaporeClock } from "../../src/lib/display.js";
 
 const CROWD_SCORE = { light: 0, moderate: 1, busy: 2 };
 
@@ -17,12 +18,12 @@ export function legLabel(leg) {
 
 export function clockFrom(ms) {
   if (!ms) return "";
-  const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return singaporeClock(ms);
 }
 
 function fareOf(itin) {
   const raw = itin.fare ?? (itin.fareProducts && itin.fareProducts[0] && itin.fareProducts[0].amount);
+  if (raw == null || raw === "") return null;
   const n = Number(raw);
   return isFinite(n) ? n : null;
 }
@@ -71,7 +72,7 @@ export function stepsOf(itin, destName) {
         mode: "WALK",
         icon: last ? "flag" : "footprints",
         title: last ? `Walk to ${destName || toName}` : `Walk to ${toName}`,
-        detail: metres ? `${metres} m on foot` : "Walk",
+        detail: metres ? `${metres >= 1000 ? `${(metres / 1000).toFixed(1)} km` : `${metres} m`} on foot` : "Walk",
         toName: last ? destName || toName : toName,
         metres,
         secs,
