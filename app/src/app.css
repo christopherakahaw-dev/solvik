@@ -41,7 +41,7 @@
 .sv-commute-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sv-commute-time { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
 .sv-commute-time small { color: var(--text-accent); font: var(--weight-heavy) 10px/1 var(--font-body); letter-spacing: .075em; text-transform: uppercase; }
-.sv-commute-time strong { color: var(--text-strong); font: var(--weight-heavy) 24px/1 var(--font-numeric); letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+.sv-commute-time strong { color: var(--text-strong); font: var(--weight-heavy) calc(24px * var(--type-scale)) / 1 var(--font-numeric); letter-spacing: -.025em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sv-commute-route { min-width: 0; display: grid; grid-template-columns: 16px minmax(0,1fr); grid-template-rows: auto 14px auto; column-gap: 9px; align-items: center; }
 .sv-commute-route strong { min-width: 0; color: var(--text-strong); font: var(--weight-bold) 14px/1.25 var(--font-body); overflow-wrap: anywhere; text-wrap: pretty; }
 .sv-commute-route-point { justify-self: center; width: 9px; height: 9px; border: 2px solid var(--accent); border-radius: 50%; background: var(--surface-card); }
@@ -243,7 +243,7 @@
 .sv-next-route-line::after { content: ""; position: absolute; inset: -100% 0 auto; height: 70%; border-radius: inherit; background: var(--accent); animation: sv-route-dot-travel 2.2s ease-in-out infinite; }
 .sv-next-departure { align-self: center; min-width: 112px; padding: 14px 15px; border-radius: 19px; color: var(--text-on-dark); background: var(--surface-dark); box-shadow: 0 10px 24px rgba(32,30,29,.17); }
 .sv-next-departure small { color: rgba(255,255,255,.62); }
-.sv-next-departure time { display: block; margin-top: 7px; color: var(--text-on-dark); font: var(--weight-heavy) 34px/1 var(--font-numeric); letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.sv-next-departure time { display: block; margin-top: 7px; color: var(--text-on-dark); font: var(--weight-heavy) calc(34px * var(--type-scale)) / 1 var(--font-numeric); letter-spacing: -.035em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sv-next-journey-note { display: flex; align-items: flex-start; gap: 7px; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--border-card); color: var(--text-muted); font: var(--type-caption); text-wrap: pretty; }
 .sv-next-journey-note svg { flex: none; margin-top: 1px; color: var(--text-accent); }
 .sv-next-journey-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
@@ -560,4 +560,29 @@
   .sv-account-action-list { grid-template-columns: repeat(3, minmax(0,1fr)); }
   .sv-account-action-list > button { min-height: 70px; }
   .sv-account-action-list > button > svg:last-child { display: none; }
+}
+
+/* Map attribution.
+   OneMap's tiles and OpenStreetMap both require credit wherever the map is
+   shown — for OSM that is an ODbL licence condition, not a style choice. So it
+   has to be legible rather than technically present: lifted clear of the tab
+   bar, allowed to wrap instead of clipping, and readable against the map. */
+.leaflet-control-attribution {
+  max-width: calc(100vw - 20px);
+  margin: 0 6px 6px 0 !important;
+  padding: 3px 7px !important;
+  border-radius: 7px 0 0 0;
+  background: color-mix(in oklch, var(--surface-card) 88%, transparent) !important;
+  color: var(--text-muted) !important;
+  font: var(--weight-medium) 10px/1.35 var(--font-body) !important;
+  text-wrap: pretty;
+}
+.leaflet-control-attribution a {
+  color: var(--text-body) !important;
+  text-decoration: underline;
+}
+/* The tab bar overlays the bottom of the full-height map on every screen that
+   shows one, so the credit is raised clear of it rather than hidden behind. */
+.leaflet-bottom.leaflet-right {
+  bottom: 74px;
 }

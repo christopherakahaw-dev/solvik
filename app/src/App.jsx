@@ -52,7 +52,7 @@ class AuthenticatedApp extends AppLogic {
   render() {
     const v = this.renderVals();
     return (
-      <ViewportShell fluid={!v.isIntro}>
+      <ViewportShell fluid={!v.isIntro} largeText={v.largeText}>
         {v.isIntro && <Intro v={v} />}
         {v.isMap && <MapScreen v={v} />}
         {v.isNav && <NavScreen v={v} />}

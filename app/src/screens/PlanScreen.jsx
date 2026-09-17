@@ -106,6 +106,20 @@ export function PlanScreen({ v }) {
               <span style={{ font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>{a.title}</span>
             </div>
           ))}
+          {/* LTA's own mitigation leads: free boarding is a better answer than
+              anything we can compute, and it needs no caveat. */}
+          {v.mitHas && (
+            <div style={{ marginTop: 12, padding: "12px 13px", borderRadius: 14, background: "var(--crowd-light)", color: "#fff" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <Icon name="bus-front" size={15} />
+                <span style={{ font: "var(--weight-heavy) 11px/1 var(--font-body)", letterSpacing: ".06em", textTransform: "uppercase" }}>Free travel</span>
+              </div>
+              {v.mitLines.map((line, i) => (
+                <div key={i} style={{ font: "var(--type-body-strong)", marginTop: 6, textWrap: "pretty" }}>{line}</div>
+              ))}
+              <div style={{ font: "var(--type-caption)", opacity: 0.82, marginTop: 6, textWrap: "pretty" }}>{v.mitNote}</div>
+            </div>
+          )}
           {v.rrHas && (
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-card)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -133,6 +147,64 @@ export function PlanScreen({ v }) {
             <div style={{ marginTop: 13 }}>
               <Button variant="secondary" size="md" iconRight="arrow-right" onClick={v.fgAction}>
                 {v.fgActionLabel}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {v.wxHas && (
+        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.wxWet ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-soft)", color: v.wxWet ? "var(--crowd-moderate)" : "var(--text-accent)" }}>
+              <Icon name={v.wxWet ? "cloud-rain" : "sun"} size={15} />
+            </span>
+            <SectionLabel>Weather on your way</SectionLabel>
+          </div>
+          <div style={{ font: "var(--weight-heavy) 17px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 11, textWrap: "pretty" }}>{v.wxTitle}</div>
+          {v.wxDetail && (
+            <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.wxDetail}</div>
+          )}
+          {v.roadLine && (
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 9 }}>
+              <span style={{ flex: "none", marginTop: 2, color: "var(--crowd-moderate)" }}><Icon name="traffic-cone" size={14} /></span>
+              <span style={{ font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>
+                {v.roadLine}{v.roadIncident ? ` ${v.roadIncident}` : ""}
+              </span>
+            </div>
+          )}
+          {v.wxNote && (
+            <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.wxNote}</div>
+          )}
+        </div>
+      )}
+
+      {v.pwHas && (
+        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.pwBlocking ? "var(--crowd-busy)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: v.pwBlocking ? "var(--crowd-busy)" : "var(--accent-soft)", color: v.pwBlocking ? "#fff" : "var(--text-accent)" }}>
+              <Icon name="construction" size={15} />
+            </span>
+            <SectionLabel>Planned work</SectionLabel>
+          </div>
+          <div style={{ font: "var(--weight-heavy) 17px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 11, textWrap: "pretty" }}>{v.pwTitle}</div>
+          {v.pwDetail && (
+            <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.pwDetail}</div>
+          )}
+          {v.pwScheduled.map((item, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 9 }}>
+              <span style={{ flex: "none", marginTop: 2, color: "var(--text-accent)" }}><Icon name="calendar-clock" size={14} /></span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)", textWrap: "pretty" }}>{item.label}</span>
+                {item.detail && <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 2, textWrap: "pretty" }}>{item.detail}</span>}
+              </span>
+            </div>
+          ))}
+          <div style={{ font: "var(--type-caption)", color: v.pwBlocking ? "var(--crowd-busy)" : "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.pwNote}</div>
+          {v.pwHasAction && (
+            <div style={{ marginTop: 13 }}>
+              <Button variant="secondary" size="md" iconRight="arrow-right" onClick={v.pwAction}>
+                {v.pwActionLabel}
               </Button>
             </div>
           )}
@@ -204,6 +276,38 @@ export function PlanScreen({ v }) {
               </span>
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Named on screen, because the brief scores whether a submission says who
+          it is for — and because the same disruption genuinely means different
+          things to each of these three. */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
+          <SectionLabel>Tailored for you</SectionLabel>
+        </div>
+        <div style={{ padding: "15px 16px", borderRadius: 20, background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
+          <div style={{ font: "var(--type-body)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.personaBlurb}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+            {v.personaOptions.map((option) => (
+              <button
+                key={option.id}
+                onClick={option.pick}
+                aria-pressed={option.on}
+                style={{
+                  width: "100%", textAlign: "left", cursor: "pointer", padding: "12px 13px", borderRadius: 14,
+                  background: option.on ? "var(--accent-soft)" : "var(--sand-100)",
+                  border: "1.5px solid " + (option.on ? "var(--accent)" : "var(--border-card)"),
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>{option.name}</span>
+                  {option.on && <Icon name="check" size={15} />}
+                </span>
+                <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 4, textWrap: "pretty" }}>{option.example}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

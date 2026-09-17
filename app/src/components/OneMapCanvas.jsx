@@ -1,15 +1,32 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { baseLayerOrder, mapTilerKey } from "../lib/mapBase.js";
 
-// OneMapCanvas — Singapore Land Authority (OneMap) raster tiles instead of
-// OpenStreetMap, with props that update after mount. Falls back to OSM tiles
-// if OneMap tiles fail to load (rate limits, outages) so the canvas never
-// renders blank.
+// The map surface. OpenStreetMap is the base, with OneMap as the fallback —
+// see the tile constants below for why it is that way round — and props that
+// update after mount.
 const isLL = (v) => Array.isArray(v) && v.length >= 2 && isFinite(v[0]) && isFinite(v[1]);
 
-const ONEMAP_TILE_URL = "https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png";
-const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+// Which base renders, and what it falls back to, lives in src/lib/mapBase.js so
+// it can be tested without a browser. Leaflet's attribution control is kept,
+// compacted to a prefix-free corner so it costs almost no screen on a phone.
+const MAPTILER_KEY = (() => {
+  try {
+    return mapTilerKey(import.meta.env);
+  } catch {
+    return "";
+  }
+})();
+
+// A missing key is a deployment mistake whose only symptom is the map quietly
+// not being OpenStreetMap, so say so once where a developer will look.
+if (!MAPTILER_KEY && typeof console !== "undefined") {
+  console.warn(
+    "VITE_MAPTILER_KEY is not set, so the map base is OneMap, not OpenStreetMap. " +
+      "It is read at build time — setting it on the host requires a rebuild to take effect.",
+  );
+}
 
 const SAVED_PLACE_GLYPHS = {
   home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
@@ -25,6 +42,10 @@ export function OneMapCanvas({
   center,
   zoom,
   route,
+  // The route being compared against, drawn faint behind the live one, and the
+  // spans of the live route that are disrupted.
+  compareRoute,
+  affected,
   marker,
   markerAccuracy,
   origin,
@@ -46,6 +67,9 @@ export function OneMapCanvas({
   const safeCenter = isLL(center) ? center : [1.3521, 103.8198];
   const safeZoom = isFinite(zoom) ? zoom : 12;
   const safeRoute = Array.isArray(route) ? route.filter(isLL) : [];
+  // The route being compared against — the original, when an alternative is
+  // being shown — and which spans of the live route are disrupted.
+  const safeCompare = Array.isArray(compareRoute) ? compareRoute.filter(isLL) : [];
   const safeZones = Array.isArray(zones) ? zones.filter((z) => z && isLL(z.ll)) : [];
   const safeSavedPlaces = Array.isArray(savedPlaces)
     ? savedPlaces.filter((place) => place && SAVED_PLACE_GLYPHS[place.id] && isLL(place.ll))
@@ -75,14 +99,25 @@ export function OneMapCanvas({
       zoomDelta: 0.5,
       wheelPxPerZoomLevel: 90,
     });
-    const onemap = L.tileLayer(ONEMAP_TILE_URL, { minZoom: 11, maxZoom: 19 }).addTo(map);
-    let fellBack = false;
-    onemap.on("tileerror", () => {
-      if (fellBack) return;
-      fellBack = true;
-      map.removeLayer(onemap);
-      L.tileLayer(OSM_TILE_URL, { maxZoom: 19 }).addTo(map);
-    });
+    L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
+    const layers = baseLayerOrder(MAPTILER_KEY);
+    let baseIndex = 0;
+    let base = null;
+    // Walk the list on failure. The list only ever holds bases that *can*
+    // authenticate, so running out of it means the tile servers are down or
+    // the network is — not that we have another spelling left to try.
+    const useBase = (index) => {
+      if (base) map.removeLayer(base);
+      const spec = layers[index];
+      base = L.tileLayer(spec.url, spec.options);
+      base.on("tileerror", () => {
+        if (baseIndex !== index || index + 1 >= layers.length) return;
+        baseIndex = index + 1;
+        useBase(baseIndex);
+      });
+      base.addTo(map);
+    };
+    useBase(0);
     map.on("click", (e) => {
       if (clickRef.current) clickRef.current([e.latlng.lat, e.latlng.lng]);
     });
@@ -133,10 +168,35 @@ export function OneMapCanvas({
     layersRef.current = [];
     const green = getComputedStyle(document.documentElement).getPropertyValue("--map-route").trim() || "#437858";
 
+    // The route the commuter would otherwise have taken, drawn faint and behind
+    // the live one. 3.2.3 asks for "the alternative shown against the original,
+    // so the commuter can judge the trade-off rather than being told to trust
+    // the app" — which only works if both are on the map at once.
+    if (safeCompare.length > 1) {
+      const was = L.polyline(safeCompare, {
+        color: getComputedStyle(document.documentElement).getPropertyValue("--text-muted").trim() || "#7a736c",
+        weight: 4, opacity: 0.45, dashArray: "6 8", lineCap: "round",
+      }).addTo(map);
+      layersRef.current.push(was);
+    }
     if (safeRoute.length > 1) {
       const line = L.polyline(safeRoute, { color: green, weight: 5, opacity: 1, dashArray: "1 11", lineCap: "round" }).addTo(map);
       layersRef.current.push(line);
-      if (fitRoute) map.fitBounds(line.getBounds(), { padding: [34, 34] });
+
+      // The affected stretch, drawn over the route in the disruption colour.
+      // Same requirement: "the affected portion clearly distinguished from the
+      // unaffected portion". Colour alone would not be enough on a bright
+      // platform, so it is also twice the weight.
+      const fault = getComputedStyle(document.documentElement).getPropertyValue("--crowd-busy").trim() || "#b4483c";
+      (Array.isArray(affected) ? affected : []).forEach((span) => {
+        const slice = safeRoute.slice(Math.max(0, span.from | 0), Math.min(safeRoute.length, (span.to | 0) + 1));
+        if (slice.length < 2) return;
+        const hit = L.polyline(slice, { color: fault, weight: 9, opacity: 0.85, lineCap: "round" }).addTo(map);
+        layersRef.current.push(hit);
+      });
+
+      const bounds = safeCompare.length > 1 ? line.getBounds().extend(L.latLngBounds(safeCompare)) : line.getBounds();
+      if (fitRoute) map.fitBounds(bounds, { padding: [34, 34] });
     }
     if (isLL(marker)) {
       // GPS accuracy ring, drawn under the position dot — context, not the
@@ -247,7 +307,7 @@ export function OneMapCanvas({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(safeRoute), JSON.stringify(marker), markerAccuracy, JSON.stringify(origin), JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeSavedPlaces), JSON.stringify(safeZones)]);
+  }, [JSON.stringify(safeRoute), JSON.stringify(safeCompare), JSON.stringify(affected), JSON.stringify(marker), markerAccuracy, JSON.stringify(origin), JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeSavedPlaces), JSON.stringify(safeZones)]);
 
   const lastTokenRef = useRef(recenterToken);
   useEffect(() => {

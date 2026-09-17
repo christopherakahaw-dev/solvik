@@ -7,10 +7,19 @@ import { getNearestStop } from "../api/stop";
 import { getArrivals } from "../api/arrivals";
 import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { commuteOutlook, outlookCodes } from "../lib/outlook";
+import { worksLabel, worksDetail, mitigationsFor, roadWorksOnRoute, roadWorkLabel, roadWorkDetail, busChangesOnRoute, busChangeLabel, busChangeDetail } from "../lib/planned";
 import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary, seedSampleJourneys } from "../lib/journeys";
 import { inferCommutes, commuteFromPattern, evidenceLine, staleCommutes, RETIRE_MS } from "../lib/patterns";
 import { canonicalLine, sameLine } from "../lib/lines";
 import { learnedPlaces, linesForPlaces } from "../lib/places";
+import { getPlannedWorks } from "../api/planned";
+import { getWeather } from "../api/weather";
+import { getRoadConditions } from "../api/road";
+import { worstBandOn, roadLine, incidentNear } from "../lib/roadConditions";
+import { personaOf, personaList, modeFor, reasonFor, DEFAULT_PERSONA } from "../lib/persona";
+import { forecastAt, nowcastAt, weatherLine, isWet, walkAdjustment } from "../lib/weather";
+import { submitReport, loadReportGroups as fetchReportGroups, loadMyReports as fetchMyReports } from "../api/reports";
+import { groupsFromCounts } from "../lib/confidence";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
 import { getForecast } from "../api/forecast";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
@@ -70,7 +79,16 @@ export const CROWD = { light: "var(--crowd-light)", moderate: "var(--crowd-moder
 export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 
 export class AppLogic extends Component {
-  initialPreferences = loadPreferences();
+  initialPreferences = (() => {
+    const prefs = loadPreferences();
+    // Onboarding already asks how someone travels. Reading a persona out of
+    // that beats making them answer the same question twice — they can still
+    // change it on the Today tab.
+    if (!prefs.persona) {
+      prefs.persona = prefs.stepFree ? "stepFree" : prefs.avoidCrowds || prefs.lessWalking ? "flexible" : DEFAULT_PERSONA;
+    }
+    return prefs;
+  })();
   state = {
     savedList: loadStored(COMMUTES_KEY, []),
     savedPlaces: loadSavedPlaces(),
@@ -85,7 +103,14 @@ export class AppLogic extends Component {
       ? (loadStored(ONBOARDED_KEY, false) ? "map" : "intro")
       : (this.props.user?.onboardingComplete ? "map" : "intro"),
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
-    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0, tripCollapsed: true,
+    planned: { works: [], roadWorks: [], busChanges: [], pending: true, error: null },
+    weather: { nowcast: null, outlook: null, pending: true, error: null },
+    road: { bands: [], incidents: [], pending: true, error: null },
+    reportGroups: { groups: [], configured: true, pending: true, error: null },
+    myReports: [],
+    photo: null, cameraOpen: false, reportBusy: false, reportResult: null,
+    navPhoto: null, navCameraOpen: false,
+    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripAvoidStations: null, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0, tripCollapsed: true,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
@@ -294,6 +319,139 @@ export class AppLogic extends Component {
       });
   };
 
+  // Planned works, read once on opening and then left alone: lift maintenance
+  // changes over days, not minutes, so re-asking on the alert poll would be
+  // three requests an hour for an answer that does not move.
+  loadPlanned = () => {
+    getPlannedWorks()
+      .then((data) => this.setState({ planned: { ...data, pending: false, error: null } }))
+      .catch((err) => this.setState({ planned: { works: [], roadWorks: [], busChanges: [], pending: false, error: String(err.message || err) } }));
+  };
+
+  // The planned works that fall on the stations this journey actually passes
+  // through. Matched by station code, not by line: a lift out at Bishan matters
+  // if you go through Bishan, and not otherwise.
+  worksOnRoute(itinerary) {
+    const works = ((this.state.planned || {}).works) || [];
+    if (!itinerary || !works.length) return [];
+    const codes = new Set(outlookCodes([itinerary]).map((c) => String(c).toUpperCase()));
+    return works.filter((w) => codes.has(String(w.stationCode).toUpperCase()));
+  }
+
+  // The station codes LTA is currently naming itself, from either feed. A
+  // commuter report at one of these is not a rumour any more — it is the
+  // official record catching up, which is the strongest thing this app can say
+  // about a report and costs nothing, because both feeds are already fetched.
+  ltaNamedStations() {
+    const works = ((this.state.planned || {}).works || []).map((w) => String(w.stationCode).toUpperCase());
+    const alerts = ((this.state.faults && this.state.faults.items) || []).flatMap((f) => f.stations || []);
+    return [...new Set([...works, ...alerts])];
+  }
+
+  // Read once on opening and every half hour: the nowcast covers two hours and
+  // the outlook is issued a few times a day, so asking more often would be
+  // traffic for an answer that has not moved.
+  loadWeather = () => {
+    getWeather()
+      .then((data) => this.setState({ weather: { ...data, pending: false, error: null } }))
+      .catch((err) => this.setState({ weather: { nowcast: null, outlook: null, pending: false, error: String(err.message || err) } }));
+  };
+
+  // Speed bands move on a five-minute cadence, so this rides the same slow
+  // timer as the weather rather than polling on its own.
+  loadRoad = () => {
+    getRoadConditions()
+      .then((data) => this.setState({ road: { ...data, pending: false, error: null } }))
+      .catch((err) => this.setState({ road: { bands: [], incidents: [], pending: false, error: String(err.message || err) } }));
+  };
+
+  loadReportGroups = () => {
+    fetchReportGroups()
+      .then(({ groups, configured }) => this.setState({ reportGroups: { groups, configured, pending: false, error: null } }))
+      .catch((err) => this.setState({ reportGroups: { groups: [], configured: true, pending: false, error: String(err.message || err) } }));
+    fetchMyReports()
+      .then((myReports) => this.setState({ myReports }))
+      .catch(() => {});
+  };
+
+  // Filing one. Everything the server needs to judge it travels with it: where
+  // the device thinks it is, how sure it is of that, and when the shutter fired.
+  // The photo goes too, and is discarded after the check — it is never stored.
+  submitReportNow = () => {
+    const s = this.state;
+    const stop = s.stop && s.stop.data;
+    const photo = s.photo;
+    if (!stop || !photo || s.reportBusy) return;
+    const kind = s.repType;
+
+    this.setState({ reportBusy: true, reportResult: null });
+    submitReport({
+      kind,
+      stationCode: stop.code,
+      stationName: stop.name,
+      lat: s.userLoc ? s.userLoc[0] : stop.lat,
+      lng: s.userLoc ? s.userLoc[1] : stop.lng,
+      accuracy: s.userAccuracy,
+      fixAt: s.userFixAt,
+      capturedAt: photo.capturedAt,
+      photo: photo.dataUrl,
+    })
+      .then((result) => {
+        // The photo is dropped from state the moment it has been checked. It is
+        // not stored on the server either.
+        this.setState({ reportBusy: false, reportResult: result, photo: null, rep: "done" });
+        this.flash(result.verdict === "accepted" ? `Filed · ${result.points} points pending` : "Not filed");
+        if (result.verdict === "accepted") this.loadReportGroups();
+      })
+      .catch((err) => {
+        // Shown on the result screen, not just flashed: leaving the reporter on
+        // the form with a vanishing toast is how a failure reads as a bug.
+        this.setState({ reportBusy: false, rep: "done", reportResult: { verdict: "rejected", reason: String(err.message || err), checks: [] } });
+      });
+  };
+
+  // Filed from the nav sheet, mid-journey. Same endpoint, same checks; the trip
+  // keeps running either way.
+  submitNavReport = () => {
+    const s = this.state;
+    const photo = s.navPhoto;
+    if (!photo || !s.userLoc || s.reportBusy) return;
+    this.setState({ reportBusy: true });
+    submitReport({
+      kind: s.nrType,
+      stationName: "",
+      lat: s.userLoc[0],
+      lng: s.userLoc[1],
+      accuracy: s.userAccuracy,
+      fixAt: s.userFixAt,
+      capturedAt: photo.capturedAt,
+      photo: photo.dataUrl,
+    })
+      .then((result) => {
+        this.setState({ reportBusy: false, navRepOpen: false, nrType: null, nrSev: null, navPhoto: null });
+        this.flash(result.verdict === "accepted" ? `Filed · ${result.points} points pending` : result.reason || "Not filed");
+        if (result.verdict === "accepted") this.loadReportGroups();
+      })
+      .catch((err) => {
+        this.setState({ reportBusy: false });
+        this.flash(String(err.message || err));
+      });
+  };
+
+  // Road works and bus route changes that fall on this journey's own bus legs.
+  // Matched by the road a stop sits on and by the service ridden — never by
+  // proximity, for the same reason a lift is matched by station.
+  roadEventsOnRoute(itinerary) {
+    const planned = this.state.planned || {};
+    if (!itinerary) return { roadWorks: [], busChanges: [] };
+    const roads = (itinerary.steps || []).flatMap((step) => [step.road, step.fromRoad, step.toRoad]).filter(Boolean);
+    const services = (itinerary.transitLegs || []).filter((l) => l.mode === "BUS").map((l) => l.service);
+    return {
+      roadWorks: roadWorksOnRoute(planned.roadWorks, roads),
+      busChanges: busChangesOnRoute(planned.busChanges, services),
+    };
+  }
+
   // An alert is actionable when it names a rail line you use and there is a
   // commute with a known destination to re-plan towards.
   canRerouteFrom(alert) {
@@ -314,7 +472,7 @@ export class AppLogic extends Component {
       this.flash("No commute to re-plan yet");
       return;
     }
-    this.setState({ screen: "map", fcAlerts: false, tripMode: "reroute", tripAvoid: alert.line });
+    this.setState({ screen: "map", fcAlerts: false, tripMode: "reroute", tripAvoid: alert.line, tripAvoidStations: null });
     this.chooseDest(
       { name: to.label, detail: to.place, ll: to.ll, kind: "Commute" },
       from && from.ll ? { routeOrigin: { id: from.id, name: from.label, address: from.place, ll: from.ll } } : undefined
@@ -593,6 +751,12 @@ export class AppLogic extends Component {
     this.flash("Cleared everything Solvik had learned");
   };
 
+  // "4 min ago" — for report ages, which are always inside the 30-minute window.
+  relTimeOf(at) {
+    const mins = Math.max(0, Math.round((Date.now() - (at || 0)) / 60000));
+    return mins < 1 ? "just now" : `${mins} min`;
+  }
+
   // The Today tab: when to leave, and what the stations on the way are
   // forecast to be like when you get to them. Every number here comes from a
   // real request — the journey from OneMap, the levels from LTA — and where
@@ -608,6 +772,10 @@ export class AppLogic extends Component {
       fgHas: false, fgTitle: "", fgDetail: "", fgTone: "muted", fgCoverage: "", fgAlerts: [],
       fgActionLabel: "View alternatives", fgAction: () => {}, fgHasAction: false,
       rrHas: false, rrPending: false, rrLine: "", rrTitle: "", rrDetail: "", rrCaveat: "", rrAdvice: "",
+      mitHas: false, mitLines: [], mitNote: "",
+      wxHas: false, wxTitle: "", wxDetail: "", wxNote: "", wxWet: false,
+      roadLine: "", roadIncident: "",
+      pwHas: false, pwTitle: "", pwDetail: "", pwNote: "", pwBlocking: false, pwAction: () => {}, pwHasAction: false, pwActionLabel: "", pwScheduled: [],
     };
     if (!next) {
       return {
@@ -643,6 +811,37 @@ export class AppLogic extends Component {
     const worst = view && view.worst;
     const busy = !!(worst && worst.level !== "light");
     const reroute = s.reroute && s.reroute.key ? s.reroute : {};
+    // Planned works on the stations this commute passes through. Step-free is
+    // the whole point of the weighting: a lift out is a note if you can take the
+    // stairs and a blocked journey if you can't, and the commute already says
+    // which of those you are.
+    const works = this.worksOnRoute(itinerary);
+    const roadEvents = this.roadEventsOnRoute(itinerary);
+    const scheduled = [
+      ...roadEvents.roadWorks.map((w) => ({ label: roadWorkLabel(w), detail: roadWorkDetail(w) })),
+      ...roadEvents.busChanges.map((c) => ({ label: busChangeLabel(c), detail: busChangeDetail(c) })),
+    ];
+    // Step-free is the commute's own setting or the persona's — either is a
+    // reason to treat a lift outage as blocking.
+    const stepFree = next.mode === "Step-free" || personaOf((s.routingPreferences || {}).persona).liftOutageBlocks;
+    // What LTA has already activated for this disruption. Station codes are
+    // resolved to names through the crowd feed, which carries both.
+    const stationName = (code) => {
+      const hit = ((s.crowd && s.crowd.stations) || []).find((st) => String(st.code).toUpperCase() === String(code).toUpperCase());
+      return (hit && hit.name) || code;
+    };
+    const mitigations = mitigationsFor(alerts, stationName);
+
+    // Weather at the destination end, at the time you would arrive — the walk
+    // legs are where rain actually costs you. The penalty is stated, never
+    // folded silently into the ETA.
+    const persona = personaOf((s.routingPreferences || {}).persona);
+    const weather = s.weather || {};
+    const arriveAt = view && view.arriveAt ? view.arriveAt : Date.now() + (view ? view.durationMins : 0) * 60000;
+    const wxForecast = forecastAt({ outlook: weather.outlook, ll: t.ll, at: arriveAt });
+    const wxNow = nowcastAt(weather.nowcast, f.ll);
+    const wxWet = !!(wxForecast && isWet(wxForecast.condition));
+    const wxWalk = walkAdjustment({ walkSecs: (itinerary && itinerary.walkSecs) || 0, condition: wxForecast && wxForecast.condition });
     const rrOption = reroute.option || null;
     const rrNone = !!(reroute.avoided && reroute.avoided.none);
     const rrDelta = rrOption && view ? rrOption.mins - view.durationMins : null;
@@ -657,12 +856,12 @@ export class AppLogic extends Component {
       ? `Forecast from LTA for all ${coverage.total} station${coverage.total === 1 ? "" : "s"} on the way.`
       : `Forecast from LTA for ${coverage.covered} of ${coverage.total} stations on the way.`;
 
-    const goToCommute = (mode, avoid = null) => {
+    const goToCommute = (mode, avoid = null, avoidStations = null) => {
       if (!t.ll) {
         this.flash("Search for this place in Your places first");
         return;
       }
-      this.setState({ screen: "map", tripMode: mode, tripAvoid: avoid });
+      this.setState({ screen: "map", tripMode: mode, tripAvoid: avoid, tripAvoidStations: avoidStations });
       // A commute names both ends, so the map is given both. Without the
       // origin it would fall back to your position — or, with none, to saved
       // Home, which on an evening trip home means planning Home → Home.
@@ -703,7 +902,9 @@ export class AppLogic extends Component {
           : "Light all the way"
         : "",
       planNextCrowdLevel: worst ? worst.level : "light",
-      startNext: () => goToCommute(busy ? "quiet" : COMMUTE_MODES[next.mode] || "fast"),
+      // Which of rain and crowding wins is a property of the person, not the
+      // network — Rachel keeps her fast route in the rain, Mdm Lim does not.
+      startNext: () => goToCommute(modeFor(persona.id, { wet: wxWet, busy })),
       watchNext: () => this.armLeaveAlert(view, `${f.label} → ${t.label}`),
       watchNextLabel: s.leaveAlert && s.leaveAlert.key === (outlook.key || "") ? "Alert set" : "Alert me",
 
@@ -781,6 +982,74 @@ export class AppLogic extends Component {
       // disruption is happening, so this is a route that avoids the broken line
       // — not a live-adjusted time. Saying so is the whole point.
       rrCaveat: rrOption ? `${rrOption.mins} min is OneMap's timetable, which doesn't know about the disruption. Expect the alternative to be busier than usual.` : "",
+      // Road conditions on this journey's bus legs. Said only when slow enough
+      // to change a decision, and never converted into minutes — a speed band
+      // covers a segment, not a bus's run.
+      roadLine: (() => {
+        const roads = ((itinerary && itinerary.steps) || []).flatMap((step) => [step.road, step.fromRoad, step.toRoad]).filter(Boolean);
+        return roadLine(worstBandOn((s.road || {}).bands, roads));
+      })(),
+      roadIncident: (() => {
+        const board = ((itinerary && itinerary.transitLegs) || []).find((l) => l.mode === "BUS" && Number.isFinite(l.fromLat));
+        if (!board) return "";
+        const hit = incidentNear((s.road || {}).incidents, [board.fromLat, board.fromLng]);
+        return hit ? hit.message : "";
+      })(),
+
+      // Weather. The brief names rain as something that must change the
+      // recommendation, so this both warns and shifts the mode: a wet walk is
+      // ranked differently, and the card says that is why.
+      wxHas: !!wxForecast,
+      wxWet,
+      wxTitle: wxForecast ? (wxWet ? `${wxForecast.text} when you arrive` : wxForecast.text) : "",
+      wxDetail: wxForecast ? weatherLine({ forecast: wxForecast, walkSecs: (itinerary && itinerary.walkSecs) || 0 }) : "",
+      wxNote: [
+        wxNow && isWet(wxNow.condition) ? `${wxNow.text} at ${wxNow.name} right now.` : "",
+        // Said at the feed's own resolution — periods of hours, never a minute.
+        wxForecast ? "From NEA's 24-hour forecast, published in multi-hour periods." : "",
+      ].filter(Boolean).join(" "),
+
+      // What LTA has activated. Shown above our own alternative because it is
+      // quoted from the feed rather than computed — which is also why it carries
+      // no timetable caveat, unlike the reroute below it.
+      mitHas: mitigations.length > 0,
+      mitLines: mitigations.flatMap((m) => m.lines).slice(0, 3),
+      mitNote: mitigations.length ? "Activated by LTA for this disruption." : "",
+
+      // Planned works — scheduled, not a fault, so stated separately from the
+      // disruption above rather than blended into it.
+      pwHas: works.length > 0 || scheduled.length > 0,
+      // Road works and bus route changes sit alongside lift maintenance: all
+      // three are scheduled rather than faults, and the brief treats that
+      // distinction as the differentiator.
+      pwScheduled: scheduled.slice(0, 3),
+      pwBlocking: stepFree && works.length > 0,
+      pwTitle: works.length === 1
+        ? worksLabel(works[0])
+        : works.length > 1
+          ? `Lifts out at ${works.length} stations on your way`
+          : scheduled.length === 1
+            ? scheduled[0].label
+            : `${scheduled.length} planned changes on your way`,
+      pwDetail: works.length === 1
+        ? worksDetail(works[0])
+        : works.length > 1
+          ? works.map((w) => w.stationName || w.stationCode).join(", ")
+          : scheduled.length === 1
+            ? scheduled[0].detail
+            : "",
+      // The same feed row, weighted by who is reading it. LTA publishes which
+      // lift, never for how long, so neither version claims a duration.
+      pwNote: works.length
+        ? `${reasonFor(persona.id, "lift", { blocking: stepFree })} LTA publishes which lift, not how long it will be out.`
+        : "Scheduled by LTA and published in advance, so it can be planned around.",
+      pwHasAction: !!(works.length && t.ll),
+      pwActionLabel: works.length === 1 ? `Route around ${works[0].stationName || works[0].stationCode}` : "Route around these stations",
+      pwAction: () => {
+        goToCommute(stepFree ? "step" : "reroute", null, works.map((w) => w.stationCode));
+        this.flash(`Avoiding ${works.map((w) => w.stationName || w.stationCode).join(", ")}`);
+      },
+
       // LTA's own message often names bridging buses — better information than
       // we can derive, and already fetched. It arrives as a general service
       // message rather than a per-line segment, so it is looked for across all
@@ -794,6 +1063,9 @@ export class AppLogic extends Component {
   }
 
   addCommuteVals(s) {
+    // The picker lives on this screen, so it resolves the persona here rather
+    // than borrowing todayVals' local.
+    const persona = personaOf((s.routingPreferences || {}).persona);
     const savedPlaces = s.savedPlaces || {};
     const PLACES = this.placeList(s);
     const addSearch = s.addSearchResults || { items: [], pending: false, error: null, query: "" };
@@ -958,6 +1230,26 @@ export class AppLogic extends Component {
       })(),
       memoryNote: "Kept only in this browser and never sent anywhere. Trips older than 90 days fall away on their own.",
       memoryPlacesLabel: "Places it has noticed",
+      // Named on screen rather than inferred silently: the brief scores whether
+      // a submission says who it is for.
+      personaId: persona.id,
+      personaName: persona.name,
+      personaBlurb: persona.blurb,
+      personaOptions: personaList().map((option) => ({
+        id: option.id,
+        name: option.name,
+        blurb: option.blurb,
+        example: option.example,
+        on: option.id === persona.id,
+        pick: () =>
+          this.setState(
+            (st) => ({ routingPreferences: { ...st.routingPreferences, persona: option.id } }),
+            () => {
+              this.flash(`Tailored for: ${option.name}`);
+              this.loadOutlook();
+            }
+          ),
+      })),
       forgetEverything: this.forgetEverything,
       canSeedTrips: DEMO_MODE && !(s.journeys || []).length,
       seedSampleTrips: this.seedSampleTrips,
@@ -1170,7 +1462,7 @@ export class AppLogic extends Component {
       s.dest &&
       !s.routeLocationPending &&
       s.screen !== "nav" &&
-      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.tripAvoid !== prevState.tripAvoid || s.routeOrigin !== prevState.routeOrigin || s.routeOriginDraft !== prevState.routeOriginDraft || s.routeLocationPending !== prevState.routeLocationPending || (!s.routeOriginDraft && this.originDrifted()))
+      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.tripAvoid !== prevState.tripAvoid || s.tripAvoidStations !== prevState.tripAvoidStations || s.routeOrigin !== prevState.routeOrigin || s.routeOriginDraft !== prevState.routeOriginDraft || s.routeLocationPending !== prevState.routeLocationPending || (!s.routeOriginDraft && this.originDrifted()))
     ) {
       this.loadTripOptions();
     }
@@ -1227,6 +1519,15 @@ export class AppLogic extends Component {
     this.loadFaults();
     this.loadCrowding();
     this.loadOutlook();
+    this.loadPlanned();
+    this.loadReportGroups();
+    this.loadWeather();
+    this.loadRoad();
+    this.weatherIv = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      this.loadWeather();
+      this.loadRoad();
+    }, 30 * 60 * 1000);
     // Journeys outlive the session that recorded them, so the pattern has to be
     // re-read on opening too. Without this, the trip that tipped the balance
     // would only be noticed on the next one — and a commute you had already
@@ -1252,6 +1553,7 @@ export class AppLogic extends Component {
     if (this._snapBackT) clearTimeout(this._snapBackT);
     if (this._cloudSyncT) clearTimeout(this._cloudSyncT);
     if (this.outlookIv) clearInterval(this.outlookIv);
+    if (this.weatherIv) clearInterval(this.weatherIv);
     this.stopAlertPoll();
     if (this._leaveCancel) this._leaveCancel();
     this.stopTracking();
@@ -1528,7 +1830,7 @@ export class AppLogic extends Component {
   // Real journey options for the picked destination and mode. No fallback:
   // a failure surfaces in the sheet rather than being papered over.
   loadTripOptions = () => {
-    const { dest, tripMode, tripAvoid } = this.state;
+    const { dest, tripMode, tripAvoid, tripAvoidStations } = this.state;
     if (!dest || !dest.ll) return;
     if (this.state.routeOriginDraft) {
       this.setState({ trips: { key: null, options: [], pending: false, error: "Select a starting place from the search results." } });
@@ -1540,13 +1842,16 @@ export class AppLogic extends Component {
       return;
     }
     const request = (origin) => {
-      const key = `${dest.name}|${tripMode}|${tripAvoid || ""}|${origin.join(",")}`;
+      const key = `${dest.name}|${tripMode}|${tripAvoid || ""}|${(tripAvoidStations || []).join("+")}|${origin.join(",")}`;
       if (this.state.trips.key === key && (this.state.trips.pending || this.state.trips.options.length)) {
         return Promise.resolve();
       }
       this._planOrigin = origin;
-      this.setState({ trips: { key, options: [], pending: true, error: null } });
-      return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid })
+      // Hold on to what was being shown, so an avoid-route can be drawn against
+      // the route it replaced rather than appearing out of nowhere.
+      const before = !tripAvoid && !(tripAvoidStations || []).length ? null : (this.state.trips.options || [])[0] || this.state.tripBefore || null;
+      this.setState({ trips: { key, options: [], pending: true, error: null }, tripBefore: before });
+      return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid, avoidStations: tripAvoidStations })
       .then((options) => {
         if (this.state.dest !== dest || this.state.tripMode !== tripMode || this.state.trips.key !== key) return;
         this.setState({ trips: { key, options, pending: false, error: null, recorded: !!options.recorded, avoided: options.avoided || null }, tripRoute: 0, tripCollapsed: true });
@@ -1584,6 +1889,15 @@ export class AppLogic extends Component {
             seg.StartStation && seg.EndStation ? `Between ${seg.StartStation} and ${seg.EndStation}.` : "",
             seg.Stations ? `Stations: ${seg.Stations}` : "",
           ].filter(Boolean).join(" "),
+          // Kept so a commuter report at one of these stations can be matched
+          // against LTA's own record of the same problem.
+          stations: String(seg.Stations || "").split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
+          // The mitigation is in the feed. When LTA activates free boarding onto
+          // normal buses, or runs a shuttle, this endpoint says where — so there
+          // is nothing to infer and nothing to caveat. Quoted, not computed.
+          freeBus: String(seg.FreePublicBus || "").trim(),
+          freeShuttle: String(seg.FreeMRTShuttle || "").trim(),
+          shuttleDirection: String(seg.MRTShuttleDirection || "").trim(),
         }));
         const messageItems = data && Array.isArray(data.Message)
           ? data.Message.filter((message) => message && message.Content).map((message) => {
@@ -1916,6 +2230,16 @@ export class AppLogic extends Component {
     const sevSet = SEV[s.repType || "crowd"] || SEV.crowd;
     const severities = sevSet.opts.map((label, i) => ({ label, on: s.sev === i, pick: () => this.setState({ sev: i }) }));
 
+    // Reports, grouped and scored against LTA's own feed. Every number the
+    // Report tab shows comes from here, and every one of them is countable.
+    const reportsState = s.reportGroups || { groups: [], pending: false, error: null };
+    const reportGroups = groupsFromCounts(reportsState.groups, { ltaStations: this.ltaNamedStations() });
+    const mine = s.myReports || [];
+    // Confirmed points are spendable; pending ones are not, because the report
+    // they came from has not been corroborated yet.
+    const confirmedPoints = mine.filter((r) => r.state === "confirmed").reduce((sum, r) => sum + (r.points || 0), 0);
+    const pendingPoints = mine.filter((r) => r.state === "pending").reduce((sum, r) => sum + (r.points || 0), 0);
+
     const vouchers = [
       { title: "$1 off at Kopitiam", sub: "400 points · 6 outlets nearby", cost: 400 },
       { title: "$5 EZ-Link top-up", sub: "1,800 points · instant", cost: 1800 },
@@ -2205,6 +2529,20 @@ export class AppLogic extends Component {
       // No destination, no line: the map must not keep drawing the plan you
       // just backed out of.
       routeCoords: dest ? (tripOptions[s.tripRoute] || tripOptions[0] || {}).geometry || [] : [],
+      // When the shown route avoids something, the route it replaced is drawn
+      // faint behind it: 3.2.3 wants the trade-off visible, not asserted.
+      compareRouteCoords: dest && (s.tripAvoid || (s.tripAvoidStations || []).length) ? ((s.tripBefore && s.tripBefore.geometry) || []) : [],
+      // Which spans of the shown route are disrupted. A leg on a line named in
+      // a current alert is drawn in the fault colour over the route.
+      affectedSpans: (() => {
+        const option = dest ? tripOptions[s.tripRoute] || tripOptions[0] : null;
+        if (!option || !option.legSpans) return [];
+        const hit = (label) => ((s.faults && s.faults.items) || []).some((f) => canonicalLine(f.line) && sameLine(label, f.line));
+        return (option.transitLegs || [])
+          .filter((leg) => hit(leg.label))
+          .map((leg) => option.legSpans[leg.legIndex])
+          .filter(Boolean);
+      })(),
       userAccuracy: s.userLoc ? s.userAccuracy : null,
       recenterToken: s.recenterToken || 0,
       locating: !!s.locating,
@@ -2254,12 +2592,12 @@ export class AppLogic extends Component {
       ].map((m) => {
         const on = s.tripMode === m.id;
         return {
-          ...m, pick: () => this.setState({ tripMode: m.id, tripAvoid: null, tripRoute: 0, tripCollapsed: true }),
+          ...m, pick: () => this.setState({ tripMode: m.id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0, tripCollapsed: true }),
           tileStyle: "flex:none;padding:10px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;font:var(--weight-bold) 13px/1 var(--font-body);letter-spacing:-.005em;transition:background .15s,color .15s;" +
             (on ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);"),
         };
       }),
-      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripAvoid: null, tripRoute: 0, tripCollapsed: true }),
+      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0, tripCollapsed: true }),
       tripModeBlurb: {
         fast: "Ranked by total journey time from OneMap.",
         budget: "Ranked by the fare OneMap returns, bus-only options included.",
@@ -2287,14 +2625,17 @@ export class AppLogic extends Component {
       // Nothing left after avoiding a disrupted line is a different answer from
       // no route existing, and the sheet has to say which.
       tripsEmptyNote: trips.avoided && trips.avoided.none
-        ? `Every route OneMap offers still uses ${trips.avoided.lines.join(" and ")}. Nothing here avoids the disruption.`
+        ? `Every route OneMap offers still goes via ${(trips.avoided.all || trips.avoided.lines || []).join(" and ")}. Nothing here avoids it.`
         : "No public transport route found for this trip.",
-      tripsAvoiding: trips.avoided && !trips.avoided.none ? `Avoiding ${trips.avoided.lines.join(" and ")}` : "",
+      tripsAvoiding: trips.avoided && !trips.avoided.none ? `Avoiding ${(trips.avoided.all || trips.avoided.lines || []).join(" and ")}` : "",
       retryTrips: () => { this.setState({ trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions); },
       isNav: sc === "nav",
       endTrip: () => { this.setState({ screen: "map", navTrip: null, navProgress: null, navFixStatus: null }); this.flash("Trip ended"); },
       goReport: () => this.setState({ navRepOpen: true, nrType: null, nrSev: null }),
       ...nav,
+      // Read by the app shell. The step-free persona asks for large text, and
+      // the scale is one token rather than a list of overridden sizes.
+      largeText: personaOf((s.routingPreferences || {}).persona).largeText,
       headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today", account: "Account" }[sc] || "Solvik",
       headerSub: {
         map: "OneMap · Singapore Land Authority",
@@ -2361,8 +2702,8 @@ export class AppLogic extends Component {
       navRepOpen: !!s.navRepOpen,
       navRepPick: !!s.navRepOpen && !s.nrType,
       navRepForm: !!s.navRepOpen && !!s.nrType,
-      closeNavRep: () => { if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto); this.setState({ navRepOpen: false, nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null }); },
-      navRepBack: () => { if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto); this.setState({ nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null }); },
+      closeNavRep: () => this.setState({ navRepOpen: false, nrType: null, nrSev: null, navPhoto: null, navCameraOpen: false }),
+      navRepBack: () => this.setState({ nrType: null, nrSev: null, navPhoto: null, navCameraOpen: false }),
       navRepTypes: rTypes.map((t) => ({
         label: t.label, sub: t.sub, pts: t.pts, icon: t.icon,
         pick: () => this.setState({ nrType: t.id, nrSev: null }),
@@ -2375,23 +2716,18 @@ export class AppLogic extends Component {
         style: "width:100%;text-align:left;padding:12px 14px;border-radius:999px;cursor:pointer;font:var(--weight-bold) 13px/1.3 var(--font-body);" +
           (s.nrSev === i ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);"),
       })),
-      navRepNoPhoto: !s.nrPhoto, navRepHasPhoto: !!s.nrPhoto,
-      navRepPhotoName: s.nrPhotoName || "",
-      navRepThumb: s.nrPhoto ? <img src={s.nrPhoto} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
-      onNavRepPhoto: (e) => {
-        const f = e && e.target && e.target.files && e.target.files[0];
-        if (!f) return;
-        if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto);
-        this.setState({ nrPhoto: URL.createObjectURL(f), nrPhotoName: f.name + " · just now" });
-      },
-      navRepCta: !s.nrPhoto ? "Add a photo to post" : "Post · " + (rTypes.find((t) => t.id === s.nrType) || { pts: 0 }).pts + " points",
-      navRepPost: () => {
-        if (!s.nrPhoto) return;
-        const t = rTypes.find((x) => x.id === s.nrType) || { pts: 0, label: "Report" };
-        URL.revokeObjectURL(s.nrPhoto);
-        this.setState({ navRepOpen: false, nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null, points: s.points + t.pts });
-        this.flash(t.label + " posted · +" + t.pts + " points");
-      },
+      navRepNoPhoto: !s.navPhoto, navRepHasPhoto: !!s.navPhoto,
+      navRepPhotoName: "Taken just now · checked, then discarded",
+      navRepThumb: s.navPhoto ? <img src={s.navPhoto.dataUrl} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
+      // The same camera and the same triage as the Report tab — one path, one
+      // set of checks. The station is left for the server to resolve, because
+      // mid-journey all the app knows is where you are.
+      navCameraOpen: !!s.navCameraOpen,
+      openNavCamera: () => this.setState({ navCameraOpen: true }),
+      closeNavCamera: () => this.setState({ navCameraOpen: false }),
+      onNavCapture: (photo) => this.setState({ navPhoto: photo, navCameraOpen: false }),
+      navRepCta: s.reportBusy ? "Checking…" : !s.navPhoto ? "Take a photo to file" : "File · " + (rTypes.find((t) => t.id === s.nrType) || { pts: 0 }).pts + " points pending",
+      navRepPost: () => this.submitNavReport(),
       locEyebrow: s.stop.data ? "Live at your stop" : s.stop.requested ? (s.stop.error ? "No stop found" : "Finding your stop") : "Location is off",
       locStopName: s.stop.data ? s.stop.data.name : s.stop.error ? "Location unavailable" : s.stop.pending ? "Locating…" : "Use your location",
       locDetail: s.stop.data
@@ -2400,36 +2736,81 @@ export class AppLogic extends Component {
       locRecheckLabel: s.stop.pending ? "Locating" : s.stop.requested ? "Recheck" : "Use location",
       locRecheck: () => this.findNearestStop(),
       reportStopReady: !!s.stop.data,
-      hasPhoto: !!s.photoUrl, noPhoto: !s.photoUrl,
-      photoName: s.photoName || "",
-      photoThumb: s.photoUrl ? <img src={s.photoUrl} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
-      reportCta: s.photoUrl ? "Post report · " + chosen.pts + " points" : "Add a photo to post",
-      onPhoto: (e) => {
-        const f = e && e.target && e.target.files && e.target.files[0];
-        if (!f) return;
-        if (s.photoUrl) URL.revokeObjectURL(s.photoUrl);
-        this.setState({ photoUrl: URL.createObjectURL(f), photoName: f.name + " · just now" });
-        this.flash("Photo attached · faces blurred");
+      // Camera-only: getUserMedia, never a file input. An old or borrowed image
+      // cannot enter the flow because there is no file to choose.
+      cameraOpen: !!s.cameraOpen,
+      openCamera: () => this.setState({ cameraOpen: true }),
+      closeCamera: () => this.setState({ cameraOpen: false }),
+      onCapture: (photo) => {
+        this.setState({ photo, cameraOpen: false });
+        this.flash("Photo taken");
       },
-      clearPhoto: () => { if (s.photoUrl) URL.revokeObjectURL(s.photoUrl); this.setState({ photoUrl: null, photoName: null }); },
-      backToPick: () => { if (s.photoUrl) URL.revokeObjectURL(s.photoUrl); this.setState({ rep: "pick", repType: null, sev: null, photoUrl: null, photoName: null }); },
-      submitReport: () => { if (!s.photoUrl) return; this.setState({ rep: "done", points: s.points + chosen.pts, photoUrl: null, photoName: null }); },
-      recentReports: [
-        { c: CROWD.busy, text: "Packed platform · Bishan", ago: "2 min", votes: 14 },
-        { c: CROWD.moderate, text: "Escalator down · Exit C", ago: "11 min", votes: 6 },
-        { c: CROWD.light, text: "Bus 969 arriving light", ago: "14 min", votes: 3 },
-      ].map((r) => ({
-        ...r,
-        dotStyle: { flex: "none", width: 10, height: 10, borderRadius: 999, background: r.c, boxShadow: "0 0 0 4px color-mix(in oklch, " + r.c + " 18%, transparent)" },
-        confirm: () => { this.setState({ points: s.points + 5 }); this.flash("Confirmed · +5 points"); },
+      hasPhoto: !!s.photo, noPhoto: !s.photo,
+      photoName: s.photo ? "Taken just now · checked, then discarded" : "",
+      photoThumb: s.photo ? <img src={s.photo.dataUrl} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
+      reportBusy: !!s.reportBusy,
+      reportCta: s.reportBusy ? "Checking…" : s.photo ? "File report · " + chosen.pts + " points pending" : "Take a photo to file",
+      clearPhoto: () => this.setState({ photo: null }),
+      backToPick: () => this.setState({ rep: "pick", repType: null, sev: null, photo: null, reportResult: null, cameraOpen: false }),
+      submitReport: this.submitReportNow,
+
+      // What came back from triage. A rejection says which check failed — a
+      // silent one is how you lose the contributor you wanted.
+      reportVerdict: (s.reportResult && s.reportResult.verdict) || null,
+      reportAccepted: !!(s.reportResult && s.reportResult.verdict === "accepted"),
+      reportReason: (s.reportResult && s.reportResult.reason) || "",
+      reportPhotoNote: (s.reportResult && s.reportResult.vision && s.reportResult.vision.reason) || (s.reportResult && s.reportResult.visionNote) || "",
+      reportChecks: ((s.reportResult && s.reportResult.checks) || []).map((c) => ({
+        id: c.id,
+        ok: c.ok,
+        label: { "fresh-fix": "Location is current", "precise-fix": "Position is precise enough", "at-the-place": "You are at the place", "fresh-photo": "Photo taken just now", "not-flooding": "Within your hourly limit" }[c.id] || c.id,
+        detail: c.ok ? "" : c.detail,
       })),
-      points: s.points.toLocaleString(), vouchers,
-      toGold: Math.max(0, 3100 - s.points).toLocaleString(),
-      tierBarStyle: { width: Math.round(Math.max(0, Math.min(1, (s.points - 1000) / 2100)) * 100) + "%", height: "100%", background: "var(--crowd-light)", borderRadius: 999, transition: "width var(--dur-slow) var(--ease-out)" },
+      reportPointsLine: s.reportResult && s.reportResult.verdict === "accepted"
+        // The whole point of the rewards change, said on the screen where it
+        // matters: filing alone earns nothing until someone else agrees.
+        ? `${s.reportResult.points} points pending. They are credited when another commuter reports the same thing, or LTA's own feed confirms it.`
+        : "No points — this report wasn't filed.",
+
+      // Real reports, grouped, with the evidence that justifies each tier.
+      // Nothing here is sample data any more.
+      recentReports: reportGroups.map((group) => ({
+        key: group.key,
+        text: `${group.label} · ${group.stationName}`,
+        tier: group.confidence.label,
+        line: group.confidence.line,
+        ago: this.relTimeOf(group.lastAt),
+        official: group.confidence.official,
+        dotStyle: { flex: "none", width: 10, height: 10, borderRadius: 999, background: group.confidence.official ? CROWD.busy : CROWD.moderate, boxShadow: "0 0 0 4px color-mix(in oklch, " + (group.confidence.official ? CROWD.busy : CROWD.moderate) + " 18%, transparent)" },
+        tierStyle: "font:var(--weight-bold) 10px/1 var(--font-body);letter-spacing:.06em;text-transform:uppercase;padding:5px 9px;border-radius:999px;white-space:nowrap;color:" +
+          (group.confidence.official ? "#fff" : "var(--text-muted)") + ";background:" + (group.confidence.official ? "var(--crowd-busy)" : "var(--sand-200)"),
+      })),
+      reportsPending: !!reportsState.pending,
+      reportsError: reportsState.error || null,
+      reportsEmpty: !reportsState.pending && !reportsState.error && reportGroups.length === 0,
+      reportsNote: reportsState.error
+        ? reportsState.error
+        // "No reports" is a fact worth stating; inventing three to fill the
+        // space is what this list used to do.
+        : "Reports from commuters nearby, live for 30 minutes. Counted by people, not submissions.",
+
+      points: confirmedPoints.toLocaleString(), vouchers,
+      pendingPoints: pendingPoints.toLocaleString(),
+      hasPending: pendingPoints > 0,
+      pendingLine: pendingPoints > 0
+        ? `${pendingPoints.toLocaleString()} points waiting on someone else to report the same thing, or on LTA confirming it.`
+        : "",
+      // Derived from points that are now real, rather than a fixed label.
+      tierName: confirmedPoints >= 3100 ? "Gold tier" : confirmedPoints >= 1000 ? "Silver tier" : "Bronze tier",
+      toGold: Math.max(0, 3100 - confirmedPoints).toLocaleString(),
+      tierBarStyle: { width: Math.round(Math.max(0, Math.min(1, (confirmedPoints - 1000) / 2100)) * 100) + "%", height: "100%", background: "var(--crowd-light)", borderRadius: 999, transition: "width var(--dur-slow) var(--ease-out)" },
+      // Counted from this account's own reports. The old row claimed "94%
+      // verified by others", which was invented and used the one word this
+      // feature must never use.
       pointStats: [
-        { icon: "megaphone", value: "18", label: "Reports this month" },
-        { icon: "badge-check", value: "94%", label: "Verified by others" },
-        { icon: "users", value: "2.1k", label: "Commuters helped" },
+        { icon: "megaphone", value: String(mine.length), label: "Reports you filed" },
+        { icon: "badge-check", value: String(mine.filter((r) => r.state === "confirmed").length), label: "Confirmed by others" },
+        { icon: "hourglass", value: String(mine.filter((r) => r.state === "pending").length), label: "Awaiting confirmation" },
       ],
       ...this.addCommuteVals(s),
     };

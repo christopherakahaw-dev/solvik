@@ -1,9 +1,14 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 
-// Runs the api/*.js serverless functions inside the Vite dev server, so
-// `npm run dev` gives a working full-stack app locally without needing the
-// Vercel CLI. In production these files deploy as real serverless functions.
+// Runs the serverless API inside the Vite dev server, so `npm run dev` gives a
+// working full-stack app locally without needing the Vercel CLI.
+//
+// It loads the same catch-all dispatcher Vercel deploys, rather than reaching
+// into api/_handlers/ itself, so a route missing from the dispatcher's table
+// fails here exactly as it would in production instead of only in deployment.
+const API_DISPATCHER = '/api/[...path].js';
+
 function apiDevMiddleware() {
   return {
     name: 'local-api-functions',
@@ -12,19 +17,22 @@ function apiDevMiddleware() {
         if (!req.url || !req.url.startsWith('/api/')) return next();
 
         const url = new URL(req.url, 'http://localhost');
-        const fnName = url.pathname.replace('/api/', '').split('/')[0];
-        const modPath = `/api/${fnName}.js`;
 
         let mod;
         try {
-          mod = await server.ssrLoadModule(modPath);
+          mod = await server.ssrLoadModule(API_DISPATCHER);
         } catch (err) {
-          res.statusCode = 404;
-          res.end(`No API function at ${modPath}: ${err.message}`);
+          res.statusCode = 500;
+          res.end(`Could not load ${API_DISPATCHER}: ${err.message}`);
           return;
         }
 
-        req.query = Object.fromEntries(url.searchParams);
+        // Vercel hands the catch-all its matched segments as req.query.path;
+        // mirror that so the dispatcher takes the same branch in both places.
+        req.query = {
+          ...Object.fromEntries(url.searchParams),
+          path: url.pathname.replace('/api/', '').split('/').filter(Boolean),
+        };
         if (req.method === 'POST' && String(req.headers['content-type'] || '').includes('application/json')) {
           try {
             const chunks = [];

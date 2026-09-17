@@ -1,10 +1,10 @@
 // Live platform crowding per MRT station, plus the same-day forecast that
 // drives the time scrubber. Joins LTA's crowd levels (which identify stations
 // only by code) with OneMap coordinates.
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedForecast, recordedStations } from "./_lib/recorded/index.js";
-import { realtimeLevels, forecastIndex, PCT, stationsAtForecast } from "./_lib/crowd.js";
-import { resolveStations } from "./_lib/stations.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedForecast, recordedStations } from "../_lib/recorded/index.js";
+import { realtimeLevels, forecastIndex, PCT, stationsAtForecast } from "../_lib/crowd.js";
+import { resolveStations } from "../_lib/stations.js";
 
 let locatedCache = null; // { at, stations } — resolved coordinates, not levels
 const LOCATED_TTL_MS = 60_000;

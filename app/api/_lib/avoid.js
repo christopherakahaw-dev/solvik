@@ -35,3 +35,45 @@ export function withoutLines(options, lines) {
   const kept = (options || []).filter((opt) => !avoid.some((line) => usesLine(opt, line)));
   return { kept, dropped: (options || []).length - kept.length, lines: avoid };
 }
+
+// Does this journey depend on the named station — somewhere you board, alight
+// or change? A station the train merely runs through is not one you are in, and
+// counting it would throw away good routes: a lift being out at Bishan is no
+// reason to refuse a train that passes Bishan without stopping for you. This is
+// the same set stationsAlong() uses for the crowd forecast, for the same reason.
+export function usesStation(option, code) {
+  const want = squash(code);
+  if (!want) return false;
+  const codes = [];
+  (option.transitLegs || []).forEach((leg) => {
+    codes.push(leg.fromStopCode, leg.toStopCode);
+  });
+  (option.steps || []).forEach((step) => {
+    codes.push(step.boardStopCode, step.alightStopCode);
+  });
+  return codes.some((c) => c && squash(c) === want);
+}
+
+// Avoiding a station rather than a whole line. A lift being out at one
+// interchange is no reason to write off every train on that line — it is a
+// reason to find a way that doesn't go through that station.
+export function withoutStations(options, stations) {
+  const avoid = parseAvoid(stations);
+  if (!avoid.length) return { kept: options, dropped: 0, stations: [] };
+  const kept = (options || []).filter((opt) => !avoid.some((code) => usesStation(opt, code)));
+  return { kept, dropped: (options || []).length - kept.length, stations: avoid };
+}
+
+// Both filters in one pass, for a request that names either or both.
+export function withoutAny(options, { lines, stations } = {}) {
+  const byLine = withoutLines(options, lines);
+  const byStation = withoutStations(byLine.kept, stations);
+  const all = [...byLine.lines, ...byStation.stations];
+  return {
+    kept: byStation.kept,
+    dropped: byLine.dropped + byStation.dropped,
+    lines: byLine.lines,
+    stations: byStation.stations,
+    all,
+  };
+}

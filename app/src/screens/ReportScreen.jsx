@@ -1,4 +1,6 @@
 import { Icon, IconButton, Card, SectionLabel, TogglePill, Button } from "../design-system";
+import { CameraCapture } from "../components/CameraCapture";
+import { styleText } from "../lib/styleText";
 
 export function ReportScreen({ v }) {
   return (
@@ -42,23 +44,26 @@ export function ReportScreen({ v }) {
           <Card tone="plain">
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <SectionLabel>Nearby · last 30 min</SectionLabel>
-              <span style={{ marginLeft: "auto", font: "var(--weight-bold) 10px/1 var(--font-body)", letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text-muted)", background: "var(--sand-200)", borderRadius: 999, padding: "5px 9px" }}>
-                Sample data
-              </span>
             </div>
+            <div style={{ font: "var(--type-caption)", color: v.reportsError ? "var(--status-fault)" : "var(--text-muted)", marginTop: 7, textWrap: "pretty" }}>{v.reportsNote}</div>
+            {v.reportsPending && (
+              <div style={{ font: "var(--type-body)", color: "var(--text-muted)", padding: "14px 0" }}>Checking what people are reporting…</div>
+            )}
+            {v.reportsEmpty && (
+              <div style={{ font: "var(--type-body)", color: "var(--text-muted)", padding: "14px 0", textWrap: "pretty" }}>Nobody has reported anything nearby in the last 30 minutes.</div>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 10 }}>
-              {v.recentReports.map((r, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 0", borderTop: "1px solid var(--border-card)" }}>
-                  <div style={r.dotStyle} />
+              {v.recentReports.map((r) => (
+                <div key={r.key} style={{ display: "flex", alignItems: "flex-start", gap: 11, padding: "11px 0", borderTop: "1px solid var(--border-card)" }}>
+                  <div style={{ ...r.dotStyle, marginTop: 5 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ font: "var(--type-body)", color: "var(--text-body)", textWrap: "pretty" }}>{r.text}</div>
-                    <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>
-                      {r.ago} ago · {r.votes} confirmed
-                    </div>
+                    {/* The count and the "not yet confirmed" half, together —
+                        one without the other is how a rumour reads as a notice. */}
+                    <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{r.line}</div>
+                    <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{r.ago} ago</div>
                   </div>
-                  <Button variant="secondary" size="sm" iconLeft="thumbs-up" onClick={r.confirm}>
-                    Still there
-                  </Button>
+                  <span style={styleText(r.tierStyle)}>{r.tier}</span>
                 </div>
               ))}
             </div>
@@ -85,16 +90,22 @@ export function ReportScreen({ v }) {
             </div>
           </Card>
           <Card tone="plain">
-            <SectionLabel>Photo · required</SectionLabel>
-            {v.noPhoto && (
-              <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 9, marginTop: 10, padding: "26px 16px", borderRadius: "var(--radius-card)", border: "1px dashed var(--sand-400)", background: "var(--accent-soft)", cursor: "pointer", textAlign: "center" }}>
-                <input type="file" accept="image/*" capture="environment" onChange={v.onPhoto} style={{ position: "absolute", width: 1, height: 1, opacity: 0 }} />
-                <div style={{ width: 46, height: 46, borderRadius: 999, background: "var(--accent)", color: "var(--text-on-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <SectionLabel>Photo · taken now, not uploaded</SectionLabel>
+            {v.cameraOpen && (
+              <div style={{ marginTop: 10 }}>
+                <CameraCapture onCapture={v.onCapture} onCancel={v.closeCamera} />
+              </div>
+            )}
+            {v.noPhoto && !v.cameraOpen && (
+              <button onClick={v.openCamera} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 9, marginTop: 10, padding: "26px 16px", borderRadius: "var(--radius-card)", border: "1px dashed var(--sand-400)", background: "var(--accent-soft)", cursor: "pointer", textAlign: "center" }}>
+                <span style={{ width: 46, height: 46, borderRadius: 999, background: "var(--accent)", color: "var(--text-on-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Icon name="camera" size={22} />
-                </div>
-                <div style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>Take a photo</div>
-                <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Nearby commuters trust reports with a photo. Faces are blurred automatically.</div>
-              </label>
+                </span>
+                <span style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>Open the camera</span>
+                {/* The old copy said faces were blurred automatically. Nothing
+                    blurred anything, so it says what is true instead. */}
+                <span style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>The photo has to be taken here, now — it can't be chosen from your files. It is checked and then discarded.</span>
+              </button>
             )}
             {v.hasPhoto && (
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10 }}>
@@ -107,25 +118,46 @@ export function ReportScreen({ v }) {
               </div>
             )}
           </Card>
-          <Button size="lg" fullWidth disabled={v.noPhoto} onClick={v.submitReport}>
+          <Button size="lg" fullWidth disabled={v.noPhoto || v.reportBusy} onClick={v.submitReport}>
             {v.reportCta}
           </Button>
-          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textAlign: "center", textWrap: "pretty" }}>Shared anonymously with nearby commuters and LTA.</div>
+          {/* "Anonymously" stopped being true when accounts arrived. */}
+          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textAlign: "center", textWrap: "pretty" }}>Filed under your account, shown to other commuters without your name. Your photo is checked and discarded, never stored.</div>
         </div>
       )}
 
       {v.reportDone && (
-        <div style={{ paddingTop: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, textAlign: "center" }}>
-          <div style={{ width: 84, height: 84, borderRadius: "50%", background: "var(--accent)", color: "var(--text-on-accent)", font: "var(--weight-heavy) 28px/84px var(--font-numeric)", fontVariantNumeric: "tabular-nums" }}>{v.chosenPts}</div>
-          <div style={{ font: "var(--type-title)", letterSpacing: "var(--tracking-title)", color: "var(--text-strong)" }}>Report is live</div>
-          <div style={{ font: "var(--type-body)", color: "var(--text-muted)", maxWidth: 300, textWrap: "pretty" }}>247 commuters heading to Bishan in the next 15 minutes can see it.</div>
-          <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-            <Button size="md" onClick={v.goRewards}>
-              See points
-            </Button>
-            <Button variant="secondary" size="md" onClick={v.backToPick}>
-              Report again
-            </Button>
+        <div style={{ paddingTop: 30, display: "flex", flexDirection: "column", alignItems: "center", gap: 14, textAlign: "center" }}>
+          <div style={{ width: 76, height: 76, borderRadius: "50%", background: v.reportAccepted ? "var(--accent)" : "var(--status-fault)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name={v.reportAccepted ? "check" : "x"} size={34} />
+          </div>
+          <div style={{ font: "var(--type-title)", letterSpacing: "var(--tracking-title)", color: "var(--text-strong)" }}>
+            {v.reportAccepted ? "Filed" : "Not filed"}
+          </div>
+          <div style={{ font: "var(--type-body)", color: "var(--text-muted)", maxWidth: 320, textWrap: "pretty" }}>{v.reportReason}</div>
+          {v.reportPhotoNote && (
+            <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", maxWidth: 320, textWrap: "pretty" }}>Photo check: {v.reportPhotoNote}</div>
+          )}
+          {/* Which checks ran, and which one turned it away. */}
+          {v.reportChecks.length > 0 && (
+            <div style={{ width: "100%", maxWidth: 340, display: "flex", flexDirection: "column", gap: 6, textAlign: "left", padding: "13px 15px", borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
+              {v.reportChecks.map((c) => (
+                <div key={c.id} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+                  <span style={{ flex: "none", color: c.ok ? "var(--crowd-light)" : "var(--status-fault)", marginTop: 1 }}>
+                    <Icon name={c.ok ? "check" : "x"} size={14} />
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>{c.label}</span>
+                    {c.detail && <span style={{ display: "block", font: "var(--type-caption)", color: "var(--status-fault)", marginTop: 2, textWrap: "pretty" }}>{c.detail}</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", maxWidth: 320, textWrap: "pretty" }}>{v.reportPointsLine}</div>
+          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+            <Button size="md" onClick={v.goRewards}>See points</Button>
+            <Button variant="secondary" size="md" onClick={v.backToPick}>Report again</Button>
           </div>
         </div>
       )}

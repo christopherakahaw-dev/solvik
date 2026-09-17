@@ -19,7 +19,8 @@ async function setup(page, places = { home, school }, options = {}) {
   await page.addInitScript(({ places }) => {
     if (!localStorage.getItem("qa:seeded")) {
       localStorage.setItem("sv-auth:guest-session", "1");
-      localStorage.setItem("solvik:onboarded", "1");
+      localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("solvik:onboarded", "1");
       localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places }));
       localStorage.setItem("solvik:searches", JSON.stringify([{ name: "CLARKE QUAY MRT STATION", detail: "10 EU TONG SEN STREET", ll: [1.288, 103.846] }]));
       localStorage.setItem("qa:seeded", "1");
@@ -133,13 +134,17 @@ test("tablet and laptop keep the map full-screen and reveal panels on demand", a
   await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("dialog", { name: "Solvik menu" }).getByRole("button", { name: "Map", exact: true }).click();
 
-  await page.getByRole("button", { name: "Crowding layer on" }).click();
+  const crowdToggle = page.getByRole("button", { name: "Crowding layer off" });
+  await expect(crowdToggle).toBeVisible();
   const pinHint = page.getByText("Tap anywhere to drop a pin");
   await expect(pinHint).toBeVisible();
   const hintBox = await pinHint.boundingBox();
   expect(page.viewportSize().height - hintBox.y - hintBox.height).toBeLessThanOrEqual(36);
   await page.screenshot({ path: info.outputPath("pin-hint.png") });
-  await page.getByRole("button", { name: "Crowding layer off" }).click();
+  await crowdToggle.click();
+  await expect(page.getByRole("button", { name: "Crowding layer on" })).toBeVisible();
+  await expect(page.locator(".sv-crowd-bar")).toBeVisible();
+  await page.getByRole("button", { name: "Crowding layer on" }).click();
 
   const search = page.getByRole("textbox", { name: "Search address, stop or area", exact: true });
   const topbarBefore = await page.locator(".sv-map-topbar").boundingBox();
@@ -461,9 +466,9 @@ test("a learned commute whose trips stopped is retired on opening, and says so",
 
   await expect(page.getByText(/Stopped watching Old home → Old job/)).toBeVisible();
   await page.getByRole("button", { name: "Plan", exact: true }).click();
-  await expect(page.getByRole("button", { name: /Campus → New job/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Home → School/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Old home → Old job/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Edit commute from Campus to New job/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Edit commute from Home to School/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Edit commute from Old home to Old job/ })).toHaveCount(0);
 
   // The retirement is written through, not just hidden for this session.
   await page.reload();
@@ -481,6 +486,7 @@ const busOption = { mins: 52, eta: "09:24", fare: "$2.10", fareValue: 2.1, walk:
 async function disruptedCommute(page, { rerouteBody } = {}) {
   await page.addInitScript(({ home, school }) => {
     if (localStorage.getItem("qa:disrupt")) return;
+    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
@@ -556,6 +562,7 @@ test("two trips to a place is enough to be warned about its line", async ({ page
   await page.addInitScript(({ office }) => {
     if (localStorage.getItem("qa:places")) return;
     localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
     // Two visits on two days, well under the commute bar of four journeys.
@@ -590,5 +597,200 @@ test("two trips to a place is enough to be warned about its line", async ({ page
   await page.getByRole("button", { name: "Map", exact: true }).click();
   await page.getByRole("button", { name: "Alerts" }).click();
   await expect(page.getByText(/You use this line to get to The Office/)).toBeVisible();
+  await noOverflow(page);
+});
+
+// Planned works: scheduled, not a fault, and only worth raising when they fall
+// on a station your own commute passes through.
+// Changes at Bishan — which is what makes a lift there matter. A station the
+// train only runs through is deliberately not a warning.
+const bishanRoute = { mins: 38, eta: "08:38", fare: "$2.20", fareValue: 2.2, walk: "6 min", walkSecs: 360, transfers: 1, tag: "Fastest", geometry: [[1.43, 103.83], [1.28, 103.85]], legSpans: [{ from: 0, to: 1 }], legs: ["NSL", "CCL"],
+  transitLegs: [
+    { legIndex: 0, label: "NSL", mode: "RAIL", service: "NS", fromStopCode: "NS13", toStopCode: "NS17" },
+    { legIndex: 1, label: "CCL", mode: "RAIL", service: "CC", fromStopCode: "CC15", toStopCode: "CC19" },
+  ],
+  steps: [
+    { legIndex: 0, mode: "RAIL", label: "NSL", secs: 900, from: "Yishun", alight: "Bishan", boardStopCode: "NS13", alightStopCode: "NS17", stopCodes: ["NS15", "NS16"] },
+    { legIndex: 1, mode: "RAIL", label: "CCL", secs: 1380, from: "Bishan", alight: "Botanic Gardens", boardStopCode: "CC15", alightStopCode: "CC19", stopCodes: ["CC17"] },
+  ],
+  note: "1 transfer" };
+
+async function plannedWorks(page, { mode = "Comfort" } = {}) {
+  await page.addInitScript(({ mode }) => {
+    if (localStorage.getItem("qa:pw")) return;
+    localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
+      home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },
+      school: { id: "school", name: "Raffles Place", address: "Raffles Place", ll: [1.2841, 103.8515], source: "onemap", verified: true },
+    } }));
+    localStorage.setItem("solvik:commutes", JSON.stringify([{
+      from: "home", to: "school", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], mins: 480, mode, legs: ["NSL"],
+      fromPlace: { id: "home", label: "Yishun", place: "Yishun", ll: [1.4294, 103.835] },
+      toPlace: { id: "school", label: "Raffles Place", place: "Raffles Place", ll: [1.2841, 103.8515] },
+    }]));
+    localStorage.setItem("qa:pw", "1");
+  }, { mode });
+
+  const planned = [];
+  page.on("request", r => { if (r.url().includes("trip-options")) planned.push(r.postDataJSON()); });
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    let response = {};
+    if (path.endsWith("trip-options")) response = { options: [bishanRoute] };
+    else if (path.endsWith("planned")) response = { works: [{ stationCode: "NS17", stationName: "Bishan", line: "NSL", lifts: [{ id: "B1L01", desc: "Exit B street level to concourse" }] }] };
+    else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Plan", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  return planned;
+}
+
+test("a lift out at a station on your way is raised as planned work, not a fault", async ({ page }) => {
+  await plannedWorks(page);
+  await expect(page.getByText("Planned work")).toBeVisible();
+  await expect(page.getByText("Lift out at Bishan")).toBeVisible();
+  await expect(page.getByText("Exit B street level to concourse")).toBeVisible();
+  // For a commute that isn't step-free this is a note, not a blocked journey.
+  await expect(page.getByText(/The trains still run — only the lift is out/)).toBeVisible();
+  await noOverflow(page);
+});
+
+test("the same lift is a blocked journey when the commute is step-free", async ({ page }) => {
+  const planned = await plannedWorks(page, { mode: "Step-free" });
+  await expect(page.getByText(/You travel step-free, so this may block the way through/)).toBeVisible();
+  // And we do not claim to know how long it will be out — LTA doesn't publish that.
+  await expect(page.getByText(/publishes which lift, not how long/)).toBeVisible();
+
+  // Routing around it avoids the station, not the whole line: the trains run.
+  await page.getByRole("button", { name: /Route around Bishan/ }).click();
+  await expect.poll(() => planned.some(b => b && b.avoidStations === "NS17")).toBe(true);
+  expect(planned.some(b => b && b.avoid), "the line itself must not be avoided").toBe(false);
+});
+
+test("a lift out somewhere you never go is not mentioned", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
+      home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },
+      school: { id: "school", name: "Raffles Place", address: "Raffles Place", ll: [1.2841, 103.8515], source: "onemap", verified: true },
+    } }));
+    localStorage.setItem("solvik:commutes", JSON.stringify([{
+      from: "home", to: "school", days: ["Mon"], mins: 480, mode: "Comfort", legs: ["NSL"],
+      fromPlace: { id: "home", label: "Yishun", place: "Yishun", ll: [1.4294, 103.835] },
+      toPlace: { id: "school", label: "Raffles Place", place: "Raffles Place", ll: [1.2841, 103.8515] },
+    }]));
+  });
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    let response = {};
+    if (path.endsWith("trip-options")) response = { options: [bishanRoute] };
+    // Punggol is nowhere near this commute.
+    else if (path.endsWith("planned")) response = { works: [{ stationCode: "PE5", stationName: "Punggol", line: "PLRT", lifts: [{ id: "A1", desc: "Exit A" }] }] };
+    else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(page.getByText(/38 min journey/)).toBeVisible();
+  await expect(page.getByText("Planned work")).toHaveCount(0);
+});
+
+// Reports: camera-only capture, triage before anything is filed, and points that
+// wait on somebody else agreeing.
+async function reportFlow(page, { verdict = "accepted" } = {}) {
+  await page.addInitScript(() => {
+    localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
+    // A camera that exists, so getUserMedia resolves the way it would on a phone.
+    const canvas = document.createElement("canvas");
+    canvas.width = 640; canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    // Keep drawing, or captureStream produces no frames and the video never
+    // reports dimensions.
+    setInterval(() => { ctx.fillStyle = `hsl(${Date.now() % 360},50%,50%)`; ctx.fillRect(0, 0, 640, 480); }, 100);
+    // mediaDevices is a prototype getter in Chromium — plain assignment is
+    // silently dropped.
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: async () => canvas.captureStream(5) },
+    });
+    navigator.geolocation.getCurrentPosition = (ok) => ok({ coords: { latitude: 1.3507, longitude: 103.8481, accuracy: 10 }, timestamp: Date.now() });
+    navigator.geolocation.watchPosition = (ok) => { ok({ coords: { latitude: 1.3507, longitude: 103.8481, accuracy: 10 }, timestamp: Date.now() }); return 1; };
+    navigator.geolocation.clearWatch = () => {};
+  });
+
+  const posted = [];
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    let response = {};
+    if (path.endsWith("/api/report")) {
+      posted.push(route.request().postDataJSON());
+      response = verdict === "accepted"
+        ? { verdict: "accepted", reason: "Checks passed. It needs another commuter or LTA to confirm it.", points: 25, pointsState: "pending", checks: [{ id: "fresh-fix", ok: true }, { id: "at-the-place", ok: true }], vision: { reason: "The photo shows a lift with a notice." } }
+        : { verdict: "rejected", reason: "You appear to be 420 m away. Reports have to be made where the problem is.", points: 0, pointsState: "none", checks: [{ id: "fresh-fix", ok: true }, { id: "at-the-place", ok: false, detail: "You appear to be 420 m away. Reports have to be made where the problem is." }] };
+    } else if (path.endsWith("nearest-stop")) response = { code: "53061", name: "Bishan Stn Exit C", road: "Bishan Rd", lat: 1.3507, lng: 103.8485, distanceM: 30 };
+    else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    else if (path.endsWith("planned")) response = { works: [] };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Report", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Report", exact: true }).click();
+  return posted;
+}
+
+test("a report cannot be filed from a file, only from the camera", async ({ page }) => {
+  await reportFlow(page);
+  await page.getByRole("button", { name: /Use location|Recheck/ }).click();
+  await page.getByText("Escalator or lift down").click();
+
+  // The one assertion this whole feature rests on: there is no file input to use.
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  await expect(page.getByText(/can't be chosen from your files/)).toBeVisible();
+  // And the claim that used to sit here, which nothing did, is gone.
+  await expect(page.getByText(/Faces are blurred/)).toHaveCount(0);
+  await noOverflow(page);
+});
+
+test("a filed report earns points that are pending, not credited", async ({ page }) => {
+  const posted = await reportFlow(page);
+  await page.getByRole("button", { name: /Use location|Recheck/ }).click();
+  await page.getByText("Escalator or lift down").click();
+  await page.getByRole("button", { name: /Open the camera/ }).click();
+  await page.getByRole("button", { name: "Take photo" }).click();
+  await page.getByRole("button", { name: /File report/ }).click();
+
+  await expect(page.getByText("Filed", { exact: true })).toBeVisible();
+  await expect(page.getByText(/points pending/).first()).toBeVisible();
+  await expect(page.getByText(/credited when another commuter reports the same thing, or LTA/)).toBeVisible();
+  // Never the word the model cannot support.
+  await expect(page.getByText(/verified/i)).toHaveCount(0);
+
+  // The shutter time and the fix travel with the report so the server can judge it.
+  expect(posted).toHaveLength(1);
+  expect(posted[0].capturedAt).toBeGreaterThan(0);
+  expect(posted[0].photo.startsWith("data:image/jpeg;base64,")).toBe(true);
+  expect(posted[0].accuracy).toBe(10);
+});
+
+test("a rejected report earns nothing and says which check failed", async ({ page }) => {
+  await reportFlow(page, { verdict: "rejected" });
+  await page.getByRole("button", { name: /Use location|Recheck/ }).click();
+  await page.getByText("Escalator or lift down").click();
+  await page.getByRole("button", { name: /Open the camera/ }).click();
+  await page.getByRole("button", { name: "Take photo" }).click();
+  await page.getByRole("button", { name: /File report/ }).click();
+
+  await expect(page.getByText("Not filed").first()).toBeVisible();
+  await expect(page.getByText(/420 m away/).first()).toBeVisible();
+  await expect(page.getByText(/No points — this report wasn't filed/)).toBeVisible();
   await noOverflow(page);
 });

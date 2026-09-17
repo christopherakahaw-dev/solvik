@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import searchHandler from "../api/onemap-search.js";
-import stopHandler from "../api/nearest-stop.js";
-import deleteAccountHandler from "../api/delete-account.js";
+import searchHandler from "../api/_handlers/onemap-search.js";
+import stopHandler from "../api/_handlers/nearest-stop.js";
+import deleteAccountHandler from "../api/_handlers/delete-account.js";
 
 function responseRecorder() {
   return {

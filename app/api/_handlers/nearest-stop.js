@@ -1,7 +1,7 @@
 // Resolves the bus stop nearest a coordinate, so a report is filed against a
 // real stop. The stop directory itself lives in _lib/busStops.js, shared with
 // the arrivals lookup.
-import { nearestStop } from "./_lib/busStops.js";
+import { nearestStop } from "../_lib/busStops.js";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "private, no-store");

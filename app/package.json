@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "node --import ./test/setup.mjs --test test/*.test.mjs",
     "test:ui": "playwright test",
+    "capture": "playwright test -c scripts/capture-demo.config.js",
     "diagnose": "node scripts/diagnose.mjs",
     "stations": "node scripts/stations.mjs"
   },

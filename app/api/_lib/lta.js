@@ -59,4 +59,6 @@ export function busLoadLevel(load) {
   return null;
 }
 
-export const TRAIN_LINES = ["NSL", "EWL", "CGL", "CCL", "DTL", "NEL", "TEL", "BPL", "SLRT", "PLRT"];
+// The eleven TrainLine values PCDRealTime and PCDForecast accept, verbatim from
+// the brief. CEL was missing, so Circle Line Extension crowding was never read.
+export const TRAIN_LINES = ["NSL", "EWL", "CGL", "CCL", "CEL", "NEL", "DTL", "BPL", "SLRT", "PLRT", "TEL"];

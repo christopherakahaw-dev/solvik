@@ -9,21 +9,26 @@ export function RewardsScreen({ v }) {
         <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 9 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,.14)", borderRadius: 999, padding: "6px 11px", font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".06em", textTransform: "uppercase" }}>
             <Icon name="medal" size={14} />
-            Silver tier
+            {v.tierName}
           </div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,.14)", borderRadius: 999, padding: "6px 11px", font: "var(--weight-bold) 12px/1 var(--font-body)" }}>
-            <Icon name="flame" size={14} />
-            6-day streak
-          </div>
+          {/* A "6-day streak" used to sit here. Nothing counted days. */}
         </div>
         <div style={{ position: "relative", display: "flex", alignItems: "baseline", gap: 9, marginTop: 16 }}>
           <div style={{ font: "var(--weight-heavy) 52px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", letterSpacing: "-.03em" }}>{v.points}</div>
           <div style={{ font: "var(--type-body)", opacity: 0.72 }}>points</div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, font: "var(--weight-bold) 12px/1 var(--font-body)", color: "var(--crowd-light)" }}>
-            <Icon name="trending-up" size={15} />
-            +180 this week
-          </div>
+          {/* Was "+180 this week", which nothing counted. */}
+          {v.hasPending && (
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, font: "var(--weight-bold) 12px/1 var(--font-body)", color: "var(--crowd-moderate)" }}>
+              <Icon name="hourglass" size={15} />
+              {v.pendingPoints} pending
+            </div>
+          )}
         </div>
+        {/* The rule the whole rewards change rests on: filing earns nothing on
+            its own. Said here, not just on the report screen. */}
+        {v.hasPending && (
+          <div style={{ position: "relative", font: "var(--type-caption)", opacity: 0.74, marginTop: 9, textWrap: "pretty" }}>{v.pendingLine}</div>
+        )}
         <div style={{ position: "relative", marginTop: 18 }}>
           <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,.16)", overflow: "hidden" }}>
             <div style={v.tierBarStyle} />
@@ -41,7 +46,9 @@ export function RewardsScreen({ v }) {
           Sample data
         </span>
         <span style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
-          Points and rewards need an account service — not part of LTA or OneMap.
+          {/* Points are counted from your own filed reports now, so the label
+              narrows to what is still illustrative: the catalogue. */}
+          The vouchers below are illustrative — nothing here issues a real one. Your points are counted from reports you actually filed.
         </span>
       </div>
 

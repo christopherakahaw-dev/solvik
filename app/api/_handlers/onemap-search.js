@@ -1,8 +1,8 @@
 // Proxies OneMap's address/postal-code/building search so the browser never
 // talks to onemap.gov.sg directly. Search does not require an API token.
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedSearch } from "./_lib/recorded/index.js";
-import { oneMapSearch } from "./_lib/onemap.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedSearch } from "../_lib/recorded/index.js";
+import { oneMapSearch } from "../_lib/onemap.js";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "private, no-store");

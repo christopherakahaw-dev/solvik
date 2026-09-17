@@ -121,9 +121,19 @@ export function savedPlaceDetail(place) {
 
 export function loadPreferences() {
   const raw = loadStored(KEYS.preferences, {});
-  return Object.fromEntries(
+  const prefs = Object.fromEntries(
     Object.entries(DEFAULT_PREFERENCES).map(([key, fallback]) => [key, typeof raw?.[key] === "boolean" ? raw[key] : fallback])
   );
+  // Persona is the one preference that is not a boolean: which of the three
+  // commuters in the brief this person is. Kept here so it syncs with the rest
+  // of the preferences to the account, rather than being a fourth store.
+  prefs.persona = typeof raw?.persona === "string" ? raw.persona : null;
+  return prefs;
+}
+
+export function savePreferences(prefs) {
+  store(KEYS.preferences, prefs);
+  return prefs;
 }
 
 export function clearAllUserData() {

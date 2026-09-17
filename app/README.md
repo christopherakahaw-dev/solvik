@@ -10,12 +10,12 @@ mobile build, implemented from the `Onward.dc.html` Claude Design handoff
 ## Stack
 
 - **React + Vite** — single-page app, no server-rendering.
-- **Leaflet + OneMap tiles** — the map surface (`src/components/OneMapCanvas.jsx`), falling back to OpenStreetMap tiles if OneMap tiles fail to load.
+- **Leaflet + OpenStreetMap** — the map surface (`src/components/OneMapCanvas.jsx`). OSM is served through MapTiler (`VITE_MAPTILER_KEY`), because the OSM tile policy forbids applications from using `tile.openstreetmap.org`; OneMap's own tiles are the fallback. The ordering and the fallback rule are in `src/lib/mapBase.js` so they can be tested without a browser; MapTiler is only ever in the list when a key exists, because a keyless request to it is a guaranteed 403 and Leaflet asks for a tile per screenful. `VITE_MAPTILER_KEY` is compiled into the bundle at build time, so setting it on a host takes effect on the next deploy, not immediately.
 - **`lucide`** for icons, matching the design system's icon set.
 - **Supabase Auth + Postgres** — verified email/password accounts and optional,
   row-level-secured sync for explicitly saved places, manual commutes and route
   preferences. Live location, searches and learned journeys remain local.
-- **`api/*.js`** — small serverless functions (Vercel Node runtime) that proxy OneMap and LTA DataMall so their credentials never reach the browser, and do the joining work (journey ranking, crowd density to station coordinates) server-side. `npm run dev` runs these locally too (see `vite.config.js`), so the app is fully functional without deploying anywhere.
+- **`api/`** — the server side (Vercel Node runtime), which proxies OneMap and LTA DataMall so their credentials never reach the browser and does the joining work (journey ranking, crowd density to station coordinates) there rather than in the client. `api/[...path].js` is a catch-all that dispatches on the first path segment to one handler per endpoint in `api/_handlers/`, with shared code in `api/_lib/`; both underscore directories are outside Vercel's function scan, so the fifteen endpoints deploy as one function and stay under the free tier's twelve-function cap. `npm run dev` loads the same dispatcher (see `vite.config.js`), so the app is fully functional without deploying anywhere.
 
 ## Getting started
 
@@ -42,8 +42,10 @@ Copy `.env.example` to `.env` and fill in:
   alerts and the nearest-stop lookup.
 - **Supabase** — create a project, copy its URL and publishable key into
   `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, then apply
-  the tracked migrations with `supabase db push`. Set `SUPABASE_URL` and the
-  server-only `SUPABASE_SERVICE_ROLE_KEY` in Vercel to enable account deletion.
+  the tracked migrations with `supabase db push`. Set the server-only
+  `SUPABASE_SERVICE_ROLE_KEY` too — `/api/report` needs it to write past
+  row-level security after triage, and `/api/delete-account` to remove an
+  account.
   Add both the local and deployed app URLs under Authentication redirect URLs.
 
 The locate button uses the browser's own geolocation, which needs no keys but
@@ -79,9 +81,10 @@ Until a fix has placed you on the route, the timetable drives the screen and
 says so. Once your position leads, the clock never silently takes over again:
 losing GPS holds the last reading and shows that instead.
 
-Restart `npm run dev` after editing `.env`. **Both keys are needed for the
-app to be useful**: without them, search, journey planning, crowding and
+Restart `npm run dev` after editing `.env`. **The OneMap and LTA keys are what
+make the app useful**: without them, search, journey planning, crowding and
 alerts all report that they're unavailable rather than showing stand-in data.
+`.env.example` lists every variable, split into required and optional.
 
 ### What's live vs. sample
 
@@ -105,7 +108,9 @@ invented data.
 | Your position | Browser geolocation, only after an explicit location action or during navigation |
 | Trip origin | A searched OneMap place, a verified saved place, or an already-authorised device position |
 | Your places, watched commutes, recent destinations and read alerts | Your own input, saved in the browser |
-| **Points, vouchers, nearby-reports feed** | **Sample data** — an account/social service, which neither API provides. Labelled as such in the UI. |
+| Nearby reports and their corroboration counts | Reports filed through the app by signed-in commuters, checked before they count |
+| Your points | Reports you filed that a second commuter or LTA corroborated |
+| **Vouchers** | **Sample data** — nothing issues a real EZ-Link top-up. Labelled as such in the UI. |
 
 ### The Today tab (leave-by and the crowd outlook)
 
@@ -136,6 +141,54 @@ Trains have no arrival feed — DataMall publishes crowding for rail, not
 timings — so a rail leg shows how busy the platform is rather than a countdown.
 Where bus times are missing, the card says which kind of missing it is (no key,
 unknown stop, nothing running) instead of leaving a gap.
+
+### Reports, and why a photo alone earns nothing
+
+The Report tab used to credit points the moment you tapped post, for any photo,
+with no check — which pays for spam. It now runs a report past two stages before
+it counts for anything.
+
+**The photo has to be taken here, now.** `<input type="file" capture>` is only a
+hint: desktop browsers ignore it and mobile often still offers the gallery.
+`src/components/CameraCapture.jsx` uses `getUserMedia` and a canvas instead, so
+there is no file input in the flow and no older image to choose. A device with no
+camera says it cannot file a report, which is the honest cost of that rule.
+
+**The photo is never stored.** It is posted to `/api/report`, checked, and
+dropped — no bucket, no retention window, no archive of other people's faces.
+What persists is the verdict.
+
+**Two stages of checking**, in this order because the first is free:
+
+1. Deterministic gates — your fix is under a minute old, accurate to 100 m,
+   within 150 m of the place you are reporting, the shutter fired in the last two
+   minutes, and you are under three reports this hour. A failed gate names itself
+   and says what to do.
+2. Claude, asked whether the photo is **consistent** with what was reported —
+   and whether it is a photograph of a screen, which is the cheapest way to fake
+   one. Without `ANTHROPIC_API_KEY` this stage is skipped and the report says so.
+
+Nothing here is ever called **verified**. A model can say an image is consistent
+with a report; it cannot tell a broken lift from a working one with a sign taped
+to it. That distinction is the whole reason the wording is what it is.
+
+**Confidence is a count, not a score.** `src/lib/confidence.js` returns one of
+four tiers, each a fact you could check: *Confirmed by LTA* (their own feed names
+the station), *Multiple reports* (three or more distinct accounts in 30 minutes),
+*Reported*, or *Unconfirmed*. Distinct **accounts**, never submissions — one
+person reporting four times is one person. No percentage is ever shown, and a
+test asserts that.
+
+**Points are pending until someone else agrees.** Filing a report that passes the
+checks earns points marked pending; they are credited when a second commuter
+reports the same thing or LTA's feed confirms it. That is the fix to rewarding
+everyone who submits: the payout depends on something you cannot fake alone.
+
+Reports are the one part of Solvik that deliberately leaves the device — the
+station, your coordinates and your account id, readable by other signed-in
+commuters for 30 minutes. They never see who filed what: the table grants no
+access to the reporter column, because a per-person id across stations is a
+movement trace.
 
 ### What Solvik learns, and how to stop it
 
@@ -188,6 +241,31 @@ commute to be promoted. Each place carries the lines you used to reach it, which
 is what lets an alert say *"You use this line to get to the Office"* rather than
 only naming a line code. Places are derived from the journeys on demand, never
 stored separately, so forgetting the journeys forgets them too.
+
+### Planned works
+
+Faults are only half of what disrupts a journey. `/api/planned` reads LTA's
+`v2/FacilitiesMaintenance` — which, despite the name, is narrower than it
+sounds: **adhoc lift maintenance**, one row per lift, carrying the line, the
+station and a description of which lift is out. There is no public structured
+feed for station closures, early closures or engineering works; those are
+announced in prose. `src/lib/planned.js` is written as a source list so a real
+closures feed slots in beside this one without the client changing.
+
+So the feature is built around the event the data actually supports, and it is a
+sharper one than it first appears:
+
+- A lift is only raised when it is out at a station **you board, alight or
+  change at**. A station the train merely runs through is not one you are in,
+  and warning about it would be noise.
+- If your commute is set to **Step-free**, the same fact is a blocked journey
+  rather than an inconvenience, and the card says so in those words. This is the
+  most literal form of "tailored to the commuter": the identical feed row is a
+  footnote for one person and a blocker for another, and the app knows which.
+- **Route around Bishan** avoids the *station*, not the line — a lift being out
+  is no reason to write off every train on the NSL.
+- It does not claim to know how long the lift will be out, because LTA publishes
+  which lift, not for how long.
 
 ### When a line breaks
 
@@ -242,7 +320,7 @@ situation: a stage, a short slot, and a network nobody controls. Demo mode
 covers that, and nothing else:
 
 ```bash
-DEMO_MODE=1 VITE_DEMO_MODE=1 npm run dev
+VITE_DEMO_MODE=1 npm run dev
 ```
 
 With it on, a live call that **fails** is answered from recorded data —

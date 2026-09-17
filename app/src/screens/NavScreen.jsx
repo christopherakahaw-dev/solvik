@@ -2,6 +2,7 @@ import { Icon, IconButton, Button, SectionLabel } from "../design-system";
 import { OneMapCanvas } from "../components/OneMapCanvas";
 import { SolvikBrand } from "../components/SolvikBrand";
 import { styleText } from "../lib/styleText";
+import { CameraCapture } from "../components/CameraCapture";
 
 export function NavScreen({ v }) {
   return (
@@ -147,18 +148,23 @@ export function NavScreen({ v }) {
                     </div>
                   </div>
                   <div>
-                    <SectionLabel>Photo · required</SectionLabel>
-                    {v.navRepNoPhoto && (
-                      <label style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 9, padding: "14px 15px", borderRadius: "var(--radius-card)", border: "1px dashed var(--sand-400)", background: "var(--accent-soft)", cursor: "pointer" }}>
-                        <input type="file" accept="image/*" capture="environment" onChange={v.onNavRepPhoto} style={{ position: "absolute", width: 1, height: 1, opacity: 0 }} />
+                    <SectionLabel>Photo · taken now, not uploaded</SectionLabel>
+                    {v.navCameraOpen && (
+                      <div style={{ marginTop: 9 }}>
+                        <CameraCapture onCapture={v.onNavCapture} onCancel={v.closeNavCamera} />
+                      </div>
+                    )}
+                    {v.navRepNoPhoto && !v.navCameraOpen && (
+                      <button onClick={v.openNavCamera} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 12, marginTop: 9, padding: "14px 15px", borderRadius: "var(--radius-card)", border: "1px dashed var(--sand-400)", background: "var(--accent-soft)", cursor: "pointer" }}>
                         <span style={{ flex: "none", width: 40, height: 40, borderRadius: 999, background: "var(--accent)", color: "var(--text-on-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <Icon name="camera" size={19} />
                         </span>
                         <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)" }}>Take a photo</span>
-                          <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>Faces are blurred automatically.</span>
+                          <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)" }}>Open the camera</span>
+                          {/* Was "faces are blurred automatically", which nothing did. */}
+                          <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>Photograph the problem, not people. Checked, then discarded.</span>
                         </span>
-                      </label>
+                      </button>
                     )}
                     {v.navRepHasPhoto && (
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 9 }}>
@@ -175,7 +181,7 @@ export function NavScreen({ v }) {
             </div>
             {v.navRepForm && (
               <div style={{ flex: "none", paddingTop: 12 }}>
-                <Button size="lg" fullWidth disabled={v.navRepNoPhoto} onClick={v.navRepPost}>
+                <Button size="lg" fullWidth disabled={v.navRepNoPhoto || v.reportBusy} onClick={v.navRepPost}>
                   {v.navRepCta}
                 </Button>
               </div>
