@@ -8,7 +8,7 @@ import { getArrivals } from "../api/arrivals";
 import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { commuteOutlook, outlookCodes } from "../lib/outlook";
 import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary, seedSampleJourneys } from "../lib/journeys";
-import { inferCommutes, commuteFromPattern, evidenceLine } from "../lib/patterns";
+import { inferCommutes, commuteFromPattern, evidenceLine, staleCommutes, RETIRE_MS } from "../lib/patterns";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
 import { getForecast } from "../api/forecast";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
@@ -419,19 +419,31 @@ export class AppLogic extends Component {
   // commute nobody could account for.
   reviewPatterns = () => {
     const s = this.state;
-    const patterns = inferCommutes({
-      journeys: s.journeys,
-      existing: s.savedList || [],
-      rejected: s.patternsRejected || [],
+    const journeys = s.journeys || [];
+    // Retire before promoting, so a routine that moved is replaced in one pass
+    // rather than leaving the old commute sitting next to the new one.
+    const stale = staleCommutes(s.savedList, journeys);
+    const kept = stale.length ? (s.savedList || []).filter((c) => !stale.includes(c)) : s.savedList || [];
+    const pattern = inferCommutes({ journeys, existing: kept, rejected: s.patternsRejected || [] })[0];
+    const commute = pattern ? commuteFromPattern(pattern) : null;
+    if (!commute && !stale.length) return;
+
+    this.setState({
+      savedList: commute ? kept.concat([commute]) : kept,
+      ...(commute ? { justAdded: { signature: commute.signature, at: Date.now() } } : {}),
     });
-    const pattern = patterns[0];
-    if (!pattern) return;
-    const commute = commuteFromPattern(pattern);
-    this.setState((st) => ({
-      savedList: (st.savedList || []).concat([commute]),
-      justAdded: { signature: commute.signature, at: Date.now() },
-    }));
-    this.flash(`Learned your ${commute.fromPlace.label} → ${commute.toPlace.label} trip`);
+
+    // A commute that disappears without a word is the thing the evidence line
+    // exists to prevent, so a retirement is announced the same as a promotion.
+    const name = (c) => `${(c.fromPlace && c.fromPlace.label) || "start"} → ${(c.toPlace && c.toPlace.label) || "destination"}`;
+    const dropped = stale.length === 1 ? name(stale[0]) : `${stale.length} learned trips`;
+    this.flash(
+      commute && stale.length
+        ? `Your routine changed · now watching ${name(commute)}`
+        : commute
+          ? `Learned your ${name(commute)} trip`
+          : `Stopped watching ${dropped} · no trips in ${Math.round(RETIRE_MS / 86400000)} days`
+    );
   };
 
   // Undo removes the commute and remembers the refusal, so the same pattern is

@@ -31,7 +31,10 @@ resolution: *"Busy at Bishan from 08:30"*, never *"in 15 minutes"*.
 few mornings running and it appears on the Today tab by itself, with the
 evidence that justified it and an Undo. Four or more journeys, three of them
 finished, consistent days, a 45-minute time spread, seen in the last three
-weeks — a deliberately high bar, because a wrong commute means wrong alerts.
+weeks — a deliberately high bar, because a wrong commute means wrong alerts. It
+un-learns on the same evidence: stop making the trip and the commute retires
+itself after five weeks, and says so, because an inference should be no more
+durable than what supports it.
 
 **Everything it learns stays on your device.** Only deliberate actions are
 recorded — a route you started, a destination you chose — never a background
@@ -79,7 +82,7 @@ works without deploying anywhere.
 The interesting logic is pulled out into pure modules that can be tested without
 a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
-`tripDetail.js` (an itinerary → the step-by-step card). **85 tests** run against
+`tripDetail.js` (an itinerary → the step-by-step card). **94 tests** run against
 recorded API responses, so every parser is checked without touching the network.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither

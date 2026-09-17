@@ -264,3 +264,49 @@ test("erase all data removes saved places and local history", async ({ page }) =
   await expect(page.getByRole("button", { name: "Set up in a minute" })).toBeVisible();
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("solvik:")))).toEqual([]);
 });
+
+// A learned commute must not outlive the trips that justified it: the evidence
+// ages out at 90 days, so a conclusion drawn from it cannot be permanent.
+test("a learned commute whose trips stopped is retired on opening, and says so", async ({ page }) => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const auto = (sig, from, to, fromName, toName) => ({
+    from: `auto-from:${sig}`, to: `auto-to:${sig}`,
+    fromPlace: { id: `auto-from:${sig}`, label: fromName, place: "Learned from your trips", ll: from },
+    toPlace: { id: `auto-to:${sig}`, label: toName, place: "Learned from your trips", ll: to },
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri"], mins: 490, mode: "Comfort", legs: ["EWL"],
+    arriveBy: null, source: "auto", signature: sig,
+  });
+  const journeysFor = (from, to, toName, agoDays) =>
+    [0, 1, 2, 3].map((i) => ({
+      id: `j${toName}${i}`, at: Date.now() - (agoDays + i) * DAY, fromLL: from, toLL: to,
+      toName, mode: "Comfort", legs: ["EWL"], started: true, completed: true,
+    }));
+
+  await page.addInitScript(({ auto, oldTrips, freshTrips }) => {
+    if (localStorage.getItem("qa:memory")) return;
+    localStorage.setItem("solvik:commutes", JSON.stringify(auto));
+    localStorage.setItem("solvik:journeys", JSON.stringify(oldTrips.concat(freshTrips)));
+    localStorage.setItem("qa:memory", "1");
+  }, {
+    auto: [
+      auto("1.311,103.770>1.299,103.855|weekday", [1.311, 103.77], [1.299, 103.855], "Old home", "Old job"),
+      auto("1.348,103.683>1.323,103.767|weekday", [1.348, 103.683], [1.323, 103.767], "Campus", "New job"),
+      { from: "home", to: "school", fromPlace: { id: "home", label: "Home", ll: [1.311, 103.77] }, toPlace: { id: "school", label: "School", ll: [1.348, 103.683] }, days: ["Mon"], mins: 480, mode: "Fastest" },
+    ],
+    oldTrips: journeysFor([1.311, 103.77], [1.299, 103.855], "Old job", 60),
+    freshTrips: journeysFor([1.348, 103.683], [1.323, 103.767], "New job", 3),
+  });
+  await setup(page);
+
+  await expect(page.getByText(/Stopped watching Old home → Old job/)).toBeVisible();
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Campus → New job/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Home → School/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Old home → Old job/ })).toHaveCount(0);
+
+  // The retirement is written through, not just hidden for this session.
+  await page.reload();
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:commutes")).map((c) => c.toPlace.label));
+  expect(kept).toEqual(["New job", "School"]);
+  await noOverflow(page);
+});

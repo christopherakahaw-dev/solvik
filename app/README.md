@@ -144,12 +144,33 @@ together, and a group becomes a commute only when it passes every one of these �
   can't disqualify a routine;
 - seen in the last 21 days.
 
+It un-learns too. A learned commute is retired once 35 days pass with none of
+its trips being made — long enough that a holiday doesn't erase your commute,
+well inside the 90 days the journeys themselves survive, so the evidence is
+still there to judge it by. An inference should be no more durable than what
+supports it: otherwise a job you left keeps its card on Today and keeps matching
+disruption alerts to lines you no longer ride. The retirement is announced the
+same way the promotion was, because a commute vanishing without a word is the
+thing the evidence line exists to prevent. Commutes you created or edited
+yourself are yours, and are never retired.
+
+Patterns are matched by where they go, not by the string that names them. The
+signature is anchored to the earliest trip in a group, so when that trip ages
+out the string moves while the commute stays the same — comparing strings would
+let a pattern you rejected come back, and a commute you already watch be added a
+second time.
+
 Only deliberate actions are recorded — a route you started, a destination you
 chose — never a background trace of where the device has been. Everything stays
 in the browser: no endpoint in `api/` receives any of it. Trips older than 90
 days fall away on their own, **Undo** makes a pattern stay gone however many
 more times it is seen, and **Forget everything** in the Today tab clears the
 journeys, the patterns and the commutes learned from them in one tap.
+
+What device-local does *not* mean: `localStorage` is plaintext, readable by
+anything running on the same origin, and on a shared phone readable by whoever
+picks it up. Nothing is transmitted — that is the claim, and it is the whole
+claim.
 
 Disruptions are matched against the lines those journeys actually used, so an
 alert on a line you never take stays in the Alerts sheet instead of interrupting
