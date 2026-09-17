@@ -1,10 +1,10 @@
 // Live bus arrivals for every bus leg currently on screen, in one round trip.
 // The route sheet polls this while it's open, so the times on the cards tick
 // down instead of being frozen at whenever the trip was planned.
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedArrivals } from "./_lib/recorded/index.js";
-import { parseArrivals } from "./_lib/arrivals.js";
-import { nextBuses } from "./_lib/arrivals.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedArrivals } from "../_lib/recorded/index.js";
+import { parseArrivals } from "../_lib/arrivals.js";
+import { nextBuses } from "../_lib/arrivals.js";
 
 const MAX_PAIRS = 12;
 

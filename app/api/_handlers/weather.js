@@ -1,9 +1,9 @@
 // Weather from data.gov.sg. No key, which matters: the submission rules say a
 // judge must be able to reproduce anything claimed without paying for it, and
 // this is the one live feed in the app that needs no registration at all.
-import { parseNowcast, parseOutlook } from "../src/lib/weather.js";
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedNowcast, recordedOutlook } from "./_lib/recorded/index.js";
+import { parseNowcast, parseOutlook } from "../../src/lib/weather.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedNowcast, recordedOutlook } from "../_lib/recorded/index.js";
 
 const BASE = "https://api-open.data.gov.sg/v2/real-time/api/";
 

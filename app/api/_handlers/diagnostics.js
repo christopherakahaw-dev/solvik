@@ -2,10 +2,10 @@
 // running: open /api/diagnostics. Reports credential *status* and upstream
 // responses only — never a token, password or account key — so the output is
 // safe to paste into an issue.
-import { credentialSummary, getOneMapToken } from "./_lib/onemapAuth.js";
-import { buildRouteUrl, otpError, hasTransit, REQUEST_VARIANTS, learnedRequestShape } from "./_lib/onemap.js";
-import { normalizeItinerary } from "./_lib/itinerary.js";
-import { ltaKey, ltaFetch } from "./_lib/lta.js";
+import { credentialSummary, getOneMapToken } from "../_lib/onemapAuth.js";
+import { buildRouteUrl, otpError, hasTransit, REQUEST_VARIANTS, learnedRequestShape } from "../_lib/onemap.js";
+import { normalizeItinerary } from "../_lib/itinerary.js";
+import { ltaKey, ltaFetch } from "../_lib/lta.js";
 
 function singaporeNow() {
   const parts = new Intl.DateTimeFormat("en-CA", {

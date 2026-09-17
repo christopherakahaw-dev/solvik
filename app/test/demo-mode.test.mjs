@@ -84,7 +84,7 @@ test("demo mode never calls a paid API, even with a key configured", async () =>
     return { ok: false, status: 503, json: async () => ({}) };
   };
   try {
-    const { default: handler } = await import("../api/report.js");
+    const { default: handler } = await import("../api/_handlers/report.js");
     const res = {
       headers: {}, statusCode: 0, body: null,
       setHeader(k, v) { this.headers[k] = v; },

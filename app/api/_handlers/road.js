@@ -3,10 +3,10 @@
 // Deliberately not turned into a corrected arrival time: a speed band covers a
 // road segment, not a bus's whole run, so this says the roads are slow and why,
 // and leaves the timetable caveat standing rather than pretending to replace it.
-import { ltaFetch } from "./_lib/lta.js";
-import { parseSpeedBands, parseIncidents } from "../src/lib/roadConditions.js";
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedSpeedBands, recordedIncidents } from "./_lib/recorded/index.js";
+import { ltaFetch } from "../_lib/lta.js";
+import { parseSpeedBands, parseIncidents } from "../../src/lib/roadConditions.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedSpeedBands, recordedIncidents } from "../_lib/recorded/index.js";
 
 export default async function handler(req, res) {
   const [bands, incidents] = await Promise.allSettled([

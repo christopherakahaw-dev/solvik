@@ -1,4 +1,4 @@
-import { oneMapRoute } from "./_lib/onemap.js";
+import { oneMapRoute } from "../_lib/onemap.js";
 
 // Proxies OneMap's routing service (walk / drive / cycle / public transport).
 // Public-transport routing needs an authenticated token, which is fetched

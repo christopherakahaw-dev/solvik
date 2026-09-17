@@ -113,18 +113,22 @@ and the server-only `SUPABASE_SERVICE_ROLE_KEY`, then apply the migrations in
 React + Vite, no framework beyond that. The map is Leaflet over OpenStreetMap,
 served through MapTiler, falling back to OneMap's own tiles if it fails.
 
-Fifteen serverless functions in [`app/api/`](app/api) hold the credentials and do
-the joining work — ranking journeys, attaching crowd levels and bus arrivals to
-the legs that need them, resolving station codes to positions. The browser only
-ever talks to those. `npm run dev` runs them locally too, so the whole thing
-works without deploying anywhere.
+Fifteen endpoints in [`app/api/`](app/api) hold the credentials and do the
+joining work — ranking journeys, attaching crowd levels and bus arrivals to the
+legs that need them, resolving station codes to positions. The browser only ever
+talks to those. They deploy as a *single* serverless function: Vercel's free
+tier allows twelve, so `api/[...path].js` dispatches by path to the handlers in
+`api/_handlers/`, which a leading underscore keeps out of the function count. A
+test asserts the dispatch table still matches the directory, because otherwise a
+missing route would only show up in production. `npm run dev` runs the same
+dispatcher locally, so the whole thing works without deploying anywhere.
 
 The interesting logic is pulled out into pure modules that can be tested without
 a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
 `tripDetail.js` (an itinerary → the step-by-step card), `persona.js` (who is
 reading → what changes), `lines.js` (the line-code canon the brief warns about).
-**216 tests** run against recorded API responses, so every parser is checked
+**223 tests** run against recorded API responses, so every parser is checked
 without touching the network, plus 31 in a real browser.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither

@@ -1,5 +1,5 @@
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedAlerts } from "./_lib/recorded/index.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedAlerts } from "../_lib/recorded/index.js";
 
 // Generic proxy for LTA DataMall so the AccountKey never reaches the
 // browser. Only a fixed set of read-only endpoints can be requested, and the

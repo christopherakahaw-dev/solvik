@@ -5,14 +5,14 @@
 // road works and openings that slow a bus leg, and bus route changes published
 // before their effective date. All three are asked together and any that
 // answers is used — one feed being quiet is not a reason to show nothing.
-import { ltaFetch } from "./_lib/lta.js";
+import { ltaFetch } from "../_lib/lta.js";
 import {
   parseFacilities, byStation, FACILITIES_PATHS,
   parseRoadWorks, currentRoadWorks, ROADWORK_PATHS, ROADOPENING_PATHS,
   parseBusRouteChanges, BUSROUTE_PATHS,
-} from "../src/lib/planned.js";
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedFacilities, recordedRoadWorks, recordedBusRouteChanges } from "./_lib/recorded/index.js";
+} from "../../src/lib/planned.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedFacilities, recordedRoadWorks, recordedBusRouteChanges } from "../_lib/recorded/index.js";
 
 export default async function handler(req, res) {
   const [lifts, works, openings, routes] = await Promise.allSettled([

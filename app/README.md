@@ -15,7 +15,7 @@ mobile build, implemented from the `Onward.dc.html` Claude Design handoff
 - **Supabase Auth + Postgres** — verified email/password accounts and optional,
   row-level-secured sync for explicitly saved places, manual commutes and route
   preferences. Live location, searches and learned journeys remain local.
-- **`api/*.js`** — small serverless functions (Vercel Node runtime) that proxy OneMap and LTA DataMall so their credentials never reach the browser, and do the joining work (journey ranking, crowd density to station coordinates) server-side. `npm run dev` runs these locally too (see `vite.config.js`), so the app is fully functional without deploying anywhere.
+- **`api/`** — the server side (Vercel Node runtime), which proxies OneMap and LTA DataMall so their credentials never reach the browser and does the joining work (journey ranking, crowd density to station coordinates) there rather than in the client. `api/[...path].js` is a catch-all that dispatches on the first path segment to one handler per endpoint in `api/_handlers/`, with shared code in `api/_lib/`; both underscore directories are outside Vercel's function scan, so the fifteen endpoints deploy as one function and stay under the free tier's twelve-function cap. `npm run dev` loads the same dispatcher (see `vite.config.js`), so the app is fully functional without deploying anywhere.
 
 ## Getting started
 

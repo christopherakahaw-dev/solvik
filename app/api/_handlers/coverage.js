@@ -1,7 +1,7 @@
 // Which stations the crowd feed covers, and which of those we then fail to
 // place on the map. Status only — no secrets — so it's safe to paste into an
 // issue, like /api/diagnostics.
-import { coverageReport } from "./_lib/coverage.js";
+import { coverageReport } from "../_lib/coverage.js";
 
 export default async function handler(req, res) {
   try {

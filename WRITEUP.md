@@ -59,11 +59,19 @@ map rather than an OSM rendering — so the key is what makes OSM the base.
 Each layer carries the credit actually owed: OSM's ODbL attribution on the OSM
 base, OneMap and SLA on theirs.
 
-**Fifteen serverless functions** in `app/api/` hold every credential and do the
-joining work — ranking journeys, attaching crowd levels and bus arrivals to the
-legs that need them, resolving station codes to positions, triaging reports. The
-browser talks only to those. `npm run dev` runs them locally, so the whole app
-works without deploying.
+**Fifteen endpoints** in `app/api/` hold every credential and do the joining
+work — ranking journeys, attaching crowd levels and bus arrivals to the legs that
+need them, resolving station codes to positions, triaging reports. The browser
+talks only to those.
+
+They ship as one serverless function, not fifteen. Vercel's free tier allows
+twelve per deployment, so `api/[...path].js` dispatches on the first path
+segment to handlers in `api/_handlers/` — a directory the underscore keeps out
+of the function scan. Public URLs are unchanged, the handlers are loaded lazily
+so a request pays only for its own route, and a test asserts the dispatch table
+still matches the directory, since a route dropped from it would otherwise
+surface as a 404 in production and nowhere else. `npm run dev` runs the same
+dispatcher locally, so the whole app works without deploying.
 
 The judgement lives in **pure modules** that run without a browser, each with its
 own test file: `outlook.js` (journey × forecast → when to leave), `patterns.js`
@@ -112,7 +120,7 @@ them.
 | "Free bus boarding at Yishun, Khatib" | Quoted verbatim from `AffectedSegments.FreePublicBus`. Not computed, so no caveat. |
 | "Your 12 min on foot will take about 4 min longer" | `walkSecs × 1.35` for heavy rain, `× 1.15` for showers. **These two multipliers are our own assumption, not measured** — see limitations. |
 | "Bishan Road is congested (10–19 km/h)" | `TrafficSpeedBands` band 2, with the feed's own published speed range. Never converted into minutes. |
-| "216 tests" | `npm test` in `app/`. 31 browser tests: `npx playwright test`. |
+| "223 tests" | `npm test` in `app/`. 31 browser tests: `npx playwright test`. |
 | Points in the wallet | Summed from reports you filed that were corroborated. The **vouchers are sample data** and labelled as such. |
 
 ## 6. Assumptions

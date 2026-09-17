@@ -3,9 +3,9 @@
 //
 // Stations LTA publishes nothing for come back in `missing` rather than being
 // left out: silence and "not busy" must not look the same.
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedForecast } from "./_lib/recorded/index.js";
-import { forecastIndex, realtimeLevels } from "./_lib/crowd.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedForecast } from "../_lib/recorded/index.js";
+import { forecastIndex, realtimeLevels } from "../_lib/crowd.js";
 
 const MAX_CODES = 24;
 

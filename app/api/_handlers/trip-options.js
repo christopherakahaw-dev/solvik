@@ -2,15 +2,15 @@
 // parameters suited to the chosen mode, enriches them with live LTA crowding
 // and accessibility, ranks them by what the mode actually promises, and
 // returns at most three cards in the shape the UI already renders.
-import { serveRecorded } from "./_lib/demo.js";
-import { recordedRoute } from "./_lib/recorded/index.js";
-import { oneMapRoute } from "./_lib/onemap.js";
-import { ltaFetch, crowdLevelFrom } from "./_lib/lta.js";
-import { nextBuses } from "./_lib/arrivals.js";
-import { resolveStopCode } from "./_lib/busStops.js";
-import { normalizeItinerary, crowdLevelOf, crowdScoreOf, signature, clockFrom } from "./_lib/itinerary.js";
-import { decodePolyline } from "./_lib/polyline.js";
-import { withoutAny, parseAvoid } from "./_lib/avoid.js";
+import { serveRecorded } from "../_lib/demo.js";
+import { recordedRoute } from "../_lib/recorded/index.js";
+import { oneMapRoute } from "../_lib/onemap.js";
+import { ltaFetch, crowdLevelFrom } from "../_lib/lta.js";
+import { nextBuses } from "../_lib/arrivals.js";
+import { resolveStopCode } from "../_lib/busStops.js";
+import { normalizeItinerary, crowdLevelOf, crowdScoreOf, signature, clockFrom } from "../_lib/itinerary.js";
+import { decodePolyline } from "../_lib/polyline.js";
+import { withoutAny, parseAvoid } from "../_lib/avoid.js";
 
 const MODES = {
   fast: { query: [{ mode: "transit", maxWalkDistance: 1000 }], rank: (a, b) => a.mins - b.mins, tag: "Fastest" },

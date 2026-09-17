@@ -8,11 +8,11 @@
 // The photo is used and dropped. It is sent here, checked, and never written
 // anywhere — no bucket, no retention, no archive of other people's faces.
 import { createClient } from "@supabase/supabase-js";
-import { locationChecks, verdictFor, parseVision, visionPrompt, VISION_SCHEMA, MAX_PER_HOUR } from "./_lib/triage.js";
-import { resolveStopCode, distanceMetres, nearestStop, nearestStopCode } from "./_lib/busStops.js";
-import { fromDirectory } from "./_lib/stations.js";
-import { demoMode } from "./_lib/demo.js";
-import { kindLabel } from "../src/lib/confidence.js";
+import { locationChecks, verdictFor, parseVision, visionPrompt, VISION_SCHEMA, MAX_PER_HOUR } from "../_lib/triage.js";
+import { resolveStopCode, distanceMetres, nearestStop, nearestStopCode } from "../_lib/busStops.js";
+import { fromDirectory } from "../_lib/stations.js";
+import { demoMode } from "../_lib/demo.js";
+import { kindLabel } from "../../src/lib/confidence.js";
 
 const POINTS = { crowd: 30, esc: 25, delay: 30, gantry: 20, bus: 20, aircon: 15 };
 
