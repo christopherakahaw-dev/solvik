@@ -5,6 +5,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null default '',
   cloud_sync boolean not null default false,
+  onboarding_complete boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -65,8 +66,8 @@ language plpgsql
 security definer set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, display_name)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', ''))
+  insert into public.profiles (id, display_name, onboarding_complete)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name', ''), false)
   on conflict (id) do nothing;
   return new;
 end;

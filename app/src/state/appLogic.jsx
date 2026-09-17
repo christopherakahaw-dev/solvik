@@ -79,7 +79,9 @@ export class AppLogic extends Component {
     addMode: "Comfort", addMins: 462, addWhen: "leave", fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
     hoverTab: null, pressTab: null, sheetH: 430, sheetDrag: false, navRoute: null, navStart: null,
     navPage: 0, stepsDrag: false, pin: null,
-    screen: loadStored(ONBOARDED_KEY, false) ? "map" : "intro",
+    screen: this.props.user?.isGuest
+      ? (loadStored(ONBOARDED_KEY, false) ? "map" : "intro")
+      : (this.props.user?.onboardingComplete ? "map" : "intro"),
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
     query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
@@ -1506,9 +1508,12 @@ export class AppLogic extends Component {
       })),
       introSummaryTitle: "Solvik is set up for " + (stepFree ? "step-free travel" : has("student") ? "student travel" : has("comfort") ? "a calmer commute" : has("commuter") ? "your daily commute" : "your commute"),
       introSummary: summary,
-      introCta: ["Set up in a minute", roles.length ? "Next · " + roles.length + " selected" : "Next", filled ? "Next · " + filled + " saved" : "Next", "Start using Solvik"][step],
+      introCta: s.introSaving ? "Saving setup…" : ["Set up in a minute", roles.length ? "Next · " + roles.length + " selected" : "Next", filled ? "Next · " + filled + " saved" : "Next", "Start using Solvik"][step],
+      introError: s.introError || "",
+      introCanSkip: Boolean(this.props.user?.isGuest),
       introInvalid: step === 2 && places.some((p) => s.introDraftPending?.[p.key]),
-      introNext: () => {
+      introDisabled: Boolean(s.introSaving) || (step === 2 && places.some((p) => s.introDraftPending?.[p.key])),
+      introNext: async () => {
         if (step === 2 && places.some((p) => s.introDraftPending?.[p.key])) return;
         if (step < total - 1) return this.setState({ introStep: step + 1 });
         const routingPreferences = {
@@ -1519,20 +1524,27 @@ export class AppLogic extends Component {
           studentFare: has("student"),
           routineCommute: has("commuter"),
         };
-        this.setState({
-          screen: "map", introStep: 0,
-          savedPlaces: {
-            ...(s.savedPlaces || {}),
-            home: s.introHomePlace ? { ...s.introHomePlace, id: "home" } : s.savedPlaces?.home || null,
-            work: s.introWorkPlace ? { ...s.introWorkPlace, id: "work" } : s.savedPlaces?.work || null,
-            school: s.introSchoolPlace ? { ...s.introSchoolPlace, id: "school" } : s.savedPlaces?.school || null,
-          },
-          routingPreferences,
-          mode: stepFree ? "silver" : has("comfort") ? "comfort" : "rush",
-          tripMode: stepFree ? "step" : has("comfort") ? "quiet" : "fast",
-        });
-        store(ONBOARDED_KEY, 1);
-        this.flash("Setup saved on this device");
+        const savedPlaces = {
+          ...(s.savedPlaces || {}),
+          home: s.introHomePlace ? { ...s.introHomePlace, id: "home" } : s.savedPlaces?.home || null,
+          work: s.introWorkPlace ? { ...s.introWorkPlace, id: "work" } : s.savedPlaces?.work || null,
+          school: s.introSchoolPlace ? { ...s.introSchoolPlace, id: "school" } : s.savedPlaces?.school || null,
+        };
+        this.setState({ introSaving: true, introError: "" });
+        try {
+          await this.props.onOnboardingComplete?.();
+          this.setState({
+            screen: "map", introStep: 0, introSaving: false,
+            savedPlaces,
+            routingPreferences,
+            mode: stepFree ? "silver" : has("comfort") ? "comfort" : "rush",
+            tripMode: stepFree ? "step" : has("comfort") ? "quiet" : "fast",
+          });
+          store(ONBOARDED_KEY, 1);
+          this.flash(this.props.user?.isGuest ? "Setup saved on this device" : "Setup complete");
+        } catch (error) {
+          this.setState({ introSaving: false, introError: error?.message || "Setup could not be saved. Try again." });
+        }
       },
       introBack: () => this.setState({ introStep: Math.max(0, step - 1) }),
       introSkip: () => {

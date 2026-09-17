@@ -10,6 +10,7 @@ const GUEST_USER = {
   name: "Guest",
   isGuest: true,
   cloudSync: false,
+  onboardingComplete: false,
 };
 
 function readGuest() {
@@ -47,6 +48,9 @@ function userFrom(authUser, profile = null) {
     name: profile?.display_name || authUser.user_metadata?.full_name || "",
     isGuest: false,
     cloudSync: Boolean(profile?.cloud_sync),
+    // Profiles created before account onboarding was introduced are returning
+    // accounts and should not be sent through the intro again.
+    onboardingComplete: profile?.onboarding_complete !== false,
   };
 }
 
@@ -61,7 +65,7 @@ export function AuthProvider({ children }) {
     if (!supabase || !authUser) return null;
     const { data, error } = await supabase
       .from("profiles")
-      .select("display_name, cloud_sync")
+      .select("display_name, cloud_sync, onboarding_complete")
       .eq("id", authUser.id)
       .maybeSingle();
     if (error) {
@@ -73,6 +77,7 @@ export function AuthProvider({ children }) {
         id: authUser.id,
         display_name: authUser.user_metadata?.full_name || "",
         cloud_sync: false,
+        onboarding_complete: true,
       };
       const { error: createError } = await supabase.from("profiles").upsert(fallback, { onConflict: "id" });
       if (createError) {
@@ -208,6 +213,20 @@ export function AuthProvider({ children }) {
     return next;
   }, [user]);
 
+  const completeOnboarding = useCallback(async () => {
+    if (!user) throw new Error("Sign in again to finish setup.");
+    if (user.isGuest) {
+      setUser((current) => ({ ...current, onboardingComplete: true }));
+      return;
+    }
+    const { error } = await getSupabase()
+      .from("profiles")
+      .update({ onboarding_complete: true, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
+    if (error) throw new Error(error.message);
+    setUser((current) => ({ ...current, onboardingComplete: true }));
+  }, [user]);
+
   const setCloudSync = useCallback(async (enabled) => {
     if (!user || user.isGuest) return false;
     const { error } = await getSupabase()
@@ -260,10 +279,11 @@ export function AuthProvider({ children }) {
     loginAsGuest,
     logout,
     updateProfile,
+    completeOnboarding,
     setCloudSync,
     clearCloudData,
     deleteAccount,
-  }), [user, loading, recovery, profileError, login, register, resendConfirmation, requestPasswordReset, updatePassword, loginAsGuest, logout, updateProfile, setCloudSync, clearCloudData, deleteAccount]);
+  }), [user, loading, recovery, profileError, login, register, resendConfirmation, requestPasswordReset, updatePassword, loginAsGuest, logout, updateProfile, completeOnboarding, setCloudSync, clearCloudData, deleteAccount]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

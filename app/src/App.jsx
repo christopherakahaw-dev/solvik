@@ -73,9 +73,9 @@ function LoadingScreen() {
 }
 
 export function App() {
-  const { user, loading, recovery } = useAuth();
+  const { user, loading, recovery, completeOnboarding } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user || recovery) return <ViewportShell><AuthScreen /></ViewportShell>;
   setStorageScope(user.isGuest ? "" : user.id);
-  return <AuthenticatedApp user={user} key={user.id} />;
+  return <AuthenticatedApp user={user} onOnboardingComplete={completeOnboarding} key={user.id} />;
 }

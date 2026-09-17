@@ -42,7 +42,7 @@ Copy `.env.example` to `.env` and fill in:
   alerts and the nearest-stop lookup.
 - **Supabase** — create a project, copy its URL and publishable key into
   `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, then apply
-  `supabase/migrations/20260917000000_user_data.sql`. Set `SUPABASE_URL` and the
+  the tracked migrations with `supabase db push`. Set `SUPABASE_URL` and the
   server-only `SUPABASE_SERVICE_ROLE_KEY` in Vercel to enable account deletion.
   Add both the local and deployed app URLs under Authentication redirect URLs.
 

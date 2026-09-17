@@ -87,13 +87,23 @@ export function OneMapCanvas({
       if (clickRef.current) clickRef.current([e.latlng.lat, e.latlng.lng]);
     });
     mapRef.current = map;
-    requestAnimationFrame(() => map.invalidateSize());
+    let disposed = false;
+    const invalidate = () => {
+      // Auth and onboarding can replace the whole map screen between this
+      // callback being queued and the next frame. Leaflet no longer has panes
+      // after remove(), so a late invalidateSize would otherwise throw.
+      if (disposed || mapRef.current !== map || !map._mapPane) return;
+      map.invalidateSize();
+    };
+    const resizeFrame = requestAnimationFrame(invalidate);
     let ro;
     if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(() => map.invalidateSize());
+      ro = new ResizeObserver(invalidate);
       ro.observe(ref.current);
     }
     return () => {
+      disposed = true;
+      cancelAnimationFrame(resizeFrame);
       if (ro) ro.disconnect();
       // Finish anything in flight first: a pan or zoom animation still running
       // when the panes go away throws from its own callback afterwards.

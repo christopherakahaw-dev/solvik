@@ -55,3 +55,15 @@ test("the Supabase migration protects every private table with RLS", async () =>
   assert.doesNotMatch(sql, /service_role/i);
 });
 
+test("account onboarding is required once and preserves returning accounts", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260917010000_account_onboarding.sql", import.meta.url), "utf8");
+  const auth = await readFile(new URL("../src/auth/AuthContext.jsx", import.meta.url), "utf8");
+  const intro = await readFile(new URL("../src/screens/Intro.jsx", import.meta.url), "utf8");
+
+  assert.match(sql, /add column if not exists onboarding_complete boolean/i);
+  assert.match(sql, /set onboarding_complete = true\s+where onboarding_complete is null/i);
+  assert.match(sql, /alter column onboarding_complete set default false/i);
+  assert.match(auth, /select\("display_name, cloud_sync, onboarding_complete"\)/);
+  assert.match(auth, /update\(\{ onboarding_complete: true/);
+  assert.match(intro, /v\.introCanSkip\s*&&/);
+});

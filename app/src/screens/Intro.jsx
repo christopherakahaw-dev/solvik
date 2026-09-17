@@ -103,8 +103,9 @@ export function Intro({ v }) {
       </div>
 
       <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 9, paddingTop: 14 }}>
+        {v.introError && <div className="sv-auth-notice sv-auth-notice-error" role="alert">{v.introError}</div>}
         {v.introInvalid && <div className="sv-place-detail" role="status">Select a search result or clear the unfinished address.</div>}
-        <Button size="lg" fullWidth disabled={v.introInvalid} onClick={v.introNext}>
+        <Button size="lg" fullWidth disabled={v.introDisabled} onClick={v.introNext}>
           {v.introCta}
         </Button>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -115,11 +116,11 @@ export function Intro({ v }) {
           ) : (
             <span />
           )}
-          <div style={{ marginLeft: "auto" }}>
+          {v.introCanSkip && <div style={{ marginLeft: "auto" }}>
             <Button variant="ghost" size="sm" onClick={v.introSkip}>
               Skip for now
             </Button>
-          </div>
+          </div>}
         </div>
       </div>
     </div>
