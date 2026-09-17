@@ -19,7 +19,8 @@ async function setup(page, places = { home, school }) {
   await page.addInitScript(({ places }) => {
     if (!localStorage.getItem("qa:seeded")) {
       localStorage.setItem("sv-auth:guest-session", "1");
-      localStorage.setItem("solvik:onboarded", "1");
+      localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("solvik:onboarded", "1");
       localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places }));
       localStorage.setItem("solvik:searches", JSON.stringify([{ name: "CLARKE QUAY MRT STATION", detail: "10 EU TONG SEN STREET", ll: [1.288, 103.846] }]));
       localStorage.setItem("qa:seeded", "1");
@@ -335,6 +336,7 @@ async function disruptedCommute(page, { rerouteBody } = {}) {
   await page.addInitScript(({ home, school }) => {
     if (localStorage.getItem("qa:disrupt")) return;
     localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
       home: { id: "home", name: "Home", address: "Home", ll: home, source: "onemap", verified: true },
@@ -409,6 +411,7 @@ test("two trips to a place is enough to be warned about its line", async ({ page
   await page.addInitScript(({ office }) => {
     if (localStorage.getItem("qa:places")) return;
     localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
     // Two visits on two days, well under the commute bar of four journeys.
@@ -464,6 +467,7 @@ const bishanRoute = { mins: 38, eta: "08:38", fare: "$2.20", fareValue: 2.2, wal
 async function plannedWorks(page, { mode = "Comfort" } = {}) {
   await page.addInitScript(({ mode }) => {
     if (localStorage.getItem("qa:pw")) return;
+    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
       home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },
@@ -518,6 +522,7 @@ test("the same lift is a blocked journey when the commute is step-free", async (
 
 test("a lift out somewhere you never go is not mentioned", async ({ page }) => {
   await page.addInitScript(() => {
+    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
       home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },

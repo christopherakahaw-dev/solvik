@@ -50,10 +50,13 @@ through the fault. If every route still uses it, the app says so rather than
 showing one through the disruption, and the alternative's time is labelled as
 what it is: a timetable that doesn't know anything is wrong.
 
-**Everything it learns stays on your device.** Only deliberate actions are
-recorded — a route you started, a destination you chose — never a background
-trace of where your phone has been. No endpoint receives any of it, trips older
-than 90 days fall away on their own, and one tap forgets all of it. Your API
+**What it learns about your movements stays on your device.** Only deliberate
+actions are recorded — a route you started, a destination you chose — never a
+background trace of where your phone has been. That journey history, and the
+commutes and places inferred from it, are held in the browser and sent to no
+endpoint: there is no journeys table to sync them to. Trips older than 90 days
+fall away on their own, and one tap forgets all of it. Saved places, watched
+commutes and preferences do sync, to your own account, if you make one. Your API
 keys stay server-side and never reach the browser.
 
 ## Try it
@@ -115,8 +118,9 @@ feed covers — separating LTA's gaps from our own, which is how a bug that lost
 
 Named here rather than left to be discovered:
 
-- **No accounts and no backend of our own.** Everything is device-local, which
-  is why the points wallet is sample data.
+- **The points wallet is sample data.** Accounts (Supabase) carry your places,
+  commutes and preferences, but nothing issues or redeems real vouchers, so the
+  wallet is illustrative and labelled as such on screen.
 - **No alerts while the app is closed.** A web page can't be woken without a
   push subscription server; the app says so rather than implying a push that
   won't arrive.
