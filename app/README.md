@@ -105,7 +105,9 @@ invented data.
 | Your position | Browser geolocation, only after an explicit location action or during navigation |
 | Trip origin | A searched OneMap place, a verified saved place, or an already-authorised device position |
 | Your places, watched commutes, recent destinations and read alerts | Your own input, saved in the browser |
-| **Points, vouchers, nearby-reports feed** | **Sample data** — an account/social service, which neither API provides. Labelled as such in the UI. |
+| Nearby reports and their corroboration counts | Reports filed through the app by signed-in commuters, checked before they count |
+| Your points | Reports you filed that a second commuter or LTA corroborated |
+| **Vouchers** | **Sample data** — nothing issues a real EZ-Link top-up. Labelled as such in the UI. |
 
 ### The Today tab (leave-by and the crowd outlook)
 
@@ -136,6 +138,54 @@ Trains have no arrival feed — DataMall publishes crowding for rail, not
 timings — so a rail leg shows how busy the platform is rather than a countdown.
 Where bus times are missing, the card says which kind of missing it is (no key,
 unknown stop, nothing running) instead of leaving a gap.
+
+### Reports, and why a photo alone earns nothing
+
+The Report tab used to credit points the moment you tapped post, for any photo,
+with no check — which pays for spam. It now runs a report past two stages before
+it counts for anything.
+
+**The photo has to be taken here, now.** `<input type="file" capture>` is only a
+hint: desktop browsers ignore it and mobile often still offers the gallery.
+`src/components/CameraCapture.jsx` uses `getUserMedia` and a canvas instead, so
+there is no file input in the flow and no older image to choose. A device with no
+camera says it cannot file a report, which is the honest cost of that rule.
+
+**The photo is never stored.** It is posted to `/api/report`, checked, and
+dropped — no bucket, no retention window, no archive of other people's faces.
+What persists is the verdict.
+
+**Two stages of checking**, in this order because the first is free:
+
+1. Deterministic gates — your fix is under a minute old, accurate to 100 m,
+   within 150 m of the place you are reporting, the shutter fired in the last two
+   minutes, and you are under three reports this hour. A failed gate names itself
+   and says what to do.
+2. Claude, asked whether the photo is **consistent** with what was reported —
+   and whether it is a photograph of a screen, which is the cheapest way to fake
+   one. Without `ANTHROPIC_API_KEY` this stage is skipped and the report says so.
+
+Nothing here is ever called **verified**. A model can say an image is consistent
+with a report; it cannot tell a broken lift from a working one with a sign taped
+to it. That distinction is the whole reason the wording is what it is.
+
+**Confidence is a count, not a score.** `src/lib/confidence.js` returns one of
+four tiers, each a fact you could check: *Confirmed by LTA* (their own feed names
+the station), *Multiple reports* (three or more distinct accounts in 30 minutes),
+*Reported*, or *Unconfirmed*. Distinct **accounts**, never submissions — one
+person reporting four times is one person. No percentage is ever shown, and a
+test asserts that.
+
+**Points are pending until someone else agrees.** Filing a report that passes the
+checks earns points marked pending; they are credited when a second commuter
+reports the same thing or LTA's feed confirms it. That is the fix to rewarding
+everyone who submits: the payout depends on something you cannot fake alone.
+
+Reports are the one part of Solvik that deliberately leaves the device — the
+station, your coordinates and your account id, readable by other signed-in
+commuters for 30 minutes. They never see who filed what: the table grants no
+access to the reporter column, because a per-person id across stations is a
+movement trace.
 
 ### What Solvik learns, and how to stop it
 

@@ -549,3 +549,97 @@ test("a lift out somewhere you never go is not mentioned", async ({ page }) => {
   await expect(page.getByText(/38 min journey/)).toBeVisible();
   await expect(page.getByText("Planned work")).toHaveCount(0);
 });
+
+// Reports: camera-only capture, triage before anything is filed, and points that
+// wait on somebody else agreeing.
+async function reportFlow(page, { verdict = "accepted" } = {}) {
+  await page.addInitScript(() => {
+    localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
+    // A camera that exists, so getUserMedia resolves the way it would on a phone.
+    const canvas = document.createElement("canvas");
+    canvas.width = 640; canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    // Keep drawing, or captureStream produces no frames and the video never
+    // reports dimensions.
+    setInterval(() => { ctx.fillStyle = `hsl(${Date.now() % 360},50%,50%)`; ctx.fillRect(0, 0, 640, 480); }, 100);
+    // mediaDevices is a prototype getter in Chromium — plain assignment is
+    // silently dropped.
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: async () => canvas.captureStream(5) },
+    });
+    navigator.geolocation.getCurrentPosition = (ok) => ok({ coords: { latitude: 1.3507, longitude: 103.8481, accuracy: 10 }, timestamp: Date.now() });
+    navigator.geolocation.watchPosition = (ok) => { ok({ coords: { latitude: 1.3507, longitude: 103.8481, accuracy: 10 }, timestamp: Date.now() }); return 1; };
+    navigator.geolocation.clearWatch = () => {};
+  });
+
+  const posted = [];
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    let response = {};
+    if (path.endsWith("/api/report")) {
+      posted.push(route.request().postDataJSON());
+      response = verdict === "accepted"
+        ? { verdict: "accepted", reason: "Checks passed. It needs another commuter or LTA to confirm it.", points: 25, pointsState: "pending", checks: [{ id: "fresh-fix", ok: true }, { id: "at-the-place", ok: true }], vision: { reason: "The photo shows a lift with a notice." } }
+        : { verdict: "rejected", reason: "You appear to be 420 m away. Reports have to be made where the problem is.", points: 0, pointsState: "none", checks: [{ id: "fresh-fix", ok: true }, { id: "at-the-place", ok: false, detail: "You appear to be 420 m away. Reports have to be made where the problem is." }] };
+    } else if (path.endsWith("nearest-stop")) response = { code: "53061", name: "Bishan Stn Exit C", road: "Bishan Rd", lat: 1.3507, lng: 103.8485, distanceM: 30 };
+    else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    else if (path.endsWith("planned")) response = { works: [] };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Report", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Report", exact: true }).click();
+  return posted;
+}
+
+test("a report cannot be filed from a file, only from the camera", async ({ page }) => {
+  await reportFlow(page);
+  await page.getByRole("button", { name: /Use location|Recheck/ }).click();
+  await page.getByText("Escalator or lift down").click();
+
+  // The one assertion this whole feature rests on: there is no file input to use.
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  await expect(page.getByText(/can't be chosen from your files/)).toBeVisible();
+  // And the claim that used to sit here, which nothing did, is gone.
+  await expect(page.getByText(/Faces are blurred/)).toHaveCount(0);
+  await noOverflow(page);
+});
+
+test("a filed report earns points that are pending, not credited", async ({ page }) => {
+  const posted = await reportFlow(page);
+  await page.getByRole("button", { name: /Use location|Recheck/ }).click();
+  await page.getByText("Escalator or lift down").click();
+  await page.getByRole("button", { name: /Open the camera/ }).click();
+  await page.getByRole("button", { name: "Take photo" }).click();
+  await page.getByRole("button", { name: /File report/ }).click();
+
+  await expect(page.getByText("Filed", { exact: true })).toBeVisible();
+  await expect(page.getByText(/points pending/).first()).toBeVisible();
+  await expect(page.getByText(/credited when another commuter reports the same thing, or LTA/)).toBeVisible();
+  // Never the word the model cannot support.
+  await expect(page.getByText(/verified/i)).toHaveCount(0);
+
+  // The shutter time and the fix travel with the report so the server can judge it.
+  expect(posted).toHaveLength(1);
+  expect(posted[0].capturedAt).toBeGreaterThan(0);
+  expect(posted[0].photo.startsWith("data:image/jpeg;base64,")).toBe(true);
+  expect(posted[0].accuracy).toBe(10);
+});
+
+test("a rejected report earns nothing and says which check failed", async ({ page }) => {
+  await reportFlow(page, { verdict: "rejected" });
+  await page.getByRole("button", { name: /Use location|Recheck/ }).click();
+  await page.getByText("Escalator or lift down").click();
+  await page.getByRole("button", { name: /Open the camera/ }).click();
+  await page.getByRole("button", { name: "Take photo" }).click();
+  await page.getByRole("button", { name: /File report/ }).click();
+
+  await expect(page.getByText("Not filed").first()).toBeVisible();
+  await expect(page.getByText(/420 m away/).first()).toBeVisible();
+  await expect(page.getByText(/No points — this report wasn't filed/)).toBeVisible();
+  await noOverflow(page);
+});

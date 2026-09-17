@@ -13,6 +13,8 @@ import { inferCommutes, commuteFromPattern, evidenceLine, staleCommutes, RETIRE_
 import { canonicalLine, sameLine } from "../lib/lines";
 import { learnedPlaces, linesForPlaces } from "../lib/places";
 import { getPlannedWorks } from "../api/planned";
+import { submitReport, loadReportGroups as fetchReportGroups, loadMyReports as fetchMyReports } from "../api/reports";
+import { groupsFromCounts } from "../lib/confidence";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
 import { getForecast } from "../api/forecast";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
@@ -88,6 +90,10 @@ export class AppLogic extends Component {
       : (this.props.user?.onboardingComplete ? "map" : "intro"),
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
     planned: { works: [], pending: true, error: null },
+    reportGroups: { groups: [], configured: true, pending: true, error: null },
+    myReports: [],
+    photo: null, cameraOpen: false, reportBusy: false, reportResult: null,
+    navPhoto: null, navCameraOpen: false,
     query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripAvoidStations: null, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
@@ -315,6 +321,89 @@ export class AppLogic extends Component {
     const codes = new Set(outlookCodes([itinerary]).map((c) => String(c).toUpperCase()));
     return works.filter((w) => codes.has(String(w.stationCode).toUpperCase()));
   }
+
+  // The station codes LTA is currently naming itself, from either feed. A
+  // commuter report at one of these is not a rumour any more — it is the
+  // official record catching up, which is the strongest thing this app can say
+  // about a report and costs nothing, because both feeds are already fetched.
+  ltaNamedStations() {
+    const works = ((this.state.planned || {}).works || []).map((w) => String(w.stationCode).toUpperCase());
+    const alerts = ((this.state.faults && this.state.faults.items) || []).flatMap((f) => f.stations || []);
+    return [...new Set([...works, ...alerts])];
+  }
+
+  loadReportGroups = () => {
+    fetchReportGroups()
+      .then(({ groups, configured }) => this.setState({ reportGroups: { groups, configured, pending: false, error: null } }))
+      .catch((err) => this.setState({ reportGroups: { groups: [], configured: true, pending: false, error: String(err.message || err) } }));
+    fetchMyReports()
+      .then((myReports) => this.setState({ myReports }))
+      .catch(() => {});
+  };
+
+  // Filing one. Everything the server needs to judge it travels with it: where
+  // the device thinks it is, how sure it is of that, and when the shutter fired.
+  // The photo goes too, and is discarded after the check — it is never stored.
+  submitReportNow = () => {
+    const s = this.state;
+    const stop = s.stop && s.stop.data;
+    const photo = s.photo;
+    if (!stop || !photo || s.reportBusy) return;
+    const kind = s.repType;
+
+    this.setState({ reportBusy: true, reportResult: null });
+    submitReport({
+      kind,
+      stationCode: stop.code,
+      stationName: stop.name,
+      lat: s.userLoc ? s.userLoc[0] : stop.lat,
+      lng: s.userLoc ? s.userLoc[1] : stop.lng,
+      accuracy: s.userAccuracy,
+      fixAt: s.userFixAt,
+      capturedAt: photo.capturedAt,
+      photo: photo.dataUrl,
+    })
+      .then((result) => {
+        // The photo is dropped from state the moment it has been checked. It is
+        // not stored on the server either.
+        this.setState({ reportBusy: false, reportResult: result, photo: null, rep: "done" });
+        this.flash(result.verdict === "accepted" ? `Filed · ${result.points} points pending` : "Not filed");
+        if (result.verdict === "accepted") this.loadReportGroups();
+      })
+      .catch((err) => {
+        // Shown on the result screen, not just flashed: leaving the reporter on
+        // the form with a vanishing toast is how a failure reads as a bug.
+        this.setState({ reportBusy: false, rep: "done", reportResult: { verdict: "rejected", reason: String(err.message || err), checks: [] } });
+      });
+  };
+
+  // Filed from the nav sheet, mid-journey. Same endpoint, same checks; the trip
+  // keeps running either way.
+  submitNavReport = () => {
+    const s = this.state;
+    const photo = s.navPhoto;
+    if (!photo || !s.userLoc || s.reportBusy) return;
+    this.setState({ reportBusy: true });
+    submitReport({
+      kind: s.nrType,
+      stationName: "",
+      lat: s.userLoc[0],
+      lng: s.userLoc[1],
+      accuracy: s.userAccuracy,
+      fixAt: s.userFixAt,
+      capturedAt: photo.capturedAt,
+      photo: photo.dataUrl,
+    })
+      .then((result) => {
+        this.setState({ reportBusy: false, navRepOpen: false, nrType: null, nrSev: null, navPhoto: null });
+        this.flash(result.verdict === "accepted" ? `Filed · ${result.points} points pending` : result.reason || "Not filed");
+        if (result.verdict === "accepted") this.loadReportGroups();
+      })
+      .catch((err) => {
+        this.setState({ reportBusy: false });
+        this.flash(String(err.message || err));
+      });
+  };
 
   // An alert is actionable when it names a rail line you use and there is a
   // commute with a known destination to re-plan towards.
@@ -614,6 +703,12 @@ export class AppLogic extends Component {
     }));
     this.flash("Cleared everything Solvik had learned");
   };
+
+  // "4 min ago" — for report ages, which are always inside the 30-minute window.
+  relTimeOf(at) {
+    const mins = Math.max(0, Math.round((Date.now() - (at || 0)) / 60000));
+    return mins < 1 ? "just now" : `${mins} min`;
+  }
 
   // The Today tab: when to leave, and what the stations on the way are
   // forecast to be like when you get to them. Every number here comes from a
@@ -1268,6 +1363,7 @@ export class AppLogic extends Component {
     this.loadCrowding();
     this.loadOutlook();
     this.loadPlanned();
+    this.loadReportGroups();
     // Journeys outlive the session that recorded them, so the pattern has to be
     // re-read on opening too. Without this, the trip that tipped the balance
     // would only be noticed on the next one — and a commute you had already
@@ -1625,6 +1721,9 @@ export class AppLogic extends Component {
             seg.StartStation && seg.EndStation ? `Between ${seg.StartStation} and ${seg.EndStation}.` : "",
             seg.Stations ? `Stations: ${seg.Stations}` : "",
           ].filter(Boolean).join(" "),
+          // Kept so a commuter report at one of these stations can be matched
+          // against LTA's own record of the same problem.
+          stations: String(seg.Stations || "").split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
         }));
         const messageItems = data && Array.isArray(data.Message)
           ? data.Message.filter((message) => message && message.Content).map((message) => {
@@ -1956,6 +2055,16 @@ export class AppLogic extends Component {
     };
     const sevSet = SEV[s.repType || "crowd"] || SEV.crowd;
     const severities = sevSet.opts.map((label, i) => ({ label, on: s.sev === i, pick: () => this.setState({ sev: i }) }));
+
+    // Reports, grouped and scored against LTA's own feed. Every number the
+    // Report tab shows comes from here, and every one of them is countable.
+    const reportsState = s.reportGroups || { groups: [], pending: false, error: null };
+    const reportGroups = groupsFromCounts(reportsState.groups, { ltaStations: this.ltaNamedStations() });
+    const mine = s.myReports || [];
+    // Confirmed points are spendable; pending ones are not, because the report
+    // they came from has not been corroborated yet.
+    const confirmedPoints = mine.filter((r) => r.state === "confirmed").reduce((sum, r) => sum + (r.points || 0), 0);
+    const pendingPoints = mine.filter((r) => r.state === "pending").reduce((sum, r) => sum + (r.points || 0), 0);
 
     const vouchers = [
       { title: "$1 off at Kopitiam", sub: "400 points · 6 outlets nearby", cost: 400 },
@@ -2391,8 +2500,8 @@ export class AppLogic extends Component {
       navRepOpen: !!s.navRepOpen,
       navRepPick: !!s.navRepOpen && !s.nrType,
       navRepForm: !!s.navRepOpen && !!s.nrType,
-      closeNavRep: () => { if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto); this.setState({ navRepOpen: false, nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null }); },
-      navRepBack: () => { if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto); this.setState({ nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null }); },
+      closeNavRep: () => this.setState({ navRepOpen: false, nrType: null, nrSev: null, navPhoto: null, navCameraOpen: false }),
+      navRepBack: () => this.setState({ nrType: null, nrSev: null, navPhoto: null, navCameraOpen: false }),
       navRepTypes: rTypes.map((t) => ({
         label: t.label, sub: t.sub, pts: t.pts, icon: t.icon,
         pick: () => this.setState({ nrType: t.id, nrSev: null }),
@@ -2405,23 +2514,18 @@ export class AppLogic extends Component {
         style: "width:100%;text-align:left;padding:12px 14px;border-radius:999px;cursor:pointer;font:var(--weight-bold) 13px/1.3 var(--font-body);" +
           (s.nrSev === i ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);"),
       })),
-      navRepNoPhoto: !s.nrPhoto, navRepHasPhoto: !!s.nrPhoto,
-      navRepPhotoName: s.nrPhotoName || "",
-      navRepThumb: s.nrPhoto ? <img src={s.nrPhoto} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
-      onNavRepPhoto: (e) => {
-        const f = e && e.target && e.target.files && e.target.files[0];
-        if (!f) return;
-        if (s.nrPhoto) URL.revokeObjectURL(s.nrPhoto);
-        this.setState({ nrPhoto: URL.createObjectURL(f), nrPhotoName: f.name + " · just now" });
-      },
-      navRepCta: !s.nrPhoto ? "Add a photo to post" : "Post · " + (rTypes.find((t) => t.id === s.nrType) || { pts: 0 }).pts + " points",
-      navRepPost: () => {
-        if (!s.nrPhoto) return;
-        const t = rTypes.find((x) => x.id === s.nrType) || { pts: 0, label: "Report" };
-        URL.revokeObjectURL(s.nrPhoto);
-        this.setState({ navRepOpen: false, nrType: null, nrSev: null, nrPhoto: null, nrPhotoName: null, points: s.points + t.pts });
-        this.flash(t.label + " posted · +" + t.pts + " points");
-      },
+      navRepNoPhoto: !s.navPhoto, navRepHasPhoto: !!s.navPhoto,
+      navRepPhotoName: "Taken just now · checked, then discarded",
+      navRepThumb: s.navPhoto ? <img src={s.navPhoto.dataUrl} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
+      // The same camera and the same triage as the Report tab — one path, one
+      // set of checks. The station is left for the server to resolve, because
+      // mid-journey all the app knows is where you are.
+      navCameraOpen: !!s.navCameraOpen,
+      openNavCamera: () => this.setState({ navCameraOpen: true }),
+      closeNavCamera: () => this.setState({ navCameraOpen: false }),
+      onNavCapture: (photo) => this.setState({ navPhoto: photo, navCameraOpen: false }),
+      navRepCta: s.reportBusy ? "Checking…" : !s.navPhoto ? "Take a photo to file" : "File · " + (rTypes.find((t) => t.id === s.nrType) || { pts: 0 }).pts + " points pending",
+      navRepPost: () => this.submitNavReport(),
       locEyebrow: s.stop.data ? "Live at your stop" : s.stop.requested ? (s.stop.error ? "No stop found" : "Finding your stop") : "Location is off",
       locStopName: s.stop.data ? s.stop.data.name : s.stop.error ? "Location unavailable" : s.stop.pending ? "Locating…" : "Use your location",
       locDetail: s.stop.data
@@ -2430,36 +2534,81 @@ export class AppLogic extends Component {
       locRecheckLabel: s.stop.pending ? "Locating" : s.stop.requested ? "Recheck" : "Use location",
       locRecheck: () => this.findNearestStop(),
       reportStopReady: !!s.stop.data,
-      hasPhoto: !!s.photoUrl, noPhoto: !s.photoUrl,
-      photoName: s.photoName || "",
-      photoThumb: s.photoUrl ? <img src={s.photoUrl} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
-      reportCta: s.photoUrl ? "Post report · " + chosen.pts + " points" : "Add a photo to post",
-      onPhoto: (e) => {
-        const f = e && e.target && e.target.files && e.target.files[0];
-        if (!f) return;
-        if (s.photoUrl) URL.revokeObjectURL(s.photoUrl);
-        this.setState({ photoUrl: URL.createObjectURL(f), photoName: f.name + " · just now" });
-        this.flash("Photo attached · faces blurred");
+      // Camera-only: getUserMedia, never a file input. An old or borrowed image
+      // cannot enter the flow because there is no file to choose.
+      cameraOpen: !!s.cameraOpen,
+      openCamera: () => this.setState({ cameraOpen: true }),
+      closeCamera: () => this.setState({ cameraOpen: false }),
+      onCapture: (photo) => {
+        this.setState({ photo, cameraOpen: false });
+        this.flash("Photo taken");
       },
-      clearPhoto: () => { if (s.photoUrl) URL.revokeObjectURL(s.photoUrl); this.setState({ photoUrl: null, photoName: null }); },
-      backToPick: () => { if (s.photoUrl) URL.revokeObjectURL(s.photoUrl); this.setState({ rep: "pick", repType: null, sev: null, photoUrl: null, photoName: null }); },
-      submitReport: () => { if (!s.photoUrl) return; this.setState({ rep: "done", points: s.points + chosen.pts, photoUrl: null, photoName: null }); },
-      recentReports: [
-        { c: CROWD.busy, text: "Packed platform · Bishan", ago: "2 min", votes: 14 },
-        { c: CROWD.moderate, text: "Escalator down · Exit C", ago: "11 min", votes: 6 },
-        { c: CROWD.light, text: "Bus 969 arriving light", ago: "14 min", votes: 3 },
-      ].map((r) => ({
-        ...r,
-        dotStyle: { flex: "none", width: 10, height: 10, borderRadius: 999, background: r.c, boxShadow: "0 0 0 4px color-mix(in oklch, " + r.c + " 18%, transparent)" },
-        confirm: () => { this.setState({ points: s.points + 5 }); this.flash("Confirmed · +5 points"); },
+      hasPhoto: !!s.photo, noPhoto: !s.photo,
+      photoName: s.photo ? "Taken just now · checked, then discarded" : "",
+      photoThumb: s.photo ? <img src={s.photo.dataUrl} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
+      reportBusy: !!s.reportBusy,
+      reportCta: s.reportBusy ? "Checking…" : s.photo ? "File report · " + chosen.pts + " points pending" : "Take a photo to file",
+      clearPhoto: () => this.setState({ photo: null }),
+      backToPick: () => this.setState({ rep: "pick", repType: null, sev: null, photo: null, reportResult: null, cameraOpen: false }),
+      submitReport: this.submitReportNow,
+
+      // What came back from triage. A rejection says which check failed — a
+      // silent one is how you lose the contributor you wanted.
+      reportVerdict: (s.reportResult && s.reportResult.verdict) || null,
+      reportAccepted: !!(s.reportResult && s.reportResult.verdict === "accepted"),
+      reportReason: (s.reportResult && s.reportResult.reason) || "",
+      reportPhotoNote: (s.reportResult && s.reportResult.vision && s.reportResult.vision.reason) || (s.reportResult && s.reportResult.visionNote) || "",
+      reportChecks: ((s.reportResult && s.reportResult.checks) || []).map((c) => ({
+        id: c.id,
+        ok: c.ok,
+        label: { "fresh-fix": "Location is current", "precise-fix": "Position is precise enough", "at-the-place": "You are at the place", "fresh-photo": "Photo taken just now", "not-flooding": "Within your hourly limit" }[c.id] || c.id,
+        detail: c.ok ? "" : c.detail,
       })),
-      points: s.points.toLocaleString(), vouchers,
-      toGold: Math.max(0, 3100 - s.points).toLocaleString(),
-      tierBarStyle: { width: Math.round(Math.max(0, Math.min(1, (s.points - 1000) / 2100)) * 100) + "%", height: "100%", background: "var(--crowd-light)", borderRadius: 999, transition: "width var(--dur-slow) var(--ease-out)" },
+      reportPointsLine: s.reportResult && s.reportResult.verdict === "accepted"
+        // The whole point of the rewards change, said on the screen where it
+        // matters: filing alone earns nothing until someone else agrees.
+        ? `${s.reportResult.points} points pending. They are credited when another commuter reports the same thing, or LTA's own feed confirms it.`
+        : "No points — this report wasn't filed.",
+
+      // Real reports, grouped, with the evidence that justifies each tier.
+      // Nothing here is sample data any more.
+      recentReports: reportGroups.map((group) => ({
+        key: group.key,
+        text: `${group.label} · ${group.stationName}`,
+        tier: group.confidence.label,
+        line: group.confidence.line,
+        ago: this.relTimeOf(group.lastAt),
+        official: group.confidence.official,
+        dotStyle: { flex: "none", width: 10, height: 10, borderRadius: 999, background: group.confidence.official ? CROWD.busy : CROWD.moderate, boxShadow: "0 0 0 4px color-mix(in oklch, " + (group.confidence.official ? CROWD.busy : CROWD.moderate) + " 18%, transparent)" },
+        tierStyle: "font:var(--weight-bold) 10px/1 var(--font-body);letter-spacing:.06em;text-transform:uppercase;padding:5px 9px;border-radius:999px;white-space:nowrap;color:" +
+          (group.confidence.official ? "#fff" : "var(--text-muted)") + ";background:" + (group.confidence.official ? "var(--crowd-busy)" : "var(--sand-200)"),
+      })),
+      reportsPending: !!reportsState.pending,
+      reportsError: reportsState.error || null,
+      reportsEmpty: !reportsState.pending && !reportsState.error && reportGroups.length === 0,
+      reportsNote: reportsState.error
+        ? reportsState.error
+        // "No reports" is a fact worth stating; inventing three to fill the
+        // space is what this list used to do.
+        : "Reports from commuters nearby, live for 30 minutes. Counted by people, not submissions.",
+
+      points: confirmedPoints.toLocaleString(), vouchers,
+      pendingPoints: pendingPoints.toLocaleString(),
+      hasPending: pendingPoints > 0,
+      pendingLine: pendingPoints > 0
+        ? `${pendingPoints.toLocaleString()} points waiting on someone else to report the same thing, or on LTA confirming it.`
+        : "",
+      // Derived from points that are now real, rather than a fixed label.
+      tierName: confirmedPoints >= 3100 ? "Gold tier" : confirmedPoints >= 1000 ? "Silver tier" : "Bronze tier",
+      toGold: Math.max(0, 3100 - confirmedPoints).toLocaleString(),
+      tierBarStyle: { width: Math.round(Math.max(0, Math.min(1, (confirmedPoints - 1000) / 2100)) * 100) + "%", height: "100%", background: "var(--crowd-light)", borderRadius: 999, transition: "width var(--dur-slow) var(--ease-out)" },
+      // Counted from this account's own reports. The old row claimed "94%
+      // verified by others", which was invented and used the one word this
+      // feature must never use.
       pointStats: [
-        { icon: "megaphone", value: "18", label: "Reports this month" },
-        { icon: "badge-check", value: "94%", label: "Verified by others" },
-        { icon: "users", value: "2.1k", label: "Commuters helped" },
+        { icon: "megaphone", value: String(mine.length), label: "Reports you filed" },
+        { icon: "badge-check", value: String(mine.filter((r) => r.state === "confirmed").length), label: "Confirmed by others" },
+        { icon: "hourglass", value: String(mine.filter((r) => r.state === "pending").length), label: "Awaiting confirmation" },
       ],
       ...this.addCommuteVals(s),
     };

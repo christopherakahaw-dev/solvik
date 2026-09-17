@@ -18,8 +18,8 @@ crowded at the time you'd be standing in it.
 a feed is missing, slow or silent, the app says which one and why — "No 410
 arrivals right now", "LTA publishes no crowd forecast for the stations on this
 trip" — instead of showing a plausible number. The only sample data left is the
-points wallet and the reports feed, and both are labelled *Sample data* on
-screen.
+voucher catalogue, labelled *Sample data* on screen; everything else, down to
+"reported by 4 commuters", is counted from something real.
 
 **The crowd warning is a join, not a prediction.** LTA publishes a same-day
 forecast in 30-minute intervals per station. Solvik plans your journey, works
@@ -50,13 +50,24 @@ through the fault. If every route still uses it, the app says so rather than
 showing one through the disruption, and the alternative's time is labelled as
 what it is: a timetable that doesn't know anything is wrong.
 
+**Reports are checked before they count, and rewarded only when corroborated.**
+A report needs a photo taken through the camera then and there — there is no
+file picker to choose an older one from. The server checks where you are, how
+precise that is, when the shutter fired, and asks Claude whether the photo is
+*consistent* with what you reported. Nothing is ever labelled **verified**,
+because consistency is not truth. Points are credited only when a second
+commuter reports the same thing or LTA's own feed confirms it, so filing alone
+earns nothing. The photo is checked and discarded — it is never stored.
+
 **What it learns about your movements stays on your device.** Only deliberate
 actions are recorded — a route you started, a destination you chose — never a
 background trace of where your phone has been. That journey history, and the
 commutes and places inferred from it, are held in the browser and sent to no
 endpoint: there is no journeys table to sync them to. Trips older than 90 days
 fall away on their own, and one tap forgets all of it. Saved places, watched
-commutes and preferences do sync, to your own account, if you make one. Your API
+commutes and preferences do sync, to your own account, if you make one — and a
+report you file deliberately sends its station, coordinates and your account id,
+which is the one thing here that is meant to leave the device. Your API
 keys stay server-side and never reach the browser.
 
 ## Try it
@@ -89,14 +100,15 @@ setup.
 | Service alerts, matched to the lines you use | LTA train service alerts |
 | Nearest stop for a report | LTA bus stops |
 | Where you are, and progress along the route | Browser geolocation |
-| Points, vouchers, nearby reports | **Sample data** — needs an account service neither API provides |
+| Commuter reports, their corroboration counts, and your points | Reports filed by people using the app, checked before they count |
+| Vouchers | **Sample data** — nothing issues a real one |
 
 ## How it's built
 
 React + Vite, no framework beyond that. The map is Leaflet over OneMap's own
 raster tiles, falling back to OpenStreetMap if they fail.
 
-Eleven serverless functions in [`app/api/`](app/api) hold the credentials and do
+Twelve serverless functions in [`app/api/`](app/api) hold the credentials and do
 the joining work — ranking journeys, attaching crowd levels and bus arrivals to
 the legs that need them, resolving station codes to positions. The browser only
 ever talks to those. `npm run dev` runs them locally too, so the whole thing
@@ -105,7 +117,7 @@ works without deploying anywhere.
 The interesting logic is pulled out into pure modules that can be tested without
 a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
-`tripDetail.js` (an itinerary → the step-by-step card). **124 tests** run against
+`tripDetail.js` (an itinerary → the step-by-step card). **157 tests** run against
 recorded API responses, so every parser is checked without touching the network.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither
@@ -118,9 +130,15 @@ feed covers — separating LTA's gaps from our own, which is how a bug that lost
 
 Named here rather than left to be discovered:
 
-- **The points wallet is sample data.** Accounts (Supabase) carry your places,
-  commutes and preferences, but nothing issues or redeems real vouchers, so the
-  wallet is illustrative and labelled as such on screen.
+- **No real vouchers.** Points are counted from reports you actually filed and
+  that someone else corroborated, but nothing issues or redeems an EZ-Link
+  top-up, so the catalogue is illustrative and labelled as such on screen.
+- **No claim that a report is true.** The photo check establishes consistency;
+  the counts establish agreement; LTA's feed confirms or doesn't. Nothing in the
+  app is labelled *verified*, because none of those three is proof.
+- **No reporting without a camera.** Camera-only capture is the point, so a
+  desktop with no camera says it cannot file a report rather than offering a
+  file picker.
 - **No alerts while the app is closed.** A web page can't be woken without a
   push subscription server; the app says so rather than implying a push that
   won't arrive.

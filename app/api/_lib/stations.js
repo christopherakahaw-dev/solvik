@@ -18,7 +18,7 @@ import directory from "./stations.json" with { type: "json" };
 const cache = new Map(); // code -> { code, name, lat, lng } | null
 const CONCURRENCY = 6;
 
-function fromDirectory(code) {
+export function fromDirectory(code) {
   const hit = directory && directory[code];
   if (!hit || !isFinite(hit.lat) || !isFinite(hit.lng)) return null;
   return { code, name: hit.name, lat: hit.lat, lng: hit.lng };
