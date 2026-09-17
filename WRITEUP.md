@@ -107,7 +107,7 @@ them.
 | "Free bus boarding at Yishun, Khatib" | Quoted verbatim from `AffectedSegments.FreePublicBus`. Not computed, so no caveat. |
 | "Your 12 min on foot will take about 4 min longer" | `walkSecs × 1.35` for heavy rain, `× 1.15` for showers. **These two multipliers are our own assumption, not measured** — see limitations. |
 | "Bishan Road is congested (10–19 km/h)" | `TrafficSpeedBands` band 2, with the feed's own published speed range. Never converted into minutes. |
-| "216 tests" | `npm test` in `app/`. |
+| "216 tests" | `npm test` in `app/`. 31 browser tests: `npx playwright test`. |
 | Points in the wallet | Summed from reports you filed that were corroborated. The **vouchers are sample data** and labelled as such. |
 
 ## 6. Assumptions
@@ -140,8 +140,9 @@ them.
 - **`PCDForecast` has returned 500 for extended periods** during development.
   `ltaFetch` retries the endpoint's alternate spelling on 5xx, and the app says
   the forecast is unavailable rather than substituting live crowding for it.
-- **Large-text mode is declared per persona but not yet applied** to the whole
-  type scale.
+- **Large text scales the type tokens, not hardcoded sizes.** Every size token
+  runs through one factor, so the step-free persona grows the whole interface;
+  a handful of inline literals in the denser screens still do not scale.
 
 ## 8. Reproducing anything here without a key
 

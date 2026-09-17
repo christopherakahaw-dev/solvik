@@ -2615,6 +2615,9 @@ export class AppLogic extends Component {
       endTrip: () => { this.setState({ screen: "map", navTrip: null, navProgress: null, navFixStatus: null }); this.flash("Trip ended"); },
       goReport: () => this.setState({ navRepOpen: true, nrType: null, nrSev: null }),
       ...nav,
+      // Read by the app shell. The step-free persona asks for large text, and
+      // the scale is one token rather than a list of overridden sizes.
+      largeText: personaOf((s.routingPreferences || {}).persona).largeText,
       headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today" }[sc] || "Solvik",
       headerSub: {
         map: "OneMap · Singapore Land Authority",

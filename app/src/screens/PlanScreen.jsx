@@ -129,7 +129,9 @@ export function PlanScreen({ v }) {
             <span style={{ font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".09em", textTransform: "uppercase", opacity: 0.78 }}>Next up · {v.planNextIn}</span>
           </div>
           <div style={{ position: "relative", display: "flex", alignItems: "flex-end", gap: 12, marginTop: 14 }}>
-            <div style={{ font: "var(--weight-heavy) 54px/1 var(--font-numeric)", letterSpacing: "-.03em", fontVariantNumeric: "tabular-nums" }}>{v.planNextLeave}</div>
+            {/* Sized from the token so large text grows it, and kept on one
+                line: at 1.25 the hero clock was wrapping to "09:" / "00". */}
+            <div style={{ font: "var(--weight-heavy) calc(54px * var(--type-scale)) / 1 var(--font-numeric)", letterSpacing: "-.03em", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{v.planNextLeave}</div>
             <div style={{ paddingBottom: 6 }}>
               <div style={{ font: "var(--weight-heavy) 17px/1.2 var(--font-display)", letterSpacing: "-.02em", textWrap: "pretty" }}>{v.planNextName}</div>
               <div style={{ font: "var(--type-caption)", opacity: 0.72, marginTop: 4, textWrap: "pretty" }}>{v.planNextRoute}</div>
