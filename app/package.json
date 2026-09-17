@@ -14,14 +14,11 @@
     "stations": "node scripts/stations.mjs"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
-    "jsonwebtoken": "^9.0.3",
+    "@supabase/supabase-js": "^2.116.0",
     "leaflet": "^1.9.4",
     "lucide": "^1.46.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "uuid": "^14.0.2"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

@@ -12,6 +12,9 @@ mobile build, implemented from the `Onward.dc.html` Claude Design handoff
 - **React + Vite** — single-page app, no server-rendering.
 - **Leaflet + OneMap tiles** — the map surface (`src/components/OneMapCanvas.jsx`), falling back to OpenStreetMap tiles if OneMap tiles fail to load.
 - **`lucide`** for icons, matching the design system's icon set.
+- **Supabase Auth + Postgres** — verified email/password accounts and optional,
+  row-level-secured sync for explicitly saved places, manual commutes and route
+  preferences. Live location, searches and learned journeys remain local.
 - **`api/*.js`** — small serverless functions (Vercel Node runtime) that proxy OneMap and LTA DataMall so their credentials never reach the browser, and do the joining work (journey ranking, crowd density to station coordinates) server-side. `npm run dev` runs these locally too (see `vite.config.js`), so the app is fully functional without deploying anywhere.
 
 ## Getting started
@@ -37,6 +40,11 @@ Copy `.env.example` to `.env` and fill in:
   <https://datamall.lta.gov.sg/content/datamall/en/request-for-api.html> and
   set `LTA_ACCOUNT_KEY`. This powers station crowding, bus loading, service
   alerts and the nearest-stop lookup.
+- **Supabase** — create a project, copy its URL and publishable key into
+  `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, then apply
+  `supabase/migrations/20260917000000_user_data.sql`. Set `SUPABASE_URL` and the
+  server-only `SUPABASE_SERVICE_ROLE_KEY` in Vercel to enable account deletion.
+  Add both the local and deployed app URLs under Authentication redirect URLs.
 
 The locate button uses the browser's own geolocation, which needs no keys but
 does require a secure context — it works on `localhost` and on the deployed

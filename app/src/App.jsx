@@ -8,9 +8,12 @@ import { RewardsScreen } from "./screens/RewardsScreen";
 import { PlanScreen, PlacesSheet, AddCommuteSheet } from "./screens/PlanScreen";
 import { TabBar } from "./screens/TabBar";
 import { ViewportShell } from "./components/ViewportShell";
+import { AuthScreen } from "./screens/AuthScreen";
+import { useAuth } from "./auth/AuthContext";
+import { setStorageScope } from "./lib/storage";
 import "./app.css";
 
-export class App extends AppLogic {
+class AuthenticatedApp extends AppLogic {
   render() {
     const v = this.renderVals();
     return (
@@ -54,4 +57,25 @@ export class App extends AppLogic {
       </ViewportShell>
     );
   }
+}
+
+function LoadingScreen() {
+  return (
+    <ViewportShell>
+      <div className="sv-auth-screen" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, color: "var(--text-muted)" }} role="status">
+          <span className="sv-auth-mark"><span style={{ font: "var(--weight-heavy) 18px/1 var(--font-display)" }}>S</span></span>
+          <span style={{ font: "var(--type-body-strong)" }}>Opening Solvik…</span>
+        </div>
+      </div>
+    </ViewportShell>
+  );
+}
+
+export function App() {
+  const { user, loading, recovery } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!user || recovery) return <ViewportShell><AuthScreen /></ViewportShell>;
+  setStorageScope(user.isGuest ? "" : user.id);
+  return <AuthenticatedApp user={user} key={user.id} />;
 }

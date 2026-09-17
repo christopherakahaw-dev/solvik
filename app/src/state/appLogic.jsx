@@ -17,6 +17,10 @@ import { metresBetween } from "../lib/geometry";
 import { resolveRouteOrigin } from "../lib/routeOrigin";
 import { addressDetail, durationLabel, forecastSlots, singaporeClock } from "../lib/display";
 import {
+  applyCloudSnapshot, loadCloudSnapshot, saveCloudSnapshot,
+  snapshotForCloud, snapshotHasPersonalData,
+} from "../lib/cloudData";
+import {
   KEYS, loadStored, store, rememberSearch, recentSearches, clearSearches,
   loadReadAlerts, markAlertsRead, alertId, loadSavedPlaces, saveSavedPlaces,
   savedPlaceDetail, loadPreferences, clearAllUserData,
@@ -24,7 +28,6 @@ import {
 
 const ONBOARDED_KEY = KEYS.onboarded;
 const COMMUTES_KEY = KEYS.commutes;
-const initialPreferences = loadPreferences();
 
 // A neutral Singapore-wide fallback. If the user has explicitly saved a
 // verified Home, that is a better local-only origin until they request GPS.
@@ -65,10 +68,12 @@ export const CROWD = { light: "var(--crowd-light)", moderate: "var(--crowd-moder
 export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 
 export class AppLogic extends Component {
+  initialPreferences = loadPreferences();
   state = {
     savedList: loadStored(COMMUTES_KEY, []),
     savedPlaces: loadSavedPlaces(),
-    routingPreferences: initialPreferences,
+    routingPreferences: this.initialPreferences,
+    cloudSyncStatus: "off", cloudConflict: null, cloudSyncError: "",
     addEdit: null, placesOpen: false,
     addOpen: false, addFrom: "home", addTo: "work", addDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
     addMode: "Comfort", addMins: 462, addWhen: "leave", fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
@@ -76,7 +81,7 @@ export class AppLogic extends Component {
     navPage: 0, stepsDrag: false, pin: null,
     screen: loadStored(ONBOARDED_KEY, false) ? "map" : "intro",
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
-    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
+    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
@@ -791,7 +796,7 @@ export class AppLogic extends Component {
         if (Object.values(s.placesDraftPending || {}).some(Boolean)) return;
         this.setState({ placesOpen: false, savedPlaces: s.placesDraft || savedPlaces, placesDraft: null,
           routingPreferences: { ...s.routingPreferences, showSavedPlaces: s.placesShowDraft } });
-        this.flash("Places saved on this device");
+        this.flash("Places saved");
       },
       placeRows: [
         { key: "home", label: "Home", short: "Home", icon: "house", placeholder: "Block, street or MRT stop" },
@@ -974,6 +979,20 @@ export class AppLogic extends Component {
     if (s.savedPlaces !== prevState.savedPlaces) saveSavedPlaces(s.savedPlaces);
     if (s.routingPreferences !== prevState.routingPreferences) store(KEYS.preferences, s.routingPreferences);
 
+    const cloudWasOn = Boolean(prevProps.user && !prevProps.user.isGuest && prevProps.user.cloudSync);
+    const cloudIsOn = Boolean(this.props.user && !this.props.user.isGuest && this.props.user.cloudSync);
+    if (cloudIsOn && !cloudWasOn) this.startCloudSync();
+    if (!cloudIsOn && cloudWasOn) {
+      if (this._cloudSyncT) clearTimeout(this._cloudSyncT);
+    }
+    if (
+      cloudIsOn &&
+      s.cloudSyncStatus === "ready" &&
+      (s.savedList !== prevState.savedList || s.savedPlaces !== prevState.savedPlaces || s.routingPreferences !== prevState.routingPreferences)
+    ) {
+      this.scheduleCloudSync();
+    }
+
     // Arrivals are polled only while there are options on screen to show them.
     if (s.trips.options !== prevState.trips.options) {
       if (s.dest && s.trips.options.length) this.startArrivalsPoll();
@@ -1009,6 +1028,7 @@ export class AppLogic extends Component {
     // The forecast moves in 30-minute steps and the clock moves under it, so
     // the outlook is re-read a few times an hour rather than once a session.
     this.startAlertPoll();
+    if (this.props.user && !this.props.user.isGuest && this.props.user.cloudSync) this.startCloudSync();
     this.outlookIv = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       this.loadOutlook();
@@ -1023,6 +1043,7 @@ export class AppLogic extends Component {
     if (this._addSearchT) clearTimeout(this._addSearchT);
     if (this._settleT) clearTimeout(this._settleT);
     if (this._snapBackT) clearTimeout(this._snapBackT);
+    if (this._cloudSyncT) clearTimeout(this._cloudSyncT);
     if (this.outlookIv) clearInterval(this.outlookIv);
     this.stopAlertPoll();
     if (this._leaveCancel) this._leaveCancel();
@@ -1030,6 +1051,65 @@ export class AppLogic extends Component {
     this.stopArrivalsPoll();
     if (typeof document !== "undefined") document.removeEventListener("visibilitychange", this.handleVisibilityChange);
   }
+
+  startCloudSync = async () => {
+    if (!this.props.user || this.props.user.isGuest || !this.props.user.cloudSync) return;
+    this.setState({ cloudSyncStatus: "loading", cloudSyncError: "", cloudConflict: null });
+    try {
+      const remote = await loadCloudSnapshot();
+      const local = snapshotForCloud(this.state);
+      if (remote.hasPersonalData && snapshotHasPersonalData(local)) {
+        this.setState({ cloudSyncStatus: "conflict", cloudConflict: remote });
+        return;
+      }
+      if (remote.hasCloudData) {
+        this.setState({
+          ...applyCloudSnapshot(this.state, remote),
+          cloudSyncStatus: "ready",
+          cloudConflict: null,
+        });
+        return;
+      }
+      await saveCloudSnapshot(this.state);
+      this.setState({ cloudSyncStatus: "ready", cloudConflict: null });
+    } catch (error) {
+      this.setState({ cloudSyncStatus: "error", cloudSyncError: error?.message || "Cloud sync is unavailable." });
+    }
+  };
+
+  scheduleCloudSync = () => {
+    if (this._cloudSyncT) clearTimeout(this._cloudSyncT);
+    this.setState({ cloudSyncStatus: "saving", cloudSyncError: "" });
+    this._cloudSyncT = setTimeout(async () => {
+      try {
+        await saveCloudSnapshot(this.state);
+        this.setState({ cloudSyncStatus: "ready" });
+      } catch (error) {
+        this.setState({ cloudSyncStatus: "error", cloudSyncError: error?.message || "Cloud sync is unavailable." });
+      }
+    }, 900);
+  };
+
+  keepDeviceData = async () => {
+    this.setState({ cloudSyncStatus: "saving", cloudSyncError: "" });
+    try {
+      await saveCloudSnapshot(this.state);
+      this.setState({ cloudSyncStatus: "ready", cloudConflict: null });
+      this.flash("This device is now synced");
+    } catch (error) {
+      this.setState({ cloudSyncStatus: "error", cloudSyncError: error?.message || "Cloud sync is unavailable." });
+    }
+  };
+
+  useCloudData = () => {
+    if (!this.state.cloudConflict) return;
+    this.setState({
+      ...applyCloudSnapshot(this.state, this.state.cloudConflict),
+      cloudSyncStatus: "ready",
+      cloudConflict: null,
+    });
+    this.flash("Cloud data restored");
+  };
 
   // Turn-by-turn follows the real position rather than a simulated clock.
   startTracking = () => {
@@ -1989,6 +2069,12 @@ export class AppLogic extends Component {
           return `${today} · ${n} watched commute${n === 1 ? "" : "s"}`;
         })(),
       }[sc] || "",
+      cloudSyncStatus: s.cloudSyncStatus,
+      cloudSyncError: s.cloudSyncError,
+      cloudSyncConflict: s.cloudSyncStatus === "conflict",
+      keepDeviceData: this.keepDeviceData,
+      useCloudData: this.useCloudData,
+      retryCloudSync: this.startCloudSync,
       toast: s.toast,
       tabItems: tabDefs, tab: sc, setTab: (id) => this.go(id),
       tabPill: {

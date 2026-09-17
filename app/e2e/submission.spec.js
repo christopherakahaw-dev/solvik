@@ -18,6 +18,7 @@ const option = { mins: 154, eta: "03:22", fare: "$0.00", walk: "154 min", walkOn
 async function setup(page, places = { home, school }) {
   await page.addInitScript(({ places }) => {
     if (!localStorage.getItem("qa:seeded")) {
+      localStorage.setItem("sv-auth:guest-session", "1");
       localStorage.setItem("solvik:onboarded", "1");
       localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places }));
       localStorage.setItem("solvik:searches", JSON.stringify([{ name: "CLARKE QUAY MRT STATION", detail: "10 EU TONG SEN STREET", ll: [1.288, 103.846] }]));
@@ -51,6 +52,18 @@ async function noOverflow(page) {
   expect(await page.locator(".solvik-app-shell").evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   expect(await page.locator("body").evaluate(el => el.scrollWidth <= window.innerWidth + 1)).toBe(true);
 }
+
+test("the account gate remains usable when Supabase is not configured", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.getByText("Account setup is not connected yet.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true }).last()).toBeDisabled();
+  await page.getByRole("tab", { name: "Create account" }).click();
+  await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue as guest" }).click();
+  await expect(page.getByRole("button", { name: "Set up in a minute" })).toBeVisible();
+  await noOverflow(page);
+});
 
 test("map overlays remain separated and search is anchored to the field", async ({ page }, info) => {
   await setup(page);
@@ -248,6 +261,7 @@ test("storage denial does not prevent skipping onboarding or browsing tabs", asy
     Storage.prototype.setItem = () => { throw new DOMException("Blocked", "SecurityError"); };
   });
   await page.reload();
+  await page.getByRole("button", { name: "Continue as guest" }).click();
   await page.getByRole("button", { name: "Skip for now" }).click();
   for (const name of ["Plan", "Report", "Points", "Map"]) {
     await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();

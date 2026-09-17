@@ -29,10 +29,23 @@ export const DEFAULT_PREFERENCES = {
   showSavedPlaces: true,
 };
 
+let activeScope = "";
+
+// Signed-in accounts get isolated browser storage, so switching accounts on a
+// shared device cannot reveal somebody else's saved places or commutes. Guest
+// mode deliberately keeps the original device-local keys for compatibility.
+export function setStorageScope(scope) {
+  activeScope = String(scope || "").replace(/[^a-zA-Z0-9_-]/g, "");
+}
+
+export function storageKey(key) {
+  return activeScope ? `${key}:account:${activeScope}` : key;
+}
+
 export function loadStored(key, fallback) {
   try {
     if (typeof localStorage === "undefined") return fallback;
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(storageKey(key));
     const parsed = raw ? JSON.parse(raw) : fallback;
     if (Array.isArray(fallback) && !Array.isArray(parsed)) return fallback;
     return parsed;
@@ -44,7 +57,7 @@ export function loadStored(key, fallback) {
 export function store(key, value) {
   try {
     if (typeof localStorage === "undefined") return;
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(storageKey(key), JSON.stringify(value));
   } catch {
     // Out of quota or storage denied; the session still works.
   }
@@ -117,7 +130,7 @@ export function clearAllUserData() {
   if (typeof localStorage === "undefined") return;
   Object.values(KEYS).forEach((key) => {
     try {
-      localStorage.removeItem(key);
+      localStorage.removeItem(storageKey(key));
     } catch {
       // Storage may be blocked. Clearing what is available is still useful.
     }
