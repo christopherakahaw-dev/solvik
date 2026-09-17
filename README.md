@@ -133,8 +133,8 @@ a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
 `tripDetail.js` (an itinerary → the step-by-step card), `persona.js` (who is
 reading → what changes), `lines.js` (the line-code canon the brief warns about).
-**230 tests** run against recorded API responses, so every parser is checked
-without touching the network, plus 32 in a real browser.
+**236 tests** run against recorded API responses, so every parser is checked
+without touching the network, plus 33 in a real browser.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither
 prints a secret: `/api/diagnostics` reports exactly what OneMap did with a

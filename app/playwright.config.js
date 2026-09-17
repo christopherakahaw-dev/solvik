@@ -22,6 +22,10 @@ export default defineConfig({
       VITE_SUPABASE_PUBLISHABLE_KEY: "",
       SUPABASE_URL: "",
       SUPABASE_SERVICE_ROLE_KEY: "",
+      // demo-path.spec.js drives the seed button, which only a demo build
+      // offers. Every other spec intercepts /api/ itself, so the recorded
+      // fallbacks this also switches on never come into play for them.
+      VITE_DEMO_MODE: "1",
     },
   },
 });
