@@ -11,6 +11,16 @@ const isLL = (v) => Array.isArray(v) && v.length >= 2 && isFinite(v[0]) && isFin
 const ONEMAP_TILE_URL = "https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png";
 const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
+// Attribution is a licence condition, not decoration. OneMap's tiles are
+// published by the Singapore Land Authority under their terms of use, and
+// OpenStreetMap is ODbL — which requires "© OpenStreetMap contributors" wherever
+// the map or anything derived from it is shown. Leaflet's own control is kept,
+// compacted to a prefix-free corner so it costs almost no screen on a phone.
+const ONEMAP_ATTRIBUTION =
+  '<a href="https://www.onemap.gov.sg/" target="_blank" rel="noreferrer">OneMap</a> © Singapore Land Authority · map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
+const OSM_ATTRIBUTION =
+  '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
+
 const SAVED_PLACE_GLYPHS = {
   home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
   work: '<rect width="18" height="14" x="3" y="7" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/>',
@@ -75,13 +85,14 @@ export function OneMapCanvas({
       zoomDelta: 0.5,
       wheelPxPerZoomLevel: 90,
     });
-    const onemap = L.tileLayer(ONEMAP_TILE_URL, { minZoom: 11, maxZoom: 19 }).addTo(map);
+    L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
+    const onemap = L.tileLayer(ONEMAP_TILE_URL, { minZoom: 11, maxZoom: 19, attribution: ONEMAP_ATTRIBUTION }).addTo(map);
     let fellBack = false;
     onemap.on("tileerror", () => {
       if (fellBack) return;
       fellBack = true;
       map.removeLayer(onemap);
-      L.tileLayer(OSM_TILE_URL, { maxZoom: 19 }).addTo(map);
+      L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION }).addTo(map);
     });
     map.on("click", (e) => {
       if (clickRef.current) clickRef.current([e.latlng.lat, e.latlng.lng]);

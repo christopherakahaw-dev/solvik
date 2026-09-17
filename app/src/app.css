@@ -172,3 +172,28 @@
 .sv-account-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; }
 .sv-account-actions button { padding: 0; cursor: pointer; border: 0; background: none; color: var(--text-muted); font: var(--weight-bold) var(--size-caption)/1.2 var(--font-body); }
 .sv-account-actions button.is-danger { color: var(--status-fault); }
+
+/* Map attribution.
+   OneMap's tiles and OpenStreetMap both require credit wherever the map is
+   shown — for OSM that is an ODbL licence condition, not a style choice. So it
+   has to be legible rather than technically present: lifted clear of the tab
+   bar, allowed to wrap instead of clipping, and readable against the map. */
+.leaflet-control-attribution {
+  max-width: calc(100vw - 20px);
+  margin: 0 6px 6px 0 !important;
+  padding: 3px 7px !important;
+  border-radius: 7px 0 0 0;
+  background: color-mix(in oklch, var(--surface-card) 88%, transparent) !important;
+  color: var(--text-muted) !important;
+  font: var(--weight-medium) 10px/1.35 var(--font-body) !important;
+  text-wrap: pretty;
+}
+.leaflet-control-attribution a {
+  color: var(--text-body) !important;
+  text-decoration: underline;
+}
+/* The tab bar overlays the bottom of the full-height map on every screen that
+   shows one, so the credit is raised clear of it rather than hidden behind. */
+.leaflet-bottom.leaflet-right {
+  bottom: 74px;
+}
