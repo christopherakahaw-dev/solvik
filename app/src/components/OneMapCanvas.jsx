@@ -8,8 +8,23 @@ import "leaflet/dist/leaflet.css";
 // renders blank.
 const isLL = (v) => Array.isArray(v) && v.length >= 2 && isFinite(v[0]) && isFinite(v[1]);
 
+// OpenStreetMap is the required geospatial base, and the same section forbids
+// serving it from tile.openstreetmap.org — that server runs on donated
+// infrastructure and its usage policy prohibits application traffic. Both
+// conditions hold at once only by rendering OSM through a provider key.
+//
+// So: OSM via MapTiler is the base. OneMap stays as the fallback rather than the
+// other way round — it is the official Singapore rendering, and worth keeping
+// for the day a key is missing or MapTiler is unreachable.
+const MAPTILER_KEY = (() => {
+  try {
+    return String(import.meta.env.VITE_MAPTILER_KEY || "").trim();
+  } catch {
+    return "";
+  }
+})();
+const OSM_TILE_URL = `https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`;
 const ONEMAP_TILE_URL = "https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png";
-const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 // Attribution is a licence condition, not decoration. OneMap's tiles are
 // published by the Singapore Land Authority under their terms of use, and
@@ -19,7 +34,7 @@ const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const ONEMAP_ATTRIBUTION =
   '<a href="https://www.onemap.gov.sg/" target="_blank" rel="noreferrer">OneMap</a> © Singapore Land Authority · map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
 const OSM_ATTRIBUTION =
-  '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
+  '<a href="https://www.maptiler.com/copyright/" target="_blank" rel="noreferrer">© MapTiler</a> · map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
 
 const SAVED_PLACE_GLYPHS = {
   home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
@@ -86,13 +101,21 @@ export function OneMapCanvas({
       wheelPxPerZoomLevel: 90,
     });
     L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
-    const onemap = L.tileLayer(ONEMAP_TILE_URL, { minZoom: 11, maxZoom: 19, attribution: ONEMAP_ATTRIBUTION }).addTo(map);
+    // With no MapTiler key configured there is nothing to fall back *from*, so
+    // OneMap leads instead of showing an empty grid. Either way OSM is credited.
+    const base = MAPTILER_KEY
+      ? L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION })
+      : L.tileLayer(ONEMAP_TILE_URL, { minZoom: 11, maxZoom: 19, attribution: ONEMAP_ATTRIBUTION });
+    base.addTo(map);
     let fellBack = false;
-    onemap.on("tileerror", () => {
+    base.on("tileerror", () => {
       if (fellBack) return;
       fellBack = true;
-      map.removeLayer(onemap);
-      L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION }).addTo(map);
+      map.removeLayer(base);
+      const other = MAPTILER_KEY
+        ? L.tileLayer(ONEMAP_TILE_URL, { minZoom: 11, maxZoom: 19, attribution: ONEMAP_ATTRIBUTION })
+        : L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION });
+      other.addTo(map);
     });
     map.on("click", (e) => {
       if (clickRef.current) clickRef.current([e.latlng.lat, e.latlng.lng]);

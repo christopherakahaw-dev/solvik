@@ -172,6 +172,20 @@ export function PlanScreen({ v }) {
               <span style={{ font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>{a.title}</span>
             </div>
           ))}
+          {/* LTA's own mitigation leads: free boarding is a better answer than
+              anything we can compute, and it needs no caveat. */}
+          {v.mitHas && (
+            <div style={{ marginTop: 12, padding: "12px 13px", borderRadius: 14, background: "var(--crowd-light)", color: "#fff" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <Icon name="bus-front" size={15} />
+                <span style={{ font: "var(--weight-heavy) 11px/1 var(--font-body)", letterSpacing: ".06em", textTransform: "uppercase" }}>Free travel</span>
+              </div>
+              {v.mitLines.map((line, i) => (
+                <div key={i} style={{ font: "var(--type-body-strong)", marginTop: 6, textWrap: "pretty" }}>{line}</div>
+              ))}
+              <div style={{ font: "var(--type-caption)", opacity: 0.82, marginTop: 6, textWrap: "pretty" }}>{v.mitNote}</div>
+            </div>
+          )}
           {v.rrHas && (
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-card)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -201,6 +215,24 @@ export function PlanScreen({ v }) {
                 {v.fgActionLabel}
               </Button>
             </div>
+          )}
+        </div>
+      )}
+
+      {v.wxHas && (
+        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.wxWet ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-soft)", color: v.wxWet ? "var(--crowd-moderate)" : "var(--text-accent)" }}>
+              <Icon name={v.wxWet ? "cloud-rain" : "sun"} size={15} />
+            </span>
+            <SectionLabel>Weather on your way</SectionLabel>
+          </div>
+          <div style={{ font: "var(--weight-heavy) 17px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 11, textWrap: "pretty" }}>{v.wxTitle}</div>
+          {v.wxDetail && (
+            <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.wxDetail}</div>
+          )}
+          {v.wxNote && (
+            <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.wxNote}</div>
           )}
         </div>
       )}

@@ -87,6 +87,52 @@ export const recordedFacilities = {
   ],
 };
 
+// Weather, in the shape data.gov.sg publishes. Rain over the north so it lands
+// on the recorded Yishun commute rather than floating unattached.
+export const recordedNowcast = {
+  data: {
+    area_metadata: [
+      { name: "Yishun", label_location: { latitude: 1.4304, longitude: 103.8354 } },
+      { name: "Bishan", label_location: { latitude: 1.3509, longitude: 103.8485 } },
+      { name: "City", label_location: { latitude: 1.2925, longitude: 103.8547 } },
+    ],
+    items: [
+      {
+        valid_period: { end: new Date(Date.now() + 2 * 3600_000).toISOString() },
+        forecasts: [
+          { area: "Yishun", forecast: "Moderate Rain" },
+          { area: "Bishan", forecast: "Light Rain" },
+          { area: "City", forecast: "Partly Cloudy (Day)" },
+        ],
+      },
+    ],
+  },
+};
+
+// Periods are generated around the current time so the demo always has one that
+// covers "now" — the shape is the published one, the clock is ours.
+export function recordedOutlook(now = Date.now()) {
+  const start = new Date(Math.floor(now / 3600_000) * 3600_000);
+  const periods = [0, 1, 2, 3].map((i) => {
+    const from = new Date(start.getTime() + i * 6 * 3600_000);
+    const to = new Date(from.getTime() + 6 * 3600_000);
+    const wet = i === 0;
+    const text = wet ? "Moderate Rain" : "Partly Cloudy (Day)";
+    return {
+      timePeriod: {
+        start: from.toISOString(),
+        end: to.toISOString(),
+        text: `${from.getHours()}.00 to ${to.getHours()}.00`,
+      },
+      regions: {
+        west: { text }, east: { text }, central: { text },
+        south: { text }, north: { text: wet ? "Heavy Thundery Showers" : text },
+      },
+    };
+  });
+  return { data: { records: [{ general: { forecast: { text: "Thundery Showers" } }, periods }] } };
+}
+
 export const recordedBusStops = [
   { BusStopCode: "53061", RoadName: "Bishan Rd", Description: "Bishan Stn Exit C", Latitude: 1.35072, Longitude: 103.84853 },
   { BusStopCode: "53069", RoadName: "Bishan Rd", Description: "Blk 511", Latitude: 1.35548, Longitude: 103.84796 },

@@ -7,12 +7,14 @@ import { getNearestStop } from "../api/stop";
 import { getArrivals } from "../api/arrivals";
 import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { commuteOutlook, outlookCodes } from "../lib/outlook";
-import { worksLabel, worksDetail } from "../lib/planned";
+import { worksLabel, worksDetail, mitigationsFor } from "../lib/planned";
 import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary, seedSampleJourneys } from "../lib/journeys";
 import { inferCommutes, commuteFromPattern, evidenceLine, staleCommutes, RETIRE_MS } from "../lib/patterns";
 import { canonicalLine, sameLine } from "../lib/lines";
 import { learnedPlaces, linesForPlaces } from "../lib/places";
 import { getPlannedWorks } from "../api/planned";
+import { getWeather } from "../api/weather";
+import { forecastAt, nowcastAt, weatherLine, isWet, walkAdjustment } from "../lib/weather";
 import { submitReport, loadReportGroups as fetchReportGroups, loadMyReports as fetchMyReports } from "../api/reports";
 import { groupsFromCounts } from "../lib/confidence";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
@@ -90,6 +92,7 @@ export class AppLogic extends Component {
       : (this.props.user?.onboardingComplete ? "map" : "intro"),
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
     planned: { works: [], pending: true, error: null },
+    weather: { nowcast: null, outlook: null, pending: true, error: null },
     reportGroups: { groups: [], configured: true, pending: true, error: null },
     myReports: [],
     photo: null, cameraOpen: false, reportBusy: false, reportResult: null,
@@ -331,6 +334,15 @@ export class AppLogic extends Component {
     const alerts = ((this.state.faults && this.state.faults.items) || []).flatMap((f) => f.stations || []);
     return [...new Set([...works, ...alerts])];
   }
+
+  // Read once on opening and every half hour: the nowcast covers two hours and
+  // the outlook is issued a few times a day, so asking more often would be
+  // traffic for an answer that has not moved.
+  loadWeather = () => {
+    getWeather()
+      .then((data) => this.setState({ weather: { ...data, pending: false, error: null } }))
+      .catch((err) => this.setState({ weather: { nowcast: null, outlook: null, pending: false, error: String(err.message || err) } }));
+  };
 
   loadReportGroups = () => {
     fetchReportGroups()
@@ -725,6 +737,8 @@ export class AppLogic extends Component {
       fgHas: false, fgTitle: "", fgDetail: "", fgTone: "muted", fgCoverage: "", fgAlerts: [],
       fgActionLabel: "View alternatives", fgAction: () => {}, fgHasAction: false,
       rrHas: false, rrPending: false, rrLine: "", rrTitle: "", rrDetail: "", rrCaveat: "", rrAdvice: "",
+      mitHas: false, mitLines: [], mitNote: "",
+      wxHas: false, wxTitle: "", wxDetail: "", wxNote: "", wxWet: false,
       pwHas: false, pwTitle: "", pwDetail: "", pwNote: "", pwBlocking: false, pwAction: () => {}, pwHasAction: false, pwActionLabel: "",
     };
     if (!next) {
@@ -767,6 +781,23 @@ export class AppLogic extends Component {
     // which of those you are.
     const works = this.worksOnRoute(itinerary);
     const stepFree = next.mode === "Step-free";
+    // What LTA has already activated for this disruption. Station codes are
+    // resolved to names through the crowd feed, which carries both.
+    const stationName = (code) => {
+      const hit = ((s.crowd && s.crowd.stations) || []).find((st) => String(st.code).toUpperCase() === String(code).toUpperCase());
+      return (hit && hit.name) || code;
+    };
+    const mitigations = mitigationsFor(alerts, stationName);
+
+    // Weather at the destination end, at the time you would arrive — the walk
+    // legs are where rain actually costs you. The penalty is stated, never
+    // folded silently into the ETA.
+    const weather = s.weather || {};
+    const arriveAt = view && view.arriveAt ? view.arriveAt : Date.now() + (view ? view.durationMins : 0) * 60000;
+    const wxForecast = forecastAt({ outlook: weather.outlook, ll: t.ll, at: arriveAt });
+    const wxNow = nowcastAt(weather.nowcast, f.ll);
+    const wxWet = !!(wxForecast && isWet(wxForecast.condition));
+    const wxWalk = walkAdjustment({ walkSecs: (itinerary && itinerary.walkSecs) || 0, condition: wxForecast && wxForecast.condition });
     const rrOption = reroute.option || null;
     const rrNone = !!(reroute.avoided && reroute.avoided.none);
     const rrDelta = rrOption && view ? rrOption.mins - view.durationMins : null;
@@ -825,7 +856,9 @@ export class AppLogic extends Component {
           : "Light all the way"
         : "",
       planNextCrowdLevel: worst ? worst.level : "light",
-      startNext: () => goToCommute(busy ? "quiet" : COMMUTE_MODES[next.mode] || "fast"),
+      // Rain moves the recommendation toward less walking; crowding toward a
+      // quieter carriage. Either way the card above has already said why.
+      startNext: () => goToCommute(wxWet ? "walk" : busy ? "quiet" : COMMUTE_MODES[next.mode] || "fast"),
       watchNext: () => this.armLeaveAlert(view, `${f.label} → ${t.label}`),
       watchNextLabel: s.leaveAlert && s.leaveAlert.key === (outlook.key || "") ? "Alert set" : "Alert me",
 
@@ -903,6 +936,26 @@ export class AppLogic extends Component {
       // disruption is happening, so this is a route that avoids the broken line
       // — not a live-adjusted time. Saying so is the whole point.
       rrCaveat: rrOption ? `${rrOption.mins} min is OneMap's timetable, which doesn't know about the disruption. Expect the alternative to be busier than usual.` : "",
+      // Weather. The brief names rain as something that must change the
+      // recommendation, so this both warns and shifts the mode: a wet walk is
+      // ranked differently, and the card says that is why.
+      wxHas: !!wxForecast,
+      wxWet,
+      wxTitle: wxForecast ? (wxWet ? `${wxForecast.text} when you arrive` : wxForecast.text) : "",
+      wxDetail: wxForecast ? weatherLine({ forecast: wxForecast, walkSecs: (itinerary && itinerary.walkSecs) || 0 }) : "",
+      wxNote: [
+        wxNow && isWet(wxNow.condition) ? `${wxNow.text} at ${wxNow.name} right now.` : "",
+        // Said at the feed's own resolution — periods of hours, never a minute.
+        wxForecast ? "From NEA's 24-hour forecast, published in multi-hour periods." : "",
+      ].filter(Boolean).join(" "),
+
+      // What LTA has activated. Shown above our own alternative because it is
+      // quoted from the feed rather than computed — which is also why it carries
+      // no timetable caveat, unlike the reroute below it.
+      mitHas: mitigations.length > 0,
+      mitLines: mitigations.flatMap((m) => m.lines).slice(0, 3),
+      mitNote: mitigations.length ? "Activated by LTA for this disruption." : "",
+
       // Planned works — scheduled, not a fault, so stated separately from the
       // disruption above rather than blended into it.
       pwHas: works.length > 0,
@@ -1364,6 +1417,11 @@ export class AppLogic extends Component {
     this.loadOutlook();
     this.loadPlanned();
     this.loadReportGroups();
+    this.loadWeather();
+    this.weatherIv = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      this.loadWeather();
+    }, 30 * 60 * 1000);
     // Journeys outlive the session that recorded them, so the pattern has to be
     // re-read on opening too. Without this, the trip that tipped the balance
     // would only be noticed on the next one — and a commute you had already
@@ -1389,6 +1447,7 @@ export class AppLogic extends Component {
     if (this._snapBackT) clearTimeout(this._snapBackT);
     if (this._cloudSyncT) clearTimeout(this._cloudSyncT);
     if (this.outlookIv) clearInterval(this.outlookIv);
+    if (this.weatherIv) clearInterval(this.weatherIv);
     this.stopAlertPoll();
     if (this._leaveCancel) this._leaveCancel();
     this.stopTracking();
