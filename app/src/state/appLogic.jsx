@@ -1724,6 +1724,12 @@ export class AppLogic extends Component {
           // Kept so a commuter report at one of these stations can be matched
           // against LTA's own record of the same problem.
           stations: String(seg.Stations || "").split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
+          // The mitigation is in the feed. When LTA activates free boarding onto
+          // normal buses, or runs a shuttle, this endpoint says where — so there
+          // is nothing to infer and nothing to caveat. Quoted, not computed.
+          freeBus: String(seg.FreePublicBus || "").trim(),
+          freeShuttle: String(seg.FreeMRTShuttle || "").trim(),
+          shuttleDirection: String(seg.MRTShuttleDirection || "").trim(),
         }));
         const messageItems = data && Array.isArray(data.Message)
           ? data.Message.filter((message) => message && message.Content).map((message) => {

@@ -114,3 +114,60 @@ test("avoiding nothing filters nothing", () => {
   assert.equal(withoutAny(opts, {}).kept.length, 1);
   assert.deepEqual(withoutAny(opts, {}).all, []);
 });
+
+// --- Mitigation LTA has already activated ------------------------------------
+//
+// The brief: "the mitigation is in the feed. You do not have to infer which
+// buses might help." These fields were being parsed and thrown away.
+import { mitigationOf, mitigationsFor } from "../src/lib/planned.js";
+
+const NAMES = { NS13: "Yishun", NS14: "Khatib", NS15: "Yio Chu Kang", EW21: "Buona Vista", EW23: "Clementi" };
+const nameFor = (code) => NAMES[code] || code;
+
+test("free bus boarding is read out as station names", () => {
+  const out = mitigationOf({ line: "NSL", freeBus: "NS13,NS14,NS15" }, nameFor);
+  assert.deepEqual(out.lines, ["Free bus boarding at Yishun, Khatib, Yio Chu Kang"]);
+  assert.deepEqual(out.bus.stations, ["NS13", "NS14", "NS15"]);
+});
+
+test("the island-wide sentence is quoted, not wrapped in \"at\"", () => {
+  // The field is either a station list or a sentence; treating the sentence as
+  // a list produced "Free bus boarding at Free bus service island wide".
+  const out = mitigationOf({ line: "EWL", freeBus: "Free bus service island wide" }, nameFor);
+  assert.deepEqual(out.lines, ["Free bus service island wide"]);
+  assert.equal(out.bus.sentence, true);
+});
+
+test("a shuttle carries its direction when it runs one way", () => {
+  const out = mitigationOf({ line: "EWL", freeShuttle: "EW21,EW23", shuttleDirection: "towards Jurong East" }, nameFor);
+  assert.deepEqual(out.lines, ["Free MRT shuttle at Buona Vista, Clementi towards Jurong East"]);
+  assert.equal(out.direction, "towards Jurong East");
+});
+
+test("a shuttle running both ways does not say so", () => {
+  const out = mitigationOf({ line: "NSL", freeShuttle: "NS13,NS14", shuttleDirection: "Both" }, nameFor);
+  assert.equal(out.direction, "");
+  assert.doesNotMatch(out.lines[0], /both/i);
+});
+
+test("both mitigations appear together, bus first", () => {
+  const out = mitigationOf({ line: "NSL", freeBus: "NS13", freeShuttle: "NS14" }, nameFor);
+  assert.equal(out.lines.length, 2);
+  assert.match(out.lines[0], /bus boarding/);
+  assert.match(out.lines[1], /shuttle/);
+});
+
+test("an alert with no mitigation is null, not an empty card", () => {
+  assert.equal(mitigationOf({ line: "NSL", freeBus: "", freeShuttle: "" }), null);
+  assert.equal(mitigationOf({ line: "NSL" }), null);
+  assert.equal(mitigationOf(null), null);
+});
+
+test("alerts without mitigation drop out of the list", () => {
+  const out = mitigationsFor(
+    [{ line: "NSL", freeBus: "NS13" }, { line: "EWL" }, { line: "CCL", freeShuttle: "CC1" }],
+    nameFor
+  );
+  assert.equal(out.length, 2);
+  assert.deepEqual(out.map((m) => m.line), ["NSL", "CCL"]);
+});

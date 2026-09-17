@@ -86,3 +86,52 @@ export function worksDetail(group) {
   if (!described.length) return "LTA hasn't said which lift.";
   return described.slice(0, 2).join(" · ");
 }
+
+// --- Mitigation LTA has actually activated -----------------------------------
+//
+// TrainServiceAlerts carries FreePublicBus and FreeMRTShuttle inside each
+// affected segment. The brief is blunt about what that means: "the mitigation is
+// in the feed. You do not have to infer which buses might help." So this is
+// quoted, never computed — which is why, unlike our own reroute, it carries no
+// timetable caveat.
+
+const STATION_LIST = /^[A-Z]{2}\d+(\s*,\s*[A-Z]{2}\d+)*$/i;
+
+// The value is either a list of station codes or a sentence like "Free bus
+// service island wide". Both are shown; only the first can be resolved to names.
+export function mitigationOf(alert, nameFor = (code) => code) {
+  if (!alert) return null;
+  const asText = (raw) => {
+    const value = String(raw || "").trim();
+    if (!value) return null;
+    // "Free bus service island wide" is a sentence, not a station list — read it
+    // out as written rather than wrapping it in "at …".
+    if (!STATION_LIST.test(value)) return { text: value, stations: [], sentence: true };
+    const stations = value.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean);
+    return { text: stations.map(nameFor).join(", "), stations, sentence: false };
+  };
+
+  const bus = asText(alert.freeBus);
+  const shuttle = asText(alert.freeShuttle);
+  if (!bus && !shuttle) return null;
+
+  const direction = String(alert.shuttleDirection || "").trim();
+  return {
+    line: alert.line || "",
+    bus,
+    shuttle,
+    direction: direction && direction.toLowerCase() !== "both" ? direction : "",
+    lines: [
+      bus ? (bus.sentence ? bus.text : `Free bus boarding at ${bus.text}`) : null,
+      shuttle
+        ? (shuttle.sentence ? shuttle.text : `Free MRT shuttle at ${shuttle.text}`) +
+          (direction && direction.toLowerCase() !== "both" ? ` ${direction}` : "")
+        : null,
+    ].filter(Boolean),
+  };
+}
+
+// Across every current alert, the mitigations that touch a line this trip rides.
+export function mitigationsFor(alerts, nameFor) {
+  return (alerts || []).map((a) => mitigationOf(a, nameFor)).filter(Boolean);
+}
