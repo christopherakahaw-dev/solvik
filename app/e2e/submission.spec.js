@@ -510,7 +510,7 @@ test("a lift out at a station on your way is raised as planned work, not a fault
 
 test("the same lift is a blocked journey when the commute is step-free", async ({ page }) => {
   const planned = await plannedWorks(page, { mode: "Step-free" });
-  await expect(page.getByText(/Your commute is set to Step-free/)).toBeVisible();
+  await expect(page.getByText(/You travel step-free, so this may block the way through/)).toBeVisible();
   // And we do not claim to know how long it will be out — LTA doesn't publish that.
   await expect(page.getByText(/publishes which lift, not how long/)).toBeVisible();
 

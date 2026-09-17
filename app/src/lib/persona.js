@@ -87,10 +87,14 @@ export function shouldInterrupt(persona, { delayMins = 0, liftOutage = false, we
 // Why this persona is being shown this, in their own terms — so the card can
 // say "your commute is step-free, so this blocks the way through" rather than
 // stating a fact and leaving the reader to work out whether it applies.
-export function reasonFor(persona, kind) {
+// `blocking` lets the caller override the persona: a commute explicitly set to
+// Step-free is a step-free journey whoever is making it, so the setting on the
+// trip has to count alongside the setting on the person. Reading only the
+// persona would quietly tell a step-free commuter the trains still run.
+export function reasonFor(persona, kind, { blocking } = {}) {
   const p = personaOf(persona);
   if (kind === "lift") {
-    return p.liftOutageBlocks
+    return (blocking === undefined ? p.liftOutageBlocks : blocking)
       ? "You travel step-free, so this may block the way through."
       : "The trains still run — only the lift is out.";
   }

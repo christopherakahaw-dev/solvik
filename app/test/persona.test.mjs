@@ -68,3 +68,11 @@ test("only the step-free persona asks for large text", () => {
   assert.equal(PERSONAS.stepFree.largeText, true);
   assert.equal(PERSONAS.fixed.largeText, false);
 });
+
+test("a step-free commute blocks even when the person is not a step-free persona", () => {
+  // The setting on the trip counts alongside the setting on the person. Reading
+  // only the persona told a step-free commuter that the trains still run.
+  assert.match(reasonFor("fixed", "lift", { blocking: true }), /you travel step-free/i);
+  assert.match(reasonFor("stepFree", "lift", { blocking: false }), /trains still run/i);
+  assert.match(reasonFor("fixed", "lift"), /trains still run/i, "no override keeps the persona's own answer");
+});

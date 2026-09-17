@@ -979,7 +979,7 @@ export class AppLogic extends Component {
         : works.map((w) => w.stationName || w.stationCode).join(", "),
       // The same feed row, weighted by who is reading it. LTA publishes which
       // lift, never for how long, so neither version claims a duration.
-      pwNote: `${reasonFor(persona.id, "lift")} LTA publishes which lift, not how long it will be out.`,
+      pwNote: `${reasonFor(persona.id, "lift", { blocking: stepFree })} LTA publishes which lift, not how long it will be out.`,
       pwHasAction: !!(works.length && t.ll),
       pwActionLabel: works.length === 1 ? `Route around ${works[0].stationName || works[0].stationCode}` : "Route around these stations",
       pwAction: () => {
