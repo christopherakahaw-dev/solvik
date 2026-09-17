@@ -2554,7 +2554,6 @@ export class AppLogic extends Component {
       backToSearch: () => this.chooseDest(null),
       pinCoord: s.pin ? s.pin.ll : null,
       hasPin: !!s.pin && !dest && !s.fcPin,
-      showMapAttrib: !dest && !s.pin && !s.fcPin && s.crowdOn === false,
       showPinHint: !s.pin && !dest && !s.searchOpen && !q && !s.fcPin && s.crowdOn === false,
       pinName: s.pin ? s.pin.name : "",
       pinDetail: s.pin ? s.pin.detail : "",

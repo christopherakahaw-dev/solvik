@@ -69,9 +69,11 @@ test("a first visit reaches the app without being asked to sign in", async ({ pa
 test("the account screen is reachable from inside the app, and usable unconfigured", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Skip for now" }).click();
-  await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Open account" }).click();
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // At phone width the account lives in the tab bar; the menu is for wider
+  // viewports.
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  // Not exact: the row's accessible name carries its subtitle too.
+  await page.getByRole("button", { name: /^Sign in/ }).click();
 
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   expect(await page.locator(".sv-auth-screen").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "Auth screen has no horizontal scroll").toBe(true);
