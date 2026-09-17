@@ -11,8 +11,8 @@ test("OpenStreetMap is credited on the map, clear of the tab bar", async ({ page
   const attr = page.locator(".leaflet-control-attribution").first();
   await expect(attr).toBeVisible();
   await expect(attr).toContainText("OpenStreetMap contributors");
-  // Whichever tile layer is live, OSM must be credited: OneMap is served on an
-  // OSM base, and the fallback is OSM itself.
+  // In this environment OneMap's tiles are unreachable, so the OSM layer is the
+  // one live — which is the layer whose licence requires the credit.
   // Clear of the tab bar: a credit hidden behind a nav bar is not displayed,
   // and ODbL requires it to be shown.
   const lifted = await attr.evaluate(el => getComputedStyle(el.closest(".leaflet-bottom")).bottom);

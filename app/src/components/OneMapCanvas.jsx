@@ -12,9 +12,10 @@ const isLL = (v) => Array.isArray(v) && v.length >= 2 && isFinite(v[0]) && isFin
 // infrastructure and its usage policy prohibits application traffic. Both
 // conditions hold at once only by rendering OSM through a provider key.
 //
-// So: OSM via MapTiler is the base. OneMap stays as the fallback rather than the
-// other way round — it is the official Singapore rendering, and worth keeping
-// for the day a key is missing or MapTiler is unreachable.
+// So: OSM via MapTiler is the base, and it needs VITE_MAPTILER_KEY. Without that
+// key the map falls back to OneMap — which still renders Singapore properly, but
+// is SLA's own data rather than OpenStreetMap, so the required base is no longer
+// OSM. The key is the difference between meeting 3.2.2 and not.
 const MAPTILER_KEY = (() => {
   try {
     return String(import.meta.env.VITE_MAPTILER_KEY || "").trim();
@@ -25,13 +26,18 @@ const MAPTILER_KEY = (() => {
 const OSM_TILE_URL = `https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`;
 const ONEMAP_TILE_URL = "https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png";
 
-// Attribution is a licence condition, not decoration. OneMap's tiles are
-// published by the Singapore Land Authority under their terms of use, and
-// OpenStreetMap is ODbL — which requires "© OpenStreetMap contributors" wherever
+// Attribution is a licence condition, not decoration, and each base gets the
+// credit that is actually owed.
+//
+// OneMap is the Singapore Land Authority's own national map — it is NOT derived
+// from OpenStreetMap, so crediting OSM here would be a false statement about
+// whose data is on screen. Their terms ask for OneMap and SLA.
+//
+// The OSM base is ODbL, which requires "© OpenStreetMap contributors" wherever
 // the map or anything derived from it is shown. Leaflet's own control is kept,
 // compacted to a prefix-free corner so it costs almost no screen on a phone.
 const ONEMAP_ATTRIBUTION =
-  '<a href="https://www.onemap.gov.sg/" target="_blank" rel="noreferrer">OneMap</a> © Singapore Land Authority · map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
+  '<a href="https://www.onemap.gov.sg/" target="_blank" rel="noreferrer">OneMap</a> © Singapore Land Authority';
 const OSM_ATTRIBUTION =
   '<a href="https://www.maptiler.com/copyright/" target="_blank" rel="noreferrer">© MapTiler</a> · map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
 

@@ -84,6 +84,12 @@ Add `ONEMAP_EMAIL` + `ONEMAP_PASSWORD` (or `ONEMAP_TOKEN`) and
 every panel as unavailable, which is the honest behaviour rather than a
 fallback.
 
+**Set `VITE_MAPTILER_KEY`** ([free, no card](https://cloud.maptiler.com/account/keys/)).
+OpenStreetMap is the map base and its tile policy forbids applications from
+using `tile.openstreetmap.org`, so OSM is served through MapTiler. Without the
+key the map still works, falling back to OneMap's own tiles — but those are the
+Singapore Land Authority's national map, not OpenStreetMap.
+
 Accounts use Supabase. Add `VITE_SUPABASE_URL` and
 `VITE_SUPABASE_PUBLISHABLE_KEY`, then apply the migration in
 `app/supabase/migrations`. Account deletion additionally needs the server-only

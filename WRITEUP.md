@@ -50,9 +50,14 @@ events come from `v2/FacilitiesMaintenance` (lifts, per exit), `RoadWorks` and
 ## 3. Architecture
 
 React + Vite, mobile-first, no framework beyond that. Leaflet renders
-**OpenStreetMap** as the base (via MapTiler, because the OSM tile policy
-prohibits application traffic on `tile.openstreetmap.org`), with OneMap as the
-fallback. Both are attributed.
+**OpenStreetMap** as the base, served through MapTiler because the OSM tile
+policy prohibits application traffic on `tile.openstreetmap.org`. This needs
+`VITE_MAPTILER_KEY` (free, no card); without it the map falls back to OneMap,
+which renders Singapore well but is the Singapore Land Authority's own national
+map rather than an OSM rendering — so the key is what makes OSM the base.
+
+Each layer carries the credit actually owed: OSM's ODbL attribution on the OSM
+base, OneMap and SLA on theirs.
 
 **Fifteen serverless functions** in `app/api/` hold every credential and do the
 joining work — ranking journeys, attaching crowd levels and bus arrivals to the
@@ -84,7 +89,7 @@ Accounts and sync are Supabase, with row-level security on every table.
 | `PV/Train`, `PV/Bus` | Whether this crowd is unusual for this station at this hour |
 | `BusStops` | The nearest stop to report from |
 | data.gov.sg weather | Rain on your walking legs, before you leave |
-| OpenStreetMap | The map base (required), and pedestrian detail |
+| OpenStreetMap (via MapTiler) | The map base, as 3.2.2 requires |
 | Rail station GeoJSON (provided) | `GRND_LEVEL` for the accessibility persona |
 
 **Deliberately not used**, because judgement is scored and not just breadth:
