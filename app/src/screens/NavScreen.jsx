@@ -1,5 +1,6 @@
 import { Icon, IconButton, Button, SectionLabel } from "../design-system";
 import { OneMapCanvas } from "../components/OneMapCanvas";
+import { SolvikBrand } from "../components/SolvikBrand";
 import { styleText } from "../lib/styleText";
 
 export function NavScreen({ v }) {
@@ -7,9 +8,10 @@ export function NavScreen({ v }) {
     <div style={{ position: "absolute", inset: 0 }}>
       <OneMapCanvas center={v.navCoord} zoom={15} route={v.routeCoords} marker={v.navMarker} markerAccuracy={v.navAccuracy} dest={v.destCoord} fitRoute={false} zoomControls={false} height="100%" />
 
-      <div style={{ position: "absolute", left: 14, right: 14, top: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="sv-nav-top" style={{ position: "absolute", left: 14, right: 14, top: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <IconButton icon="x" label="End trip" tone="plain" size="md" onClick={v.endTrip} />
+          <SolvikBrand compact className="sv-nav-brand" />
           <div style={{ font: "var(--weight-bold) 12px/1 var(--font-body)", color: "var(--text-strong)", background: "var(--surface-card)", borderRadius: 999, padding: "9px 15px", boxShadow: "var(--shadow-nav)", whiteSpace: "nowrap", flex: "none" }}>{v.navStepLabel}</div>
           {v.navTrackNote && (
             <div
@@ -29,11 +31,11 @@ export function NavScreen({ v }) {
             <Icon name={v.navIcon} size={21} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ font: "var(--weight-heavy) 19px/1.25 var(--font-display)", letterSpacing: "-.02em", textWrap: "pretty" }}>{v.navTitle}</div>
-            <div style={{ font: "var(--type-caption)", opacity: 0.74, marginTop: 5, textWrap: "pretty" }}>{v.navDetail}</div>
+            <div className="sv-nav-title" style={{ font: "var(--weight-heavy) 19px/1.25 var(--font-display)", letterSpacing: "-.02em", textWrap: "pretty" }}>{v.navTitle}</div>
+            <div className="sv-nav-detail" style={{ font: "var(--type-caption)", opacity: 0.74, marginTop: 5, textWrap: "pretty" }}>{v.navDetail}</div>
           </div>
           <div style={{ gridColumn: 2, display: "flex", gap: 6, alignItems: "baseline" }}>
-            <div style={{ font: "var(--weight-heavy) 20px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums" }}>{v.navCountdown}</div>
+            <div className="sv-nav-countdown" style={{ font: "var(--weight-heavy) 20px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums" }}>{v.navCountdown}</div>
             <div style={{ font: "var(--weight-regular) 10px/1 var(--font-body)", opacity: 0.68, marginTop: 5 }}>to go</div>
           </div>
         </div>
@@ -42,12 +44,12 @@ export function NavScreen({ v }) {
         </div>
       </div>
 
-      <div style={v.navSheetStyle}>
+      <div className="sv-nav-sheet" style={v.navSheetStyle}>
         <div onPointerDown={v.navSheetDrag} onDoubleClick={v.navSheetCycle} style={v.navGrabStyle}>
           <div style={{ width: 42, height: 4, borderRadius: 999, background: "var(--border-strong)", margin: "0 auto" }} />
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
-          <div style={{ font: "var(--weight-heavy) 26px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", color: "var(--text-strong)" }}>{v.navEta}</div>
+          <div className="sv-nav-eta" style={{ font: "var(--weight-heavy) 26px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", color: "var(--text-strong)" }}>{v.navEta}</div>
           <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>{v.navRemainLabel}</div>
         </div>
         <div ref={v.setStepsRef} onScroll={v.onStepsScroll} onPointerDown={v.stepsDragStart} style={v.stepsPagerStyle}>
@@ -100,9 +102,9 @@ export function NavScreen({ v }) {
       </div>
 
       {v.navRepOpen && (
-        <div style={{ position: "absolute", inset: 0, zIndex: 40, background: "rgba(32,30,29,.38)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+        <div className="sv-nav-modal-layer" style={{ position: "absolute", inset: 0, zIndex: 40, background: "rgba(32,30,29,.38)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <div onClick={v.closeNavRep} style={{ flex: 1 }} />
-          <section style={{ flex: "none", maxHeight: "82%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
+          <section className="sv-nav-modal-sheet" style={{ flex: "none", maxHeight: "82%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             <div style={{ flex: "none", padding: "12px 0 8px", display: "flex", justifyContent: "center" }}>
               <div style={{ width: 42, height: 4, borderRadius: 999, background: "var(--sand-400)" }} />
             </div>

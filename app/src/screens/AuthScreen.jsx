@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { Button, Icon } from "../design-system";
+import { SolvikBrand } from "../components/SolvikBrand";
 
 function Field({ label, type = "text", value, onChange, error, hint, autoComplete, placeholder }) {
   const id = useId();
@@ -226,8 +227,7 @@ export function AuthScreen() {
       <div className="sv-auth-ambient" aria-hidden="true" />
       <section className="sv-auth-card" aria-labelledby="auth-title">
         <header className="sv-auth-brand">
-          <span className="sv-auth-mark"><Icon name="route" size={22} /></span>
-          <span>Solvik</span>
+          <SolvikBrand />
         </header>
         <div className="sv-auth-copy">
           <p className="sv-auth-eyebrow">Private commute companion</p>

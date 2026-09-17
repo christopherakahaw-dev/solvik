@@ -86,6 +86,13 @@ export function OneMapCanvas({
     map.on("click", (e) => {
       if (clickRef.current) clickRef.current([e.latlng.lat, e.latlng.lng]);
     });
+    const exposeCenter = () => {
+      if (!ref.current) return;
+      const next = map.getCenter();
+      ref.current.dataset.mapCenter = `${next.lat.toFixed(6)},${next.lng.toFixed(6)}`;
+    };
+    map.whenReady(exposeCenter);
+    map.on("moveend", exposeCenter);
     mapRef.current = map;
     let disposed = false;
     const invalidate = () => {

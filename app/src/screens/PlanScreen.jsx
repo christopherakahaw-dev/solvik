@@ -1,89 +1,11 @@
 import { Icon, IconButton, Button, SectionLabel, SearchField, Tag } from "../design-system";
 import { styleText } from "../lib/styleText";
 import { PlacePicker } from "../components/PlacePicker";
-import { useState } from "react";
-import { useAuth } from "../auth/AuthContext";
-
-function AccountCard({ v }) {
-  const { user, profileError, logout, setCloudSync, clearCloudData, deleteAccount } = useAuth();
-  const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-
-  async function run(name, action) {
-    setBusy(name);
-    setError("");
-    try {
-      await action();
-    } catch (actionError) {
-      setError(actionError.message || "That action could not be completed.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  const status = {
-    loading: "Checking cloud data…",
-    saving: "Saving securely…",
-    ready: "Cloud data is up to date",
-    error: "Cloud sync needs attention",
-    conflict: "Choose which saved data to keep",
-  }[v.cloudSyncStatus];
-
-  return (
-    <section className="sv-account-card" aria-label="Account and privacy">
-      <div className="sv-account-row">
-        <span className="sv-account-avatar">{(user.name || user.email || "G").charAt(0).toUpperCase()}</span>
-        <span className="sv-account-identity">
-          <strong>{user.isGuest ? "Guest mode" : user.name || "My account"}</strong>
-          <span>{user.isGuest ? "Saved only in this browser" : user.email}</span>
-        </span>
-        <Button variant="ghost" size="sm" iconLeft="log-out" onClick={logout}>Sign out</Button>
-      </div>
-
-      {!user.isGuest && (
-        <>
-          <button
-            type="button"
-            className="sv-sync-toggle"
-            aria-pressed={user.cloudSync}
-            disabled={Boolean(busy)}
-            onClick={() => run("sync", () => setCloudSync(!user.cloudSync))}
-          >
-            <span><Icon name="cloud" size={18} /><span><strong>Sync saved data</strong><small>Places, manual commutes and route preferences</small></span></span>
-            <span className="sv-switch" aria-hidden="true"><i /></span>
-          </button>
-          <p className="sv-account-privacy">Live location, searches and learned journeys always stay on this device.</p>
-          {user.cloudSync && status && <p className={`sv-sync-status${v.cloudSyncStatus === "error" ? " is-error" : ""}`} role="status">{status}</p>}
-          {(profileError || error || (user.cloudSync && v.cloudSyncError)) && <p className="sv-sync-error" role="alert">{profileError || error || v.cloudSyncError}</p>}
-          {user.cloudSync && v.cloudSyncConflict && (
-            <div className="sv-sync-choice">
-              <p>This browser and your account both have saved places or commutes. Nothing has been overwritten.</p>
-              <div>
-                <Button size="sm" onClick={() => run("device", v.keepDeviceData)} disabled={Boolean(busy)}>Keep this device</Button>
-                <Button variant="secondary" size="sm" onClick={v.useCloudData} disabled={Boolean(busy)}>Use cloud data</Button>
-              </div>
-            </div>
-          )}
-          {user.cloudSync && v.cloudSyncStatus === "error" && <Button variant="secondary" size="sm" onClick={v.retryCloudSync} disabled={Boolean(busy)}>Try sync again</Button>}
-          <div className="sv-account-actions">
-            <button type="button" onClick={() => {
-              if (window.confirm("Delete saved places, commutes and preferences from the cloud? Data in this browser will remain.")) run("clear", clearCloudData);
-            }}>Clear cloud data</button>
-            <button type="button" className="is-danger" onClick={() => {
-              if (window.confirm("Permanently delete your Solvik account and its cloud data? This cannot be undone.")) run("delete", deleteAccount);
-            }}>Delete account</button>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
 
 export function PlanScreen({ v }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
-      <AccountCard v={v} />
-      <div style={{ padding: "0 4px" }}>
+    <div className="sv-plan-screen" style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
+      <div className="sv-plan-intro" style={{ padding: "0 4px" }}>
         <div style={{ font: "var(--weight-heavy) 22px/1.2 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", textWrap: "pretty" }}>{v.planGreeting}</div>
         {v.recordedNotice && (
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 7, padding: "6px 10px", borderRadius: 999, background: "var(--sand-100,rgba(32,30,29,.05))", font: "var(--weight-semibold) 11.5px/1.2 var(--font-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
@@ -122,36 +44,48 @@ export function PlanScreen({ v }) {
       )}
 
       {v.planHasNext && (
-        <div style={{ position: "relative", overflow: "hidden", background: "var(--surface-dark)", color: "var(--text-on-dark)", borderRadius: "var(--radius-card)", padding: 20, boxShadow: "var(--shadow-card)", animation: "sv-rise 420ms cubic-bezier(.16,1,.3,1) both" }}>
-          <div style={{ position: "absolute", right: -46, top: -58, width: 180, height: 180, borderRadius: 999, background: "rgba(255,255,255,.05)" }} />
-          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 7 }}>
-            <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--crowd-moderate)", animation: "sv-ping 1.8s var(--ease-standard) infinite" }} />
-            <span style={{ font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".09em", textTransform: "uppercase", opacity: 0.78 }}>Next up · {v.planNextIn}</span>
-          </div>
-          <div style={{ position: "relative", display: "flex", alignItems: "flex-end", gap: 12, marginTop: 14 }}>
-            <div style={{ font: "var(--weight-heavy) 54px/1 var(--font-numeric)", letterSpacing: "-.03em", fontVariantNumeric: "tabular-nums" }}>{v.planNextLeave}</div>
-            <div style={{ paddingBottom: 6 }}>
-              <div style={{ font: "var(--weight-heavy) 17px/1.2 var(--font-display)", letterSpacing: "-.02em", textWrap: "pretty" }}>{v.planNextName}</div>
-              <div style={{ font: "var(--type-caption)", opacity: 0.72, marginTop: 4, textWrap: "pretty" }}>{v.planNextRoute}</div>
+        <article className="sv-next-journey" aria-label={`Next commute from ${v.planNextFrom} to ${v.planNextTo}`}>
+          <div className="sv-next-journey-glow" aria-hidden="true" />
+          <header className="sv-next-journey-head">
+            <span className="sv-next-journey-kicker"><Icon name="sparkles" size={14} /> Next commute</span>
+            <span className="sv-next-journey-countdown">{v.planNextIn}</span>
+          </header>
+
+          <div className="sv-next-journey-main">
+            <div className="sv-next-route">
+              <div className="sv-next-route-stop">
+                <span className="sv-next-route-dot is-origin"><Icon name="circle-dot" size={15} /></span>
+                <span><small>From</small><strong>{v.planNextFrom}</strong></span>
+              </div>
+              <span className="sv-next-route-line" aria-hidden="true" />
+              <div className="sv-next-route-stop">
+                <span className="sv-next-route-dot is-destination"><Icon name="map-pin" size={15} /></span>
+                <span><small>To</small><strong>{v.planNextTo}</strong></span>
+              </div>
+            </div>
+            <div className="sv-next-departure">
+              <small>Leave at</small>
+              <time>{v.planNextLeave}</time>
             </div>
           </div>
-          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, marginTop: 14, font: "var(--type-caption)", opacity: 0.74, textWrap: "pretty" }}>{v.planNextNote}</div>
-          <div style={{ position: "relative", display: "flex", gap: 9, marginTop: 16, flexWrap: "wrap" }}>
+
+          <div className="sv-next-journey-note"><Icon name="clock" size={15} /> <span>{v.planNextNote}</span></div>
+          <footer className="sv-next-journey-actions">
             <Button size="md" iconRight="arrow-right" onClick={v.startNext}>
               See routes
             </Button>
-            <button onClick={v.watchNext} style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 16px", height: 44, borderRadius: 999, cursor: "pointer", background: "rgba(255,255,255,.14)", border: "none", color: "var(--text-on-dark)", font: "var(--weight-bold) 14px/1 var(--font-body)" }}>
+            <button className="sv-next-alert" onClick={v.watchNext}>
               <Icon name="bell" size={16} />
               {v.watchNextLabel}
             </button>
             {v.planNextCrowd && (
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "0 13px", height: 44, borderRadius: 999, background: "rgba(255,255,255,.09)", font: "var(--weight-bold) 12px/1 var(--font-body)" }}>
+              <div className="sv-next-crowd">
                 <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--crowd-" + (v.planNextCrowdLevel || "light") + ")" }} />
                 {v.planNextCrowd}
               </div>
             )}
-          </div>
-        </div>
+          </footer>
+        </article>
       )}
 
       {v.fgHas && (
@@ -214,14 +148,17 @@ export function PlanScreen({ v }) {
             </Button>
           </div>
         </div>
-        <div className="sv-saved-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 9 }}>
+        <div className="sv-saved-grid">
           {v.placeRows.map((p, i) => (
-            <button key={i} onClick={v.openPlaces} style={{ display: "flex", flexDirection: "column", gap: 8, textAlign: "left", padding: "13px 12px", borderRadius: 20, cursor: "pointer", background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
-              <span style={{ flex: "none", width: 30, height: 30, borderRadius: 999, background: "var(--accent-soft)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button className="sv-saved-place-row" key={i} onClick={v.openPlaces}>
+              <span className="sv-saved-place-row-icon">
                 <Icon name={p.icon} size={15} />
               </span>
-              <span style={{ display: "block", font: "var(--weight-bold) 10.5px/1 var(--font-body)", letterSpacing: ".07em", textTransform: "uppercase", color: "var(--text-muted)" }}>{p.short}</span>
-              <span style={{ display: "block", font: "var(--weight-bold) 13.5px/1.25 var(--font-body)", color: "var(--text-strong)", textWrap: "pretty" }}>{p.shown}</span>
+              <span className="sv-saved-place-row-copy">
+                <span>{p.short}</span>
+                <strong>{p.shown}</strong>
+              </span>
+              <Icon name="chevron-right" size={17} />
             </button>
           ))}
         </div>
@@ -243,17 +180,28 @@ export function PlanScreen({ v }) {
             </div>
           )}
           {v.saved.map((s, i) => (
-            <button key={i} onClick={s.edit} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", padding: "14px 15px", borderRadius: 20, cursor: "pointer", background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
-              <span style={{ flex: "none", font: "var(--weight-heavy) 19px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", letterSpacing: "-.02em", color: "var(--text-strong)" }}>{s.clock}</span>
-              <span style={{ flex: "none", width: 1, height: 34, background: "var(--border-card)" }} />
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)" }}>{s.name}</span>
-                <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{s.sub}</span>
+            <button className="sv-commute-card" key={i} onClick={s.edit} aria-label={`Edit commute from ${s.from} to ${s.to}`}>
+              <span className="sv-commute-card-head">
+                <span className="sv-commute-time">
+                  <small>{s.timingLabel}</small>
+                  <strong>{s.clock}</strong>
+                </span>
+                <Tag tone="soft">{s.mode}</Tag>
+              </span>
+              <span className="sv-commute-route">
+                <span className="sv-commute-route-point is-origin" aria-hidden="true" />
+                <strong>{s.from}</strong>
+                <span className="sv-commute-route-rail" aria-hidden="true" />
+                <span />
+                <span className="sv-commute-route-point is-destination" aria-hidden="true" />
+                <strong>{s.to}</strong>
+              </span>
+              <span className="sv-commute-card-foot">
+                <span><Icon name="calendar" size={14} /> {s.days}</span>
                 {s.learned && (
-                  <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-accent)", marginTop: 3, textWrap: "pretty" }}>Learned · {s.learned}</span>
+                  <span><Icon name="sparkles" size={14} /> Learned · {s.learned}</span>
                 )}
               </span>
-              <Tag tone="soft">{s.mode}</Tag>
             </button>
           ))}
         </div>
@@ -312,7 +260,7 @@ export function PlacesSheet({ v }) {
   return (
     <>
       {v.placesOpen && (
-        <div style={{ position: "absolute", inset: 0, zIndex: 32, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+        <div className="sv-page-modal-layer" style={{ position: "absolute", inset: 0, zIndex: 32, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <div onClick={v.closePlaces} style={{ flex: 1 }} />
           <section role="dialog" aria-modal="true" aria-label="Your places" className="sv-modal-sheet" style={{ flex: "none", maxHeight: "92%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             <div style={{ flex: "none", padding: "12px 0 6px", display: "flex", justifyContent: "center" }}>
@@ -362,7 +310,7 @@ export function AddCommuteSheet({ v }) {
   return (
     <>
       {v.addOpen && (
-        <div style={{ position: "absolute", inset: 0, zIndex: 30, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+        <div className="sv-page-modal-layer" style={{ position: "absolute", inset: 0, zIndex: 30, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <div onClick={v.closeAdd} style={{ flex: 1 }} />
           <section role="dialog" aria-modal="true" aria-label={v.addSheetTitle} className="sv-modal-sheet" style={{ position: "relative", flex: "none", maxHeight: "92%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             {v.addSearchOpen && (

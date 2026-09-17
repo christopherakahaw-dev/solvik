@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 // Safari's keyboard changes the visual viewport without changing 100vh.
-export function ViewportShell({ children }) {
+export function ViewportShell({ children, fluid = false }) {
   const ref = useRef(null);
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -19,5 +19,5 @@ export function ViewportShell({ children }) {
       window.removeEventListener("resize", update);
     };
   }, []);
-  return <div ref={ref} className="solvik-app-shell">{children}</div>;
+  return <div ref={ref} className={`solvik-app-shell${fluid ? " solvik-app-shell--fluid" : ""}`}>{children}</div>;
 }
