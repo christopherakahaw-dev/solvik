@@ -1,45 +1,32 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { baseLayerOrder, mapTilerKey } from "../lib/mapBase.js";
 
 // The map surface. OpenStreetMap is the base, with OneMap as the fallback —
 // see the tile constants below for why it is that way round — and props that
 // update after mount.
 const isLL = (v) => Array.isArray(v) && v.length >= 2 && isFinite(v[0]) && isFinite(v[1]);
 
-// OpenStreetMap is the required geospatial base, and the same section forbids
-// serving it from tile.openstreetmap.org — that server runs on donated
-// infrastructure and its usage policy prohibits application traffic. Both
-// conditions hold at once only by rendering OSM through a provider key.
-//
-// So: OSM via MapTiler is the base, and it needs VITE_MAPTILER_KEY. Without that
-// key the map falls back to OneMap — which still renders Singapore properly, but
-// is SLA's own data rather than OpenStreetMap, so the required base is no longer
-// OSM. The key is the difference between meeting 3.2.2 and not.
+// Which base renders, and what it falls back to, lives in src/lib/mapBase.js so
+// it can be tested without a browser. Leaflet's attribution control is kept,
+// compacted to a prefix-free corner so it costs almost no screen on a phone.
 const MAPTILER_KEY = (() => {
   try {
-    return String(import.meta.env.VITE_MAPTILER_KEY || "").trim();
+    return mapTilerKey(import.meta.env);
   } catch {
     return "";
   }
 })();
-const OSM_TILE_URL = `https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`;
-const ONEMAP_TILE_URL = "https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png";
 
-// Attribution is a licence condition, not decoration, and each base gets the
-// credit that is actually owed.
-//
-// OneMap is the Singapore Land Authority's own national map — it is NOT derived
-// from OpenStreetMap, so crediting OSM here would be a false statement about
-// whose data is on screen. Their terms ask for OneMap and SLA.
-//
-// The OSM base is ODbL, which requires "© OpenStreetMap contributors" wherever
-// the map or anything derived from it is shown. Leaflet's own control is kept,
-// compacted to a prefix-free corner so it costs almost no screen on a phone.
-const ONEMAP_ATTRIBUTION =
-  '<a href="https://www.onemap.gov.sg/" target="_blank" rel="noreferrer">OneMap</a> © Singapore Land Authority';
-const OSM_ATTRIBUTION =
-  '<a href="https://www.maptiler.com/copyright/" target="_blank" rel="noreferrer">© MapTiler</a> · map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
+// A missing key is a deployment mistake whose only symptom is the map quietly
+// not being OpenStreetMap, so say so once where a developer will look.
+if (!MAPTILER_KEY && typeof console !== "undefined") {
+  console.warn(
+    "VITE_MAPTILER_KEY is not set, so the map base is OneMap, not OpenStreetMap. " +
+      "It is read at build time — setting it on the host requires a rebuild to take effect.",
+  );
+}
 
 const SAVED_PLACE_GLYPHS = {
   home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
@@ -113,22 +100,24 @@ export function OneMapCanvas({
       wheelPxPerZoomLevel: 90,
     });
     L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
-    // With no MapTiler key configured there is nothing to fall back *from*, so
-    // OneMap leads instead of showing an empty grid. Either way OSM is credited.
-    const base = MAPTILER_KEY
-      ? L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION })
-      : L.tileLayer(ONEMAP_TILE_URL, { minZoom: 11, maxZoom: 19, attribution: ONEMAP_ATTRIBUTION });
-    base.addTo(map);
-    let fellBack = false;
-    base.on("tileerror", () => {
-      if (fellBack) return;
-      fellBack = true;
-      map.removeLayer(base);
-      const other = MAPTILER_KEY
-        ? L.tileLayer(ONEMAP_TILE_URL, { minZoom: 11, maxZoom: 19, attribution: ONEMAP_ATTRIBUTION })
-        : L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION });
-      other.addTo(map);
-    });
+    const layers = baseLayerOrder(MAPTILER_KEY);
+    let baseIndex = 0;
+    let base = null;
+    // Walk the list on failure. The list only ever holds bases that *can*
+    // authenticate, so running out of it means the tile servers are down or
+    // the network is — not that we have another spelling left to try.
+    const useBase = (index) => {
+      if (base) map.removeLayer(base);
+      const spec = layers[index];
+      base = L.tileLayer(spec.url, spec.options);
+      base.on("tileerror", () => {
+        if (baseIndex !== index || index + 1 >= layers.length) return;
+        baseIndex = index + 1;
+        useBase(baseIndex);
+      });
+      base.addTo(map);
+    };
+    useBase(0);
     map.on("click", (e) => {
       if (clickRef.current) clickRef.current([e.latlng.lat, e.latlng.lng]);
     });

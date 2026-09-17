@@ -88,7 +88,9 @@ fallback.
 OpenStreetMap is the map base and its tile policy forbids applications from
 using `tile.openstreetmap.org`, so OSM is served through MapTiler. Without the
 key the map still works, falling back to OneMap's own tiles — but those are the
-Singapore Land Authority's national map, not OpenStreetMap.
+Singapore Land Authority's national map, not OpenStreetMap. Note that `VITE_`
+values are compiled into the bundle at build time, so setting this on a host
+only takes effect on the next deploy.
 
 Accounts use Supabase. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
 and the server-only `SUPABASE_SERVICE_ROLE_KEY`, then apply the migrations in
@@ -111,7 +113,10 @@ and the server-only `SUPABASE_SERVICE_ROLE_KEY`, then apply the migrations in
 ## How it's built
 
 React + Vite, no framework beyond that. The map is Leaflet over OpenStreetMap,
-served through MapTiler, falling back to OneMap's own tiles if it fails.
+served through MapTiler, falling back to OneMap's own tiles if it fails. The
+fallback runs one way only: with no MapTiler key the base is OneMap and stays
+there, because a keyless request to MapTiler can only be refused, and Leaflet
+asks for a tile per screenful.
 
 Fifteen endpoints in [`app/api/`](app/api) hold the credentials and do the
 joining work — ranking journeys, attaching crowd levels and bus arrivals to the
@@ -128,8 +133,8 @@ a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
 `tripDetail.js` (an itinerary → the step-by-step card), `persona.js` (who is
 reading → what changes), `lines.js` (the line-code canon the brief warns about).
-**223 tests** run against recorded API responses, so every parser is checked
-without touching the network, plus 31 in a real browser.
+**230 tests** run against recorded API responses, so every parser is checked
+without touching the network, plus 32 in a real browser.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither
 prints a secret: `/api/diagnostics` reports exactly what OneMap did with a

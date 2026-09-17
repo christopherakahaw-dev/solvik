@@ -52,7 +52,8 @@ events come from `v2/FacilitiesMaintenance` (lifts, per exit), `RoadWorks` and
 React + Vite, mobile-first, no framework beyond that. Leaflet renders
 **OpenStreetMap** as the base, served through MapTiler because the OSM tile
 policy prohibits application traffic on `tile.openstreetmap.org`. This needs
-`VITE_MAPTILER_KEY` (free, no card); without it the map falls back to OneMap,
+`VITE_MAPTILER_KEY` (free, no card, and read at build time so a host needs a
+redeploy to pick it up); without it the map falls back to OneMap,
 which renders Singapore well but is the Singapore Land Authority's own national
 map rather than an OSM rendering — so the key is what makes OSM the base.
 
@@ -120,7 +121,7 @@ them.
 | "Free bus boarding at Yishun, Khatib" | Quoted verbatim from `AffectedSegments.FreePublicBus`. Not computed, so no caveat. |
 | "Your 12 min on foot will take about 4 min longer" | `walkSecs × 1.35` for heavy rain, `× 1.15` for showers. **These two multipliers are our own assumption, not measured** — see limitations. |
 | "Bishan Road is congested (10–19 km/h)" | `TrafficSpeedBands` band 2, with the feed's own published speed range. Never converted into minutes. |
-| "223 tests" | `npm test` in `app/`. 31 browser tests: `npx playwright test`. |
+| "230 tests" | `npm test` in `app/`. 32 browser tests: `npx playwright test`. |
 | Points in the wallet | Summed from reports you filed that were corroborated. The **vouchers are sample data** and labelled as such. |
 
 ## 6. Assumptions

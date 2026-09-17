@@ -10,7 +10,7 @@ mobile build, implemented from the `Onward.dc.html` Claude Design handoff
 ## Stack
 
 - **React + Vite** — single-page app, no server-rendering.
-- **Leaflet + OpenStreetMap** — the map surface (`src/components/OneMapCanvas.jsx`). OSM is served through MapTiler (`VITE_MAPTILER_KEY`), because the OSM tile policy forbids applications from using `tile.openstreetmap.org`; OneMap's own tiles are the fallback.
+- **Leaflet + OpenStreetMap** — the map surface (`src/components/OneMapCanvas.jsx`). OSM is served through MapTiler (`VITE_MAPTILER_KEY`), because the OSM tile policy forbids applications from using `tile.openstreetmap.org`; OneMap's own tiles are the fallback. The ordering and the fallback rule are in `src/lib/mapBase.js` so they can be tested without a browser; MapTiler is only ever in the list when a key exists, because a keyless request to it is a guaranteed 403 and Leaflet asks for a tile per screenful. `VITE_MAPTILER_KEY` is compiled into the bundle at build time, so setting it on a host takes effect on the next deploy, not immediately.
 - **`lucide`** for icons, matching the design system's icon set.
 - **Supabase Auth + Postgres** — verified email/password accounts and optional,
   row-level-secured sync for explicitly saved places, manual commutes and route
