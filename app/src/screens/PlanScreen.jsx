@@ -196,6 +196,19 @@ export function PlanScreen({ v }) {
               ))}
             </div>
           )}
+          {v.memoryPlaces.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <SectionLabel>{v.memoryPlacesLabel}</SectionLabel>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
+                {v.memoryPlaces.map((place, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    <span style={{ font: "var(--type-body-strong)", color: "var(--text-strong)", textWrap: "pretty" }}>{place.name}</span>
+                    <span style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>{place.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.memoryNote}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 13, flexWrap: "wrap" }}>
             {v.memoryCount > 0 && (

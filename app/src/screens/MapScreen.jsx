@@ -375,6 +375,9 @@ export function MapScreen({ v }) {
                   </div>
                   <div style={{ font: "var(--weight-bold) 14.5px/1.3 var(--font-body)", color: "var(--text-strong)", marginTop: 9, textWrap: "pretty" }}>{f.title}</div>
                   <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 5, textWrap: "pretty" }}>{f.detail}</div>
+                  {f.placeNote && (
+                    <div style={{ font: "var(--type-caption)", color: "var(--text-accent)", marginTop: 6, textWrap: "pretty" }}>{f.placeNote}</div>
+                  )}
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 9 }}>
                     <span style={{ font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".05em", textTransform: "uppercase", color: "var(--text-muted)" }}>{f.readLabel}</span>
                     {f.canReroute && (

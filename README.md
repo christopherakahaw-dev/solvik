@@ -36,6 +36,13 @@ un-learns on the same evidence: stop making the trip and the commute retires
 itself after five weeks, and says so, because an inference should be no more
 durable than what supports it.
 
+**When your line breaks, it finds you another way.** An alert naming a line you
+ride becomes a route that avoids it — OneMap has no way to exclude a line, so
+Solvik asks for more itineraries than it needs and drops the ones still running
+through the fault. If every route still uses it, the app says so rather than
+showing one through the disruption, and the alternative's time is labelled as
+what it is: a timetable that doesn't know anything is wrong.
+
 **Everything it learns stays on your device.** Only deliberate actions are
 recorded — a route you started, a destination you chose — never a background
 trace of where your phone has been. No endpoint receives any of it, trips older
@@ -82,7 +89,7 @@ works without deploying anywhere.
 The interesting logic is pulled out into pure modules that can be tested without
 a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
-`tripDetail.js` (an itinerary → the step-by-step card). **94 tests** run against
+`tripDetail.js` (an itinerary → the step-by-step card). **112 tests** run against
 recorded API responses, so every parser is checked without touching the network.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither

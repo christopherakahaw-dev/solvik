@@ -10,6 +10,7 @@ import { commuteOutlook, outlookCodes } from "../lib/outlook";
 import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary, seedSampleJourneys } from "../lib/journeys";
 import { inferCommutes, commuteFromPattern, evidenceLine, staleCommutes, RETIRE_MS } from "../lib/patterns";
 import { canonicalLine, sameLine } from "../lib/lines";
+import { learnedPlaces, linesForPlaces } from "../lib/places";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
 import { getForecast } from "../api/forecast";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
@@ -412,13 +413,30 @@ export class AppLogic extends Component {
     const fromCommutes = (this.state.savedList || []).flatMap((c) => c.legs || []);
     const fromJourneys = (this.state.journeys || []).filter((j) => j.started).flatMap((j) => j.legs || []);
     const fromOutlook = ((this.state.outlook && this.state.outlook.itinerary) || {}).legs || [];
-    return [...new Set([...fromCommutes, ...fromJourneys, ...fromOutlook].map((l) => String(l).toUpperCase()))];
+    return [...new Set([...fromCommutes, ...fromJourneys, ...fromOutlook, ...linesForPlaces(this.myPlaces())].map((l) => String(l).toUpperCase()))];
+  }
+
+  // Somewhere you go regularly — two visits on two days is the whole bar,
+  // because all this decides is whether a disruption is worth mentioning.
+  // Derived from the journeys each time rather than stored, so forgetting the
+  // journeys forgets these too.
+  myPlaces() {
+    return learnedPlaces(this.state.journeys || []);
   }
 
   alertTouchesMe(item) {
-    const line = String((item && item.line) || "").toUpperCase();
-    if (!line || line === "LTA") return false;
-    return this.myLines().some((used) => used.includes(line) || line.includes(used));
+    return !!canonicalLine(item && item.line) && this.myLines().some((used) => sameLine(used, item.line));
+  }
+
+  // Which of your places this disruption sits on the way to. Being able to say
+  // "that's your line to the office" is the point of learning places at all —
+  // a bare line code means nothing until it is attached to somewhere you go.
+  placesOnLine(item) {
+    if (!canonicalLine(item && item.line)) return [];
+    return this.myPlaces()
+      .filter((place) => place.lines.some((line) => sameLine(line, item.line)))
+      .map((place) => place.name)
+      .filter(Boolean);
   }
 
   // Alerts are re-read while the app is open, and a new one on a line you use
@@ -906,6 +924,16 @@ export class AppLogic extends Component {
         ].filter(Boolean).join(" · ");
       })(),
       memoryLines: [...new Set((s.journeys || []).flatMap((j) => j.legs || []))].slice(0, 8),
+      // The places it has noticed, with what it knows about each. Listed rather
+      // than counted, because "3 places remembered" is not something you can
+      // check — and checking is the point of this panel.
+      memoryPlaces: this.myPlaces().slice(0, 4).map((place) => ({
+        name: place.name || "Somewhere you go",
+        detail: [
+          `${place.visits} visit${place.visits === 1 ? "" : "s"}`,
+          place.lines.length ? `via ${place.lines.slice(0, 3).join(", ")}` : null,
+        ].filter(Boolean).join(" · "),
+      })),
       alertCatchUpLine: (() => {
         const c = s.alertCatchUp;
         if (!c) return "";
@@ -913,6 +941,7 @@ export class AppLogic extends Component {
         return `${c.count} new alert${c.count === 1 ? "" : "s"} on your lines${since}.`;
       })(),
       memoryNote: "Kept only in this browser and never sent anywhere. Trips older than 90 days fall away on their own.",
+      memoryPlacesLabel: "Places it has noticed",
       forgetEverything: this.forgetEverything,
       canSeedTrips: DEMO_MODE && !(s.journeys || []).length,
       seedSampleTrips: this.seedSampleTrips,
@@ -1067,6 +1096,15 @@ export class AppLogic extends Component {
         // alerts shouldn't fire a routing request each.
         canReroute: this.canRerouteFrom(f),
         reroute: () => this.rerouteFromAlert(f),
+        // "That's your line to the office" — a line code means nothing until it
+        // is attached to somewhere you actually go.
+        placeNote: (() => {
+          const names = this.placesOnLine(f);
+          if (!names.length) return "";
+          return names.length === 1
+            ? `You use this line to get to ${names[0]}.`
+            : `You use this line to get to ${names.slice(0, 2).join(" and ")}${names.length > 2 ? ` and ${names.length - 2} more` : ""}.`;
+        })(),
         readLabel: isRead(f) ? "Read" : "Tap to mark as read",
         readDotStyle: isRead(f) ? "display:none" : "width:7px;height:7px;border-radius:999px;background:var(--status-fault)",
         toggleRead: () => {

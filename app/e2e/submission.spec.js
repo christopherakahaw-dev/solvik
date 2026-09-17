@@ -388,3 +388,46 @@ test("an alert on a line you never ride offers no reroute", async ({ page }) => 
   await expect(page.getByText(/Another way/)).toHaveCount(0);
   expect(planned.some(b => b && b.avoid), "no reroute should have been requested").toBe(false);
 });
+
+// Two trips somewhere is enough to be told when that line breaks — the point of
+// learning places rather than waiting for a full commute to be promoted.
+test("two trips to a place is enough to be warned about its line", async ({ page }) => {
+  const DAY = 24 * 60 * 60 * 1000;
+  await page.addInitScript(({ office }) => {
+    if (localStorage.getItem("qa:places")) return;
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
+    // Two visits on two days, well under the commute bar of four journeys.
+    localStorage.setItem("solvik:journeys", JSON.stringify([1, 3].map((n) => ({
+      id: `p${n}`, at: Date.now() - n * 86400000, fromLL: [1.4294, 103.835], toLL: office,
+      toName: "The Office", mode: "Comfort", legs: ["NSL"], started: true, completed: true,
+    }))));
+    localStorage.setItem("qa:places", "1");
+  }, { office: [1.3009, 103.8559] });
+
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    const query = new URL(route.request().url()).searchParams;
+    let response = {};
+    if (path.endsWith("lta") && String(query.get("endpoint")).includes("TrainServiceAlerts")) {
+      response = { value: { Status: 2, AffectedSegments: [{ Line: "NSL", Direction: "Both", StartStation: "NS13", EndStation: "NS17", Stations: "NS13,NS17" }], Message: [] } };
+    } else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Plan", exact: true })).toBeVisible();
+
+  // No commute was ever promoted — the place alone carries the line.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:commutes") || "[]").length)).toBe(0);
+
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(page.getByText(/The Office/)).toBeVisible();
+  await expect(page.getByText(/2 visits · via NSL/)).toBeVisible();
+
+  // And the alert says which place it affects, not just which line.
+  await page.getByRole("button", { name: "Map", exact: true }).click();
+  await page.getByRole("button", { name: "Alerts" }).click();
+  await expect(page.getByText(/You use this line to get to The Office/)).toBeVisible();
+  await noOverflow(page);
+});

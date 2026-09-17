@@ -172,6 +172,37 @@ anything running on the same origin, and on a shared phone readable by whoever
 picks it up. Nothing is transmitted — that is the claim, and it is the whole
 claim.
 
+It also learns **places**, on a much lower bar: somewhere you went twice, on two
+different days, within the last three weeks. That is a far weaker claim than a
+commute, and all it is used for is deciding whether a disruption is worth
+mentioning — so protection starts after two trips instead of waiting for a
+commute to be promoted. Each place carries the lines you used to reach it, which
+is what lets an alert say *"You use this line to get to the Office"* rather than
+only naming a line code. Places are derived from the journeys on demand, never
+stored separately, so forgetting the journeys forgets them too.
+
+### When a line breaks
+
+An alert that names a line you ride is turned into an alternative route rather
+than left as bad news. OneMap has no banned-routes parameter, so Solvik asks for
+six itineraries across transit and bus — bus-only being the answer when rail is
+out — and drops every one still using the broken line.
+
+Three things it will not do, because this is where a transit app would be
+tempted to guess:
+
+- The alternative's time is **OneMap's timetable**, which does not know a
+  disruption is happening. The card says so, and warns the route will be busier
+  than the number suggests. It is never presented as a live adjusted time.
+- When every route still uses the broken line, it says *that* — which is a
+  different claim from "no route found", and better than showing a route
+  through the fault.
+- LTA's own message often names the bridging buses. That text is shown
+  verbatim, because it is better information than anything we could derive.
+
+The Today card reroutes itself when the commute it is already showing is hit;
+the Alerts sheet offers it on a tap, and only for lines you actually use.
+
 Disruptions are matched against the lines those journeys actually used, so an
 alert on a line you never take stays in the Alerts sheet instead of interrupting
 you. On the first run the current alerts are noted as a baseline rather than
