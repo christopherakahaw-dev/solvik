@@ -8,6 +8,8 @@ import {
   loadStored,
   normalizeSavedPlace,
   saveSavedPlaces,
+  setStorageScope,
+  storageKey,
 } from "../src/lib/storage.js";
 
 function memoryStorage(initial = {}) {
@@ -93,4 +95,13 @@ test("clear all removes every Solvik-owned storage key", () => {
     if (previous === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = previous;
   }
+});
+
+test("signed-in accounts use isolated browser keys", () => {
+  setStorageScope("user-a");
+  assert.equal(storageKey(KEYS.places), `${KEYS.places}:account:user-a`);
+  setStorageScope("user-b");
+  assert.equal(storageKey(KEYS.places), `${KEYS.places}:account:user-b`);
+  setStorageScope("");
+  assert.equal(storageKey(KEYS.places), KEYS.places);
 });

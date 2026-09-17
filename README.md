@@ -63,6 +63,12 @@ Add `ONEMAP_EMAIL` + `ONEMAP_PASSWORD` (or `ONEMAP_TOKEN`) and
 every panel as unavailable, which is the honest behaviour rather than a
 fallback.
 
+Accounts use Supabase. Add `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_PUBLISHABLE_KEY`, then apply the migration in
+`app/supabase/migrations`. Account deletion additionally needs the server-only
+`SUPABASE_SERVICE_ROLE_KEY`; see [`app/README.md`](app/README.md) for the full
+setup.
+
 ## What's live
 
 | | Source |

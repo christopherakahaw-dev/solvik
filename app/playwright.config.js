@@ -10,5 +10,18 @@ export default defineConfig({
     { name: "webkit-phone", use: { browserName: "webkit", viewport: { width: 393, height: 700 }, isMobile: true, hasTouch: true } },
     { name: "webkit-small", use: { browserName: "webkit", viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true } },
   ],
-  webServer: { command: "npm run dev -- --host 127.0.0.1 --port 5180 --strictPort", url: "http://127.0.0.1:5180", reuseExistingServer: false },
+  webServer: {
+    command: "npm run dev -- --host 127.0.0.1 --port 5180 --strictPort",
+    url: "http://127.0.0.1:5180",
+    reuseExistingServer: false,
+    // E2E runs must not depend on a developer's real Supabase project. The
+    // account-gate test deliberately verifies the safe unconfigured state.
+    env: {
+      ...process.env,
+      VITE_SUPABASE_URL: "",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "",
+      SUPABASE_URL: "",
+      SUPABASE_SERVICE_ROLE_KEY: "",
+    },
+  },
 });

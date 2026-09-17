@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import searchHandler from "../api/onemap-search.js";
 import stopHandler from "../api/nearest-stop.js";
+import deleteAccountHandler from "../api/delete-account.js";
 
 function responseRecorder() {
   return {
@@ -27,4 +28,13 @@ test("nearest-stop coordinates are accepted from a private POST body", async () 
   await stopHandler({ url: "/api/nearest-stop", body: { lat: "not-a-number", lng: 103.8 }, query: {} }, res);
   assert.equal(res.statusCode, 400);
   assert.equal(res.headers["cache-control"], "private, no-store");
+});
+
+test("the account deletion endpoint is private and rejects other methods", async () => {
+  const res = responseRecorder();
+  await deleteAccountHandler({ method: "GET", headers: {} }, res);
+  assert.equal(res.statusCode, 405);
+  assert.equal(res.headers.allow, "DELETE");
+  assert.equal(res.headers["cache-control"], "private, no-store");
+  assert.equal(res.headers["referrer-policy"], "no-referrer");
 });

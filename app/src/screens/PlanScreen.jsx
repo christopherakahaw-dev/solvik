@@ -1,10 +1,88 @@
 import { Icon, IconButton, Button, SectionLabel, SearchField, Tag } from "../design-system";
 import { styleText } from "../lib/styleText";
 import { PlacePicker } from "../components/PlacePicker";
+import { useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+
+function AccountCard({ v }) {
+  const { user, profileError, logout, setCloudSync, clearCloudData, deleteAccount } = useAuth();
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+
+  async function run(name, action) {
+    setBusy(name);
+    setError("");
+    try {
+      await action();
+    } catch (actionError) {
+      setError(actionError.message || "That action could not be completed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const status = {
+    loading: "Checking cloud data…",
+    saving: "Saving securely…",
+    ready: "Cloud data is up to date",
+    error: "Cloud sync needs attention",
+    conflict: "Choose which saved data to keep",
+  }[v.cloudSyncStatus];
+
+  return (
+    <section className="sv-account-card" aria-label="Account and privacy">
+      <div className="sv-account-row">
+        <span className="sv-account-avatar">{(user.name || user.email || "G").charAt(0).toUpperCase()}</span>
+        <span className="sv-account-identity">
+          <strong>{user.isGuest ? "Guest mode" : user.name || "My account"}</strong>
+          <span>{user.isGuest ? "Saved only in this browser" : user.email}</span>
+        </span>
+        <Button variant="ghost" size="sm" iconLeft="log-out" onClick={logout}>Sign out</Button>
+      </div>
+
+      {!user.isGuest && (
+        <>
+          <button
+            type="button"
+            className="sv-sync-toggle"
+            aria-pressed={user.cloudSync}
+            disabled={Boolean(busy)}
+            onClick={() => run("sync", () => setCloudSync(!user.cloudSync))}
+          >
+            <span><Icon name="cloud" size={18} /><span><strong>Sync saved data</strong><small>Places, manual commutes and route preferences</small></span></span>
+            <span className="sv-switch" aria-hidden="true"><i /></span>
+          </button>
+          <p className="sv-account-privacy">Live location, searches and learned journeys always stay on this device.</p>
+          {user.cloudSync && status && <p className={`sv-sync-status${v.cloudSyncStatus === "error" ? " is-error" : ""}`} role="status">{status}</p>}
+          {(profileError || error || (user.cloudSync && v.cloudSyncError)) && <p className="sv-sync-error" role="alert">{profileError || error || v.cloudSyncError}</p>}
+          {user.cloudSync && v.cloudSyncConflict && (
+            <div className="sv-sync-choice">
+              <p>This browser and your account both have saved places or commutes. Nothing has been overwritten.</p>
+              <div>
+                <Button size="sm" onClick={() => run("device", v.keepDeviceData)} disabled={Boolean(busy)}>Keep this device</Button>
+                <Button variant="secondary" size="sm" onClick={v.useCloudData} disabled={Boolean(busy)}>Use cloud data</Button>
+              </div>
+            </div>
+          )}
+          {user.cloudSync && v.cloudSyncStatus === "error" && <Button variant="secondary" size="sm" onClick={v.retryCloudSync} disabled={Boolean(busy)}>Try sync again</Button>}
+          <div className="sv-account-actions">
+            <button type="button" onClick={() => {
+              if (window.confirm("Delete saved places, commutes and preferences from the cloud? Data in this browser will remain.")) run("clear", clearCloudData);
+            }}>Clear cloud data</button>
+            <button type="button" className="is-danger" onClick={() => {
+              if (window.confirm("Permanently delete your Solvik account and its cloud data? This cannot be undone.")) run("delete", deleteAccount);
+            }}>Delete account</button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 export function PlanScreen({ v }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
+      <AccountCard v={v} />
       <div style={{ padding: "0 4px" }}>
         <div style={{ font: "var(--weight-heavy) 22px/1.2 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", textWrap: "pretty" }}>{v.planGreeting}</div>
         {v.recordedNotice && (
@@ -249,7 +327,7 @@ export function PlacesSheet({ v }) {
               </div>
             </div>
             <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
-              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Selected places stay in this browser. Search text goes to OneMap while you search, and place coordinates only when you request a route. Solvik does not keep the search query.</div>
+              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Search text goes to OneMap only while you search. Selected places stay in this browser unless you explicitly enable cloud sync; live location and search history are never synced.</div>
               {v.placeRows.map((p, i) => (
                 <div key={i}>
                   <SectionLabel>{p.label}</SectionLabel>
