@@ -49,13 +49,46 @@ test("the recorded route is a real recording, and maps like a live one", () => {
 
 test("the recorded forecast is anchored to the day it is asked for", () => {
   const morning = recordedForecast(new Date("2026-09-16T09:00:00+08:00"));
-  assert.equal(morning.slots.length, 8);
   const first = new Date(morning.slots[0]);
-  assert.equal(first.getHours(), 6);
+  assert.equal(first.getHours(), 5);
   assert.equal(first.getMinutes(), 30);
   // Busy somewhere in the peak, so the demo has something to show.
   assert.ok(Object.values(morning.series.NS26).includes("busy"));
   assert.ok(recordedStations.every((st) => st.code && Number.isFinite(st.lat)));
+});
+
+test("the recorded forecast covers the whole service day, not just the morning", () => {
+  // It used to stop at 10:00. A demo at two in the afternoon then had no
+  // forecast covering the trip, so the crowd warning never appeared — the one
+  // feature the fixture exists to show.
+  const fc = recordedForecast(new Date("2026-09-16T14:00:00+08:00"));
+  const hours = fc.slots.map((iso) => new Date(iso).getHours());
+  assert.ok(Math.min(...hours) <= 6, "starts at or before 06:00");
+  assert.ok(Math.max(...hours) >= 23, "runs to the end of service");
+  assert.equal(fc.slots.length, 37, "a 30-minute grid across the day");
+
+  // Both peaks are present, so an evening demo shows a crowd as readily as a
+  // morning one.
+  const at = (hh) => fc.series.NS26[fc.slots.find((iso) => new Date(iso).getHours() === hh)];
+  assert.equal(at(8), "busy", "morning peak");
+  assert.equal(at(18), "busy", "evening peak");
+  assert.equal(at(14), "light", "quiet in between");
+});
+
+test("the recorded disruption carries the mitigation LTA publishes with it", async () => {
+  // The brief singles these fields out: the mitigation is in the feed, not
+  // something to infer. A recording without them leaves the decision-support
+  // line — the free bus and shuttle — impossible to demo or test.
+  const { recordedAlerts } = await import("../api/_lib/recorded/index.js");
+  const seg = recordedAlerts.AffectedSegments[0];
+  assert.ok(seg.FreePublicBus, "FreePublicBus");
+  assert.ok(seg.FreeMRTShuttle, "FreeMRTShuttle");
+  assert.ok(seg.MRTShuttleDirection, "MRTShuttleDirection");
+  // The free bus must cover stations the disruption actually names, or the
+  // fixture is telling two different stories.
+  const affected = seg.Stations.split(",").map((s) => s.trim());
+  const free = seg.FreePublicBus.split(",").map((s) => s.trim());
+  assert.ok(free.every((code) => affected.includes(code)));
 });
 
 test("VITE_DEMO_MODE alone turns demo mode on", () => {
