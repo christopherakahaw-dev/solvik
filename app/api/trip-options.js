@@ -10,7 +10,7 @@ import { nextBuses } from "./_lib/arrivals.js";
 import { resolveStopCode } from "./_lib/busStops.js";
 import { normalizeItinerary, crowdLevelOf, crowdScoreOf, signature, clockFrom } from "./_lib/itinerary.js";
 import { decodePolyline } from "./_lib/polyline.js";
-import { withoutLines, parseAvoid } from "./_lib/avoid.js";
+import { withoutAny, parseAvoid } from "./_lib/avoid.js";
 
 const MODES = {
   fast: { query: [{ mode: "transit", maxWalkDistance: 1000 }], rank: (a, b) => a.mins - b.mins, tag: "Fastest" },
@@ -167,7 +167,7 @@ async function cycleOption(start, end) {
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "private, no-store");
   const q = req.body && typeof req.body === "object" ? req.body : req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
-  const { from, to, mode = "fast", destName = "", date, time, avoid } = q;
+  const { from, to, mode = "fast", destName = "", date, time, avoid, avoidStations } = q;
   if (!from || !to) {
     res.status(400).json({ error: "Missing from or to (lat,lng)" });
     return;
@@ -209,8 +209,8 @@ export default async function handler(req, res) {
 
     // Filtered before enrich(), so we don't fetch bus arrivals for options we
     // are about to throw away.
-    const { kept, dropped, lines } = withoutLines(normalized, avoid);
-    const avoided = lines.length ? { lines, dropped, none: kept.length === 0 } : null;
+    const { kept, dropped, lines, stations, all } = withoutAny(normalized, { lines: avoid, stations: avoidStations });
+    const avoided = all.length ? { lines, stations, all, dropped, none: kept.length === 0 } : null;
     if (!kept.length) {
       // An empty list after filtering means "every way still uses the broken
       // line", which is not the same as "there is no route" — and showing a
@@ -228,7 +228,8 @@ export default async function handler(req, res) {
     // OneMap says "no trip possible" with its own error id 404 and HTTP 200;
     // that genuinely means no route. Anything else is a fault worth showing.
     if (err && err.otpErrorId === 404) {
-      res.status(200).json({ mode, options: [], ...(parseAvoid(avoid).length ? { avoided: { lines: parseAvoid(avoid), dropped: 0, none: true } } : {}) });
+      const named = [...parseAvoid(avoid), ...parseAvoid(avoidStations)];
+      res.status(200).json({ mode, options: [], ...(named.length ? { avoided: { lines: parseAvoid(avoid), stations: parseAvoid(avoidStations), all: named, dropped: 0, none: true } } : {}) });
       return;
     }
     // Recorded itineraries go through exactly the same mapping as live ones,
@@ -236,14 +237,14 @@ export default async function handler(req, res) {
     // The recorded fixture is an NSL trip, so it has to face the same filter as
     // a live answer: serving it while claiming to avoid NSL would be the one
     // thing this feature must never do.
-    const sample = withoutLines(
+    const sample = withoutAny(
       (recordedRoute.plan.itineraries || []).map((itin) => normalizeItinerary(itin, "")).filter(Boolean),
-      avoid
+      { lines: avoid, stations: avoidStations }
     );
     const recorded = sample.kept
       .slice(0, 3)
       .map((opt) => ({ ...opt, recorded: true, tag: "Recorded example", note: "Sample itinerary from a different journey. Preview only; not directions to your destination." }));
-    const sampleAvoided = sample.lines.length ? { lines: sample.lines, dropped: sample.dropped, none: recorded.length === 0 } : null;
+    const sampleAvoided = sample.all.length ? { lines: sample.lines, stations: sample.stations, all: sample.all, dropped: sample.dropped, none: recorded.length === 0 } : null;
     if (!spec.cycle && serveRecorded(res, { mode, options: recorded, ...(sampleAvoided ? { avoided: sampleAvoided } : {}) })) return;
     res.status(msg.includes("not configured") || msg.includes("credentials") ? 501 : 502).json({ error: msg });
   }

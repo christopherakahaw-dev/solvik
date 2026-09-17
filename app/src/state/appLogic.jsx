@@ -7,10 +7,12 @@ import { getNearestStop } from "../api/stop";
 import { getArrivals } from "../api/arrivals";
 import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { commuteOutlook, outlookCodes } from "../lib/outlook";
+import { worksLabel, worksDetail } from "../lib/planned";
 import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary, seedSampleJourneys } from "../lib/journeys";
 import { inferCommutes, commuteFromPattern, evidenceLine, staleCommutes, RETIRE_MS } from "../lib/patterns";
 import { canonicalLine, sameLine } from "../lib/lines";
 import { learnedPlaces, linesForPlaces } from "../lib/places";
+import { getPlannedWorks } from "../api/planned";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
 import { getForecast } from "../api/forecast";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
@@ -85,7 +87,8 @@ export class AppLogic extends Component {
       ? (loadStored(ONBOARDED_KEY, false) ? "map" : "intro")
       : (this.props.user?.onboardingComplete ? "map" : "intro"),
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
-    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
+    planned: { works: [], pending: true, error: null },
+    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripAvoidStations: null, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
@@ -294,6 +297,25 @@ export class AppLogic extends Component {
       });
   };
 
+  // Planned works, read once on opening and then left alone: lift maintenance
+  // changes over days, not minutes, so re-asking on the alert poll would be
+  // three requests an hour for an answer that does not move.
+  loadPlanned = () => {
+    getPlannedWorks()
+      .then(({ works, recorded }) => this.setState({ planned: { works, recorded, pending: false, error: null } }))
+      .catch((err) => this.setState({ planned: { works: [], pending: false, error: String(err.message || err) } }));
+  };
+
+  // The planned works that fall on the stations this journey actually passes
+  // through. Matched by station code, not by line: a lift out at Bishan matters
+  // if you go through Bishan, and not otherwise.
+  worksOnRoute(itinerary) {
+    const works = ((this.state.planned || {}).works) || [];
+    if (!itinerary || !works.length) return [];
+    const codes = new Set(outlookCodes([itinerary]).map((c) => String(c).toUpperCase()));
+    return works.filter((w) => codes.has(String(w.stationCode).toUpperCase()));
+  }
+
   // An alert is actionable when it names a rail line you use and there is a
   // commute with a known destination to re-plan towards.
   canRerouteFrom(alert) {
@@ -314,7 +336,7 @@ export class AppLogic extends Component {
       this.flash("No commute to re-plan yet");
       return;
     }
-    this.setState({ screen: "map", fcAlerts: false, tripMode: "reroute", tripAvoid: alert.line });
+    this.setState({ screen: "map", fcAlerts: false, tripMode: "reroute", tripAvoid: alert.line, tripAvoidStations: null });
     this.chooseDest(
       { name: to.label, detail: to.place, ll: to.ll, kind: "Commute" },
       from && from.ll ? { routeOrigin: { id: from.id, name: from.label, address: from.place, ll: from.ll } } : undefined
@@ -608,6 +630,7 @@ export class AppLogic extends Component {
       fgHas: false, fgTitle: "", fgDetail: "", fgTone: "muted", fgCoverage: "", fgAlerts: [],
       fgActionLabel: "View alternatives", fgAction: () => {}, fgHasAction: false,
       rrHas: false, rrPending: false, rrLine: "", rrTitle: "", rrDetail: "", rrCaveat: "", rrAdvice: "",
+      pwHas: false, pwTitle: "", pwDetail: "", pwNote: "", pwBlocking: false, pwAction: () => {}, pwHasAction: false, pwActionLabel: "",
     };
     if (!next) {
       return {
@@ -643,6 +666,12 @@ export class AppLogic extends Component {
     const worst = view && view.worst;
     const busy = !!(worst && worst.level !== "light");
     const reroute = s.reroute && s.reroute.key ? s.reroute : {};
+    // Planned works on the stations this commute passes through. Step-free is
+    // the whole point of the weighting: a lift out is a note if you can take the
+    // stairs and a blocked journey if you can't, and the commute already says
+    // which of those you are.
+    const works = this.worksOnRoute(itinerary);
+    const stepFree = next.mode === "Step-free";
     const rrOption = reroute.option || null;
     const rrNone = !!(reroute.avoided && reroute.avoided.none);
     const rrDelta = rrOption && view ? rrOption.mins - view.durationMins : null;
@@ -657,12 +686,12 @@ export class AppLogic extends Component {
       ? `Forecast from LTA for all ${coverage.total} station${coverage.total === 1 ? "" : "s"} on the way.`
       : `Forecast from LTA for ${coverage.covered} of ${coverage.total} stations on the way.`;
 
-    const goToCommute = (mode, avoid = null) => {
+    const goToCommute = (mode, avoid = null, avoidStations = null) => {
       if (!t.ll) {
         this.flash("Search for this place in Your places first");
         return;
       }
-      this.setState({ screen: "map", tripMode: mode, tripAvoid: avoid });
+      this.setState({ screen: "map", tripMode: mode, tripAvoid: avoid, tripAvoidStations: avoidStations });
       // A commute names both ends, so the map is given both. Without the
       // origin it would fall back to your position — or, with none, to saved
       // Home, which on an evening trip home means planning Home → Home.
@@ -779,6 +808,26 @@ export class AppLogic extends Component {
       // disruption is happening, so this is a route that avoids the broken line
       // — not a live-adjusted time. Saying so is the whole point.
       rrCaveat: rrOption ? `${rrOption.mins} min is OneMap's timetable, which doesn't know about the disruption. Expect the alternative to be busier than usual.` : "",
+      // Planned works — scheduled, not a fault, so stated separately from the
+      // disruption above rather than blended into it.
+      pwHas: works.length > 0,
+      pwBlocking: stepFree && works.length > 0,
+      pwTitle: works.length === 1 ? worksLabel(works[0]) : `Lifts out at ${works.length} stations on your way`,
+      pwDetail: works.length === 1
+        ? worksDetail(works[0])
+        : works.map((w) => w.stationName || w.stationCode).join(", "),
+      pwNote: stepFree
+        // Said plainly, because for a step-free commute this is the journey not
+        // working rather than an inconvenience on the way.
+        ? "Your commute is set to Step-free, so this may block the way through. LTA publishes which lift, not how long it will be out."
+        : "Scheduled work, not a fault. The trains still run — only the lift is out.",
+      pwHasAction: !!(works.length && t.ll),
+      pwActionLabel: works.length === 1 ? `Route around ${works[0].stationName || works[0].stationCode}` : "Route around these stations",
+      pwAction: () => {
+        goToCommute(stepFree ? "step" : "reroute", null, works.map((w) => w.stationCode));
+        this.flash(`Avoiding ${works.map((w) => w.stationName || w.stationCode).join(", ")}`);
+      },
+
       // LTA's own message often names bridging buses — better information than
       // we can derive, and already fetched. It arrives as a general service
       // message rather than a per-line segment, so it is looked for across all
@@ -1161,7 +1210,7 @@ export class AppLogic extends Component {
       s.dest &&
       !s.routeLocationPending &&
       s.screen !== "nav" &&
-      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.tripAvoid !== prevState.tripAvoid || s.routeOrigin !== prevState.routeOrigin || s.routeOriginDraft !== prevState.routeOriginDraft || s.routeLocationPending !== prevState.routeLocationPending || (!s.routeOriginDraft && this.originDrifted()))
+      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.tripAvoid !== prevState.tripAvoid || s.tripAvoidStations !== prevState.tripAvoidStations || s.routeOrigin !== prevState.routeOrigin || s.routeOriginDraft !== prevState.routeOriginDraft || s.routeLocationPending !== prevState.routeLocationPending || (!s.routeOriginDraft && this.originDrifted()))
     ) {
       this.loadTripOptions();
     }
@@ -1218,6 +1267,7 @@ export class AppLogic extends Component {
     this.loadFaults();
     this.loadCrowding();
     this.loadOutlook();
+    this.loadPlanned();
     // Journeys outlive the session that recorded them, so the pattern has to be
     // re-read on opening too. Without this, the trip that tipped the balance
     // would only be noticed on the next one — and a commute you had already
@@ -1519,7 +1569,7 @@ export class AppLogic extends Component {
   // Real journey options for the picked destination and mode. No fallback:
   // a failure surfaces in the sheet rather than being papered over.
   loadTripOptions = () => {
-    const { dest, tripMode, tripAvoid } = this.state;
+    const { dest, tripMode, tripAvoid, tripAvoidStations } = this.state;
     if (!dest || !dest.ll) return;
     if (this.state.routeOriginDraft) {
       this.setState({ trips: { key: null, options: [], pending: false, error: "Select a starting place from the search results." } });
@@ -1531,13 +1581,13 @@ export class AppLogic extends Component {
       return;
     }
     const request = (origin) => {
-      const key = `${dest.name}|${tripMode}|${tripAvoid || ""}|${origin.join(",")}`;
+      const key = `${dest.name}|${tripMode}|${tripAvoid || ""}|${(tripAvoidStations || []).join("+")}|${origin.join(",")}`;
       if (this.state.trips.key === key && (this.state.trips.pending || this.state.trips.options.length)) {
         return Promise.resolve();
       }
       this._planOrigin = origin;
       this.setState({ trips: { key, options: [], pending: true, error: null } });
-      return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid })
+      return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid, avoidStations: tripAvoidStations })
       .then((options) => {
         if (this.state.dest !== dest || this.state.tripMode !== tripMode || this.state.trips.key !== key) return;
         this.setState({ trips: { key, options, pending: false, error: null, recorded: !!options.recorded, avoided: options.avoided || null }, tripRoute: 0 });
@@ -2236,12 +2286,12 @@ export class AppLogic extends Component {
       ].map((m) => {
         const on = s.tripMode === m.id;
         return {
-          ...m, pick: () => this.setState({ tripMode: m.id, tripAvoid: null, tripRoute: 0 }),
+          ...m, pick: () => this.setState({ tripMode: m.id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0 }),
           tileStyle: "flex:none;padding:10px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;font:var(--weight-bold) 13px/1 var(--font-body);letter-spacing:-.005em;transition:background .15s,color .15s;" +
             (on ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);"),
         };
       }),
-      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripAvoid: null, tripRoute: 0 }),
+      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0 }),
       tripModeBlurb: {
         fast: "Ranked by total journey time from OneMap.",
         budget: "Ranked by the fare OneMap returns, bus-only options included.",
@@ -2269,9 +2319,9 @@ export class AppLogic extends Component {
       // Nothing left after avoiding a disrupted line is a different answer from
       // no route existing, and the sheet has to say which.
       tripsEmptyNote: trips.avoided && trips.avoided.none
-        ? `Every route OneMap offers still uses ${trips.avoided.lines.join(" and ")}. Nothing here avoids the disruption.`
+        ? `Every route OneMap offers still goes via ${(trips.avoided.all || trips.avoided.lines || []).join(" and ")}. Nothing here avoids it.`
         : "No public transport route found for this trip.",
-      tripsAvoiding: trips.avoided && !trips.avoided.none ? `Avoiding ${trips.avoided.lines.join(" and ")}` : "",
+      tripsAvoiding: trips.avoided && !trips.avoided.none ? `Avoiding ${(trips.avoided.all || trips.avoided.lines || []).join(" and ")}` : "",
       retryTrips: () => { this.setState({ trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions); },
       isNav: sc === "nav",
       endTrip: () => { this.setState({ screen: "map", navTrip: null, navProgress: null, navFixStatus: null }); this.flash("Trip ended"); },

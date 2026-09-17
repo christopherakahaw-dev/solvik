@@ -205,6 +205,29 @@ export function PlanScreen({ v }) {
         </div>
       )}
 
+      {v.pwHas && (
+        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.pwBlocking ? "var(--crowd-busy)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: v.pwBlocking ? "var(--crowd-busy)" : "var(--accent-soft)", color: v.pwBlocking ? "#fff" : "var(--text-accent)" }}>
+              <Icon name="construction" size={15} />
+            </span>
+            <SectionLabel>Planned work</SectionLabel>
+          </div>
+          <div style={{ font: "var(--weight-heavy) 17px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 11, textWrap: "pretty" }}>{v.pwTitle}</div>
+          {v.pwDetail && (
+            <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.pwDetail}</div>
+          )}
+          <div style={{ font: "var(--type-caption)", color: v.pwBlocking ? "var(--crowd-busy)" : "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.pwNote}</div>
+          {v.pwHasAction && (
+            <div style={{ marginTop: 13 }}>
+              <Button variant="secondary" size="md" iconRight="arrow-right" onClick={v.pwAction}>
+                {v.pwActionLabel}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
           <SectionLabel>Your places</SectionLabel>

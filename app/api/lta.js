@@ -9,6 +9,7 @@ const ALLOWED_ENDPOINTS = new Set([
   "BusArrivalv2",
   "PCDRealTime",
   "PCDForecast",
+  "v2/FacilitiesMaintenance",
   "FacilitiesMaintenance",
   "BusServices",
   "BusRoutes",

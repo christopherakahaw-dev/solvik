@@ -445,3 +445,102 @@ test("two trips to a place is enough to be warned about its line", async ({ page
   await expect(page.getByText(/You use this line to get to The Office/)).toBeVisible();
   await noOverflow(page);
 });
+
+// Planned works: scheduled, not a fault, and only worth raising when they fall
+// on a station your own commute passes through.
+// Changes at Bishan — which is what makes a lift there matter. A station the
+// train only runs through is deliberately not a warning.
+const bishanRoute = { mins: 38, eta: "08:38", fare: "$2.20", fareValue: 2.2, walk: "6 min", walkSecs: 360, transfers: 1, tag: "Fastest", geometry: [[1.43, 103.83], [1.28, 103.85]], legSpans: [{ from: 0, to: 1 }], legs: ["NSL", "CCL"],
+  transitLegs: [
+    { legIndex: 0, label: "NSL", mode: "RAIL", service: "NS", fromStopCode: "NS13", toStopCode: "NS17" },
+    { legIndex: 1, label: "CCL", mode: "RAIL", service: "CC", fromStopCode: "CC15", toStopCode: "CC19" },
+  ],
+  steps: [
+    { legIndex: 0, mode: "RAIL", label: "NSL", secs: 900, from: "Yishun", alight: "Bishan", boardStopCode: "NS13", alightStopCode: "NS17", stopCodes: ["NS15", "NS16"] },
+    { legIndex: 1, mode: "RAIL", label: "CCL", secs: 1380, from: "Bishan", alight: "Botanic Gardens", boardStopCode: "CC15", alightStopCode: "CC19", stopCodes: ["CC17"] },
+  ],
+  note: "1 transfer" };
+
+async function plannedWorks(page, { mode = "Comfort" } = {}) {
+  await page.addInitScript(({ mode }) => {
+    if (localStorage.getItem("qa:pw")) return;
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
+      home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },
+      school: { id: "school", name: "Raffles Place", address: "Raffles Place", ll: [1.2841, 103.8515], source: "onemap", verified: true },
+    } }));
+    localStorage.setItem("solvik:commutes", JSON.stringify([{
+      from: "home", to: "school", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], mins: 480, mode, legs: ["NSL"],
+      fromPlace: { id: "home", label: "Yishun", place: "Yishun", ll: [1.4294, 103.835] },
+      toPlace: { id: "school", label: "Raffles Place", place: "Raffles Place", ll: [1.2841, 103.8515] },
+    }]));
+    localStorage.setItem("qa:pw", "1");
+  }, { mode });
+
+  const planned = [];
+  page.on("request", r => { if (r.url().includes("trip-options")) planned.push(r.postDataJSON()); });
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    let response = {};
+    if (path.endsWith("trip-options")) response = { options: [bishanRoute] };
+    else if (path.endsWith("planned")) response = { works: [{ stationCode: "NS17", stationName: "Bishan", line: "NSL", lifts: [{ id: "B1L01", desc: "Exit B street level to concourse" }] }] };
+    else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Plan", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  return planned;
+}
+
+test("a lift out at a station on your way is raised as planned work, not a fault", async ({ page }) => {
+  await plannedWorks(page);
+  await expect(page.getByText("Planned work")).toBeVisible();
+  await expect(page.getByText("Lift out at Bishan")).toBeVisible();
+  await expect(page.getByText("Exit B street level to concourse")).toBeVisible();
+  // For a commute that isn't step-free this is a note, not a blocked journey.
+  await expect(page.getByText(/The trains still run — only the lift is out/)).toBeVisible();
+  await noOverflow(page);
+});
+
+test("the same lift is a blocked journey when the commute is step-free", async ({ page }) => {
+  const planned = await plannedWorks(page, { mode: "Step-free" });
+  await expect(page.getByText(/Your commute is set to Step-free/)).toBeVisible();
+  // And we do not claim to know how long it will be out — LTA doesn't publish that.
+  await expect(page.getByText(/publishes which lift, not how long/)).toBeVisible();
+
+  // Routing around it avoids the station, not the whole line: the trains run.
+  await page.getByRole("button", { name: /Route around Bishan/ }).click();
+  await expect.poll(() => planned.some(b => b && b.avoidStations === "NS17")).toBe(true);
+  expect(planned.some(b => b && b.avoid), "the line itself must not be avoided").toBe(false);
+});
+
+test("a lift out somewhere you never go is not mentioned", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
+      home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },
+      school: { id: "school", name: "Raffles Place", address: "Raffles Place", ll: [1.2841, 103.8515], source: "onemap", verified: true },
+    } }));
+    localStorage.setItem("solvik:commutes", JSON.stringify([{
+      from: "home", to: "school", days: ["Mon"], mins: 480, mode: "Comfort", legs: ["NSL"],
+      fromPlace: { id: "home", label: "Yishun", place: "Yishun", ll: [1.4294, 103.835] },
+      toPlace: { id: "school", label: "Raffles Place", place: "Raffles Place", ll: [1.2841, 103.8515] },
+    }]));
+  });
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    let response = {};
+    if (path.endsWith("trip-options")) response = { options: [bishanRoute] };
+    // Punggol is nowhere near this commute.
+    else if (path.endsWith("planned")) response = { works: [{ stationCode: "PE5", stationName: "Punggol", line: "PLRT", lifts: [{ id: "A1", desc: "Exit A" }] }] };
+    else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(page.getByText(/38 min journey/)).toBeVisible();
+  await expect(page.getByText("Planned work")).toHaveCount(0);
+});

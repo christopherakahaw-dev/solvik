@@ -76,6 +76,17 @@ export const recordedAlerts = {
   ],
 };
 
+// Lift maintenance, in the shape v2/FacilitiesMaintenance returns. NS17 is
+// Bishan, which the recorded itinerary passes through — so the demo shows a
+// planned work landing on a route rather than floating unattached.
+export const recordedFacilities = {
+  value: [
+    { Line: "NSL", StationCode: "NS17", StationName: "Bishan", LiftID: "B1L01", LiftDesc: "Exit B street level to concourse" },
+    { Line: "NSL", StationCode: "NS17", StationName: "Bishan", LiftID: "B2L03", LiftDesc: "Concourse to platform B" },
+    { Line: "CCL", StationCode: "CC9", StationName: "Paya Lebar", LiftID: "A1L01", LiftDesc: "Exit A street level to concourse" },
+  ],
+};
+
 export const recordedBusStops = [
   { BusStopCode: "53061", RoadName: "Bishan Rd", Description: "Bishan Stn Exit C", Latitude: 1.35072, Longitude: 103.84853 },
   { BusStopCode: "53069", RoadName: "Bishan Rd", Description: "Blk 511", Latitude: 1.35548, Longitude: 103.84796 },

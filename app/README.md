@@ -189,6 +189,31 @@ is what lets an alert say *"You use this line to get to the Office"* rather than
 only naming a line code. Places are derived from the journeys on demand, never
 stored separately, so forgetting the journeys forgets them too.
 
+### Planned works
+
+Faults are only half of what disrupts a journey. `/api/planned` reads LTA's
+`v2/FacilitiesMaintenance` — which, despite the name, is narrower than it
+sounds: **adhoc lift maintenance**, one row per lift, carrying the line, the
+station and a description of which lift is out. There is no public structured
+feed for station closures, early closures or engineering works; those are
+announced in prose. `src/lib/planned.js` is written as a source list so a real
+closures feed slots in beside this one without the client changing.
+
+So the feature is built around the event the data actually supports, and it is a
+sharper one than it first appears:
+
+- A lift is only raised when it is out at a station **you board, alight or
+  change at**. A station the train merely runs through is not one you are in,
+  and warning about it would be noise.
+- If your commute is set to **Step-free**, the same fact is a blocked journey
+  rather than an inconvenience, and the card says so in those words. This is the
+  most literal form of "tailored to the commuter": the identical feed row is a
+  footnote for one person and a blocker for another, and the app knows which.
+- **Route around Bishan** avoids the *station*, not the line — a lift being out
+  is no reason to write off every train on the NSL.
+- It does not claim to know how long the lift will be out, because LTA publishes
+  which lift, not for how long.
+
 ### When a line breaks
 
 An alert that names a line you ride is turned into an alternative route rather

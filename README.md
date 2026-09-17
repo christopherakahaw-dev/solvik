@@ -36,6 +36,13 @@ un-learns on the same evidence: stop making the trip and the commute retires
 itself after five weeks, and says so, because an inference should be no more
 durable than what supports it.
 
+**Planned works, not just faults.** LTA publishes adhoc lift maintenance per
+station. Solvik raises one only when it falls on a station you actually board,
+alight or change at — and if your commute is set to Step-free, the same row
+stops being a footnote and becomes a blocked journey, said in those words.
+Routing around it avoids the station, not the line, because a lift being out is
+no reason to write off every train on it.
+
 **When your line breaks, it finds you another way.** An alert naming a line you
 ride becomes a route that avoids it — OneMap has no way to exclude a line, so
 Solvik asks for more itineraries than it needs and drops the ones still running
@@ -86,7 +93,7 @@ setup.
 React + Vite, no framework beyond that. The map is Leaflet over OneMap's own
 raster tiles, falling back to OpenStreetMap if they fail.
 
-Ten serverless functions in [`app/api/`](app/api) hold the credentials and do
+Eleven serverless functions in [`app/api/`](app/api) hold the credentials and do
 the joining work — ranking journeys, attaching crowd levels and bus arrivals to
 the legs that need them, resolving station codes to positions. The browser only
 ever talks to those. `npm run dev` runs them locally too, so the whole thing
@@ -95,7 +102,7 @@ works without deploying anywhere.
 The interesting logic is pulled out into pure modules that can be tested without
 a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
-`tripDetail.js` (an itinerary → the step-by-step card). **112 tests** run against
+`tripDetail.js` (an itinerary → the step-by-step card). **124 tests** run against
 recorded API responses, so every parser is checked without touching the network.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither

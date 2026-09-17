@@ -33,6 +33,9 @@ export async function getTripOptions(from, to, mode, destName, opts = {}) {
   };
   if (destName) body.destName = destName;
   if (opts.avoid) body.avoid = Array.isArray(opts.avoid) ? opts.avoid.join(",") : opts.avoid;
+  // A station rather than a line: a lift out at one interchange is no reason to
+  // write off every train on that line.
+  if (opts.avoidStations) body.avoidStations = Array.isArray(opts.avoidStations) ? opts.avoidStations.join(",") : opts.avoidStations;
   const res = await fetch("/api/trip-options", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
