@@ -9,6 +9,7 @@ import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { commuteOutlook, outlookCodes } from "../lib/outlook";
 import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary, seedSampleJourneys } from "../lib/journeys";
 import { inferCommutes, commuteFromPattern, evidenceLine, staleCommutes, RETIRE_MS } from "../lib/patterns";
+import { canonicalLine, sameLine } from "../lib/lines";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
 import { getForecast } from "../api/forecast";
 import { getPosition, watchPosition, clearWatch, messageForError, getLastPosition } from "../lib/geolocation";
@@ -76,7 +77,7 @@ export class AppLogic extends Component {
     navPage: 0, stepsDrag: false, pin: null,
     screen: loadStored(ONBOARDED_KEY, false) ? "map" : "intro",
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
-    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
+    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripMode: initialPreferences.stepFree ? "step" : initialPreferences.avoidCrowds ? "quiet" : initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
@@ -230,6 +231,89 @@ export class AppLogic extends Component {
 
   // Plan the next commute and fetch the forecast for the stations it passes.
   // Both halves are real requests; neither is substituted when it fails.
+  // The service alert, if any, that names a line this itinerary rides. Shared by
+  // the card and the reroute loader so both agree on what counts as disrupted —
+  // matched by canonical line code, since LTA and OneMap spell them differently.
+  disruptingAlerts(itinerary) {
+    const labels = (itinerary && itinerary.legs) || [];
+    if (!labels.length) return [];
+    return ((this.state.faults && this.state.faults.items) || []).filter(
+      (item) => canonicalLine(item.line) && labels.some((label) => sameLine(label, item.line))
+    );
+  }
+
+  // Your line is down — so plan the same trip again without it. OneMap has no
+  // banned-routes parameter, so /api/trip-options asks for more itineraries than
+  // it needs and drops the ones still using the broken line.
+  //
+  // Only ever for the commute you are about to make. Keyed on the outlook and
+  // the alert together, so a three-minute alert poll doesn't re-request a
+  // reroute it already has.
+  loadReroute = () => {
+    const outlook = this.state.outlook || {};
+    const itinerary = outlook.itinerary;
+    if (!itinerary || outlook.pending) return;
+    const alert = this.disruptingAlerts(itinerary)[0];
+    const current = this.state.reroute || {};
+    if (!alert) {
+      if (current.key) this.setState({ reroute: {} });
+      return;
+    }
+    const key = `${outlook.key || ""}|${alert.id}`;
+    if (current.key === key) return;
+
+    const next = this.nextCommute();
+    const places = this.placeList();
+    const from = next && places.find((p) => p.id === next.from);
+    const to = next && places.find((p) => p.id === next.to);
+    if (!from || !to || !from.ll || !to.ll) return;
+
+    this.setState({ reroute: { key, line: alert.line, alertId: alert.id, pending: true, option: null, avoided: null, error: null } });
+    getTripOptions(from.ll, to.ll, "reroute", to.label, { avoid: alert.line })
+      .then((options) => {
+        if ((this.state.reroute || {}).key !== key) return;
+        this.setState({
+          reroute: {
+            key, line: alert.line, alertId: alert.id, pending: false, error: null,
+            option: (options || [])[0] || null,
+            avoided: options.avoided || null,
+          },
+        });
+      })
+      .catch((err) => {
+        if ((this.state.reroute || {}).key !== key) return;
+        this.setState({ reroute: { key, line: alert.line, alertId: alert.id, pending: false, option: null, avoided: null, error: String(err.message || err) } });
+      });
+  };
+
+  // An alert is actionable when it names a rail line you use and there is a
+  // commute with a known destination to re-plan towards.
+  canRerouteFrom(alert) {
+    if (!alert || !canonicalLine(alert.line)) return false;
+    if (!this.myLines().some((used) => sameLine(used, alert.line))) return false;
+    const next = this.nextCommute();
+    if (!next) return false;
+    const to = this.placeList().find((p) => p.id === next.to);
+    return !!(to && to.ll);
+  }
+
+  rerouteFromAlert = (alert) => {
+    const next = this.nextCommute();
+    const places = this.placeList();
+    const to = next && places.find((p) => p.id === next.to);
+    const from = next && places.find((p) => p.id === next.from);
+    if (!to || !to.ll) {
+      this.flash("No commute to re-plan yet");
+      return;
+    }
+    this.setState({ screen: "map", fcAlerts: false, tripMode: "reroute", tripAvoid: alert.line });
+    this.chooseDest(
+      { name: to.label, detail: to.place, ll: to.ll, kind: "Commute" },
+      from && from.ll ? { routeOrigin: { id: from.id, name: from.label, address: from.place, ll: from.ll } } : undefined
+    );
+    this.flash(`Planning around ${alert.line}`);
+  };
+
   loadOutlook = () => {
     const next = this.nextCommute();
     const blank = { key: null, itinerary: null, forecast: null, pending: false, error: null };
@@ -267,7 +351,7 @@ export class AppLogic extends Component {
           forecast = { slots: [], series: {}, live: {}, missing: [], error: String(err.message || err) };
         }
         if ((this.state.outlook || blank).key !== key) return;
-        this.setState({ outlook: { key, itinerary, forecast, pending: false, error: null } });
+        this.setState({ outlook: { key, itinerary, forecast, pending: false, error: null } }, this.loadReroute);
       })
       .catch((err) => {
         if ((this.state.outlook || blank).key !== key) return;
@@ -498,6 +582,7 @@ export class AppLogic extends Component {
       planGreeting: greeting,
       fgHas: false, fgTitle: "", fgDetail: "", fgTone: "muted", fgCoverage: "", fgAlerts: [],
       fgActionLabel: "View alternatives", fgAction: () => {}, fgHasAction: false,
+      rrHas: false, rrPending: false, rrLine: "", rrTitle: "", rrDetail: "", rrCaveat: "", rrAdvice: "",
     };
     if (!next) {
       return {
@@ -528,12 +613,14 @@ export class AppLogic extends Component {
 
     // Any service alert already loaded that names a line this journey uses.
     const legLabels = itinerary ? itinerary.legs || [] : [];
-    const alerts = ((s.faults && s.faults.items) || []).filter(
-      (item) => item.line && legLabels.some((label) => String(label).toUpperCase().includes(String(item.line).toUpperCase()))
-    );
+    const alerts = this.disruptingAlerts(itinerary);
 
     const worst = view && view.worst;
     const busy = !!(worst && worst.level !== "light");
+    const reroute = s.reroute && s.reroute.key ? s.reroute : {};
+    const rrOption = reroute.option || null;
+    const rrNone = !!(reroute.avoided && reroute.avoided.none);
+    const rrDelta = rrOption && view ? rrOption.mins - view.durationMins : null;
     const coverage = view ? view.coverage : null;
     const coverageNote = !coverage
       ? ""
@@ -545,12 +632,12 @@ export class AppLogic extends Component {
       ? `Forecast from LTA for all ${coverage.total} station${coverage.total === 1 ? "" : "s"} on the way.`
       : `Forecast from LTA for ${coverage.covered} of ${coverage.total} stations on the way.`;
 
-    const goToCommute = (mode) => {
+    const goToCommute = (mode, avoid = null) => {
       if (!t.ll) {
         this.flash("Search for this place in Your places first");
         return;
       }
-      this.setState({ screen: "map", tripMode: mode });
+      this.setState({ screen: "map", tripMode: mode, tripAvoid: avoid });
       // A commute names both ends, so the map is given both. Without the
       // origin it would fall back to your position — or, with none, to saved
       // Home, which on an evening trip home means planning Home → Home.
@@ -613,7 +700,9 @@ export class AppLogic extends Component {
               : null,
           ].filter(Boolean).join(" ")
         : alerts.length
-        ? alerts[0].title
+        // The title already carries the line and the tag, so the body carries
+        // what the title doesn't: which stations, and which direction.
+        ? alerts[0].detail || alerts[0].title
         : coverage && coverage.outsideWindow
         ? "LTA's crowd forecast runs to the end of today. Check back nearer the time and this will fill in."
         : coverage && coverage.none
@@ -621,12 +710,59 @@ export class AppLogic extends Component {
         : "",
       fgTone: busy && worst.level === "busy" ? "busy" : busy ? "moderate" : alerts.length ? "warn" : "muted",
       fgCoverage: coverageNote,
-      fgAlerts: alerts.slice(0, 2).map((a) => ({ line: a.line, title: a.title })),
-      fgHasAction: !!(view && busy && t.ll),
+      // The first alert is the card's own title and detail; only the others need
+      // a chip of their own.
+      fgAlerts: (busy ? alerts.slice(0, 2) : alerts.slice(1, 3)).map((a) => ({ line: a.line, title: a.title })),
+      fgHasAction: !!(view && (busy || rrOption) && t.ll),
+      fgActionLabel: rrOption ? "Show this way" : "View alternatives",
       fgAction: () => {
+        if (rrOption) {
+          goToCommute("reroute", reroute.line);
+          this.flash(`Avoiding ${reroute.line}`);
+          return;
+        }
         goToCommute("quiet");
         this.flash("Ranked by live crowding");
       },
+
+      // The reroute. Only ever present when an alert names a line this trip
+      // rides — see loadReroute().
+      rrHas: !!(reroute.key && (rrOption || rrNone || reroute.pending || reroute.error)),
+      rrPending: !!reroute.pending,
+      rrLine: reroute.line || "",
+      // The section label already says "Another way", so the title is the route.
+      rrTitle: rrOption
+        ? rrOption.legs.join(" · ")
+        : rrNone
+        ? `No way around ${reroute.line} right now`
+        : reroute.pending
+        ? "Looking for another way…"
+        : reroute.error
+        ? "Couldn't plan an alternative"
+        : "",
+      rrDetail: rrOption
+        ? [
+            `${rrOption.mins} min${rrDelta == null ? "" : rrDelta > 0 ? ` · ${rrDelta} min longer` : rrDelta < 0 ? ` · ${-rrDelta} min faster` : " · same time"}`,
+            `avoids ${reroute.line} entirely`,
+          ].join(" · ")
+        : rrNone
+        // Honest about which of the two it is: every route OneMap offered still
+        // runs through the fault, which is not the same as there being no route.
+        ? `Every route OneMap offers still uses ${reroute.line}. Sitting it out or a taxi may be the only options.`
+        : reroute.error || "",
+      // The alternative is planned from the timetable. OneMap does not know a
+      // disruption is happening, so this is a route that avoids the broken line
+      // — not a live-adjusted time. Saying so is the whole point.
+      rrCaveat: rrOption ? `${rrOption.mins} min is OneMap's timetable, which doesn't know about the disruption. Expect the alternative to be busier than usual.` : "",
+      // LTA's own message often names bridging buses — better information than
+      // we can derive, and already fetched. It arrives as a general service
+      // message rather than a per-line segment, so it is looked for across all
+      // alerts, narrowed to ones that actually name the disrupted line.
+      rrAdvice: reroute.line
+        ? (((s.faults && s.faults.items) || []).find(
+            (a) => a.detail && /bridg|shuttle|free bus/i.test(a.detail) && a.detail.toUpperCase().includes(String(reroute.line).toUpperCase())
+          ) || {}).detail || ""
+        : "",
     };
   }
 
@@ -926,6 +1062,11 @@ export class AppLogic extends Component {
       }),
       fcFaults: faults.items.map((f) => ({
         ...f,
+        // Only an alert on a line you ride offers a reroute, and only on a tap:
+        // the Today card covers the trip you are about to make, and a sheet of
+        // alerts shouldn't fire a routing request each.
+        canReroute: this.canRerouteFrom(f),
+        reroute: () => this.rerouteFromAlert(f),
         readLabel: isRead(f) ? "Read" : "Tap to mark as read",
         readDotStyle: isRead(f) ? "display:none" : "width:7px;height:7px;border-radius:999px;background:var(--status-fault)",
         toggleRead: () => {
@@ -975,7 +1116,7 @@ export class AppLogic extends Component {
       s.dest &&
       !s.routeLocationPending &&
       s.screen !== "nav" &&
-      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.routeOrigin !== prevState.routeOrigin || s.routeOriginDraft !== prevState.routeOriginDraft || s.routeLocationPending !== prevState.routeLocationPending || (!s.routeOriginDraft && this.originDrifted()))
+      (s.dest !== prevState.dest || s.tripMode !== prevState.tripMode || s.tripAvoid !== prevState.tripAvoid || s.routeOrigin !== prevState.routeOrigin || s.routeOriginDraft !== prevState.routeOriginDraft || s.routeLocationPending !== prevState.routeLocationPending || (!s.routeOriginDraft && this.originDrifted()))
     ) {
       this.loadTripOptions();
     }
@@ -1258,7 +1399,7 @@ export class AppLogic extends Component {
   // Real journey options for the picked destination and mode. No fallback:
   // a failure surfaces in the sheet rather than being papered over.
   loadTripOptions = () => {
-    const { dest, tripMode } = this.state;
+    const { dest, tripMode, tripAvoid } = this.state;
     if (!dest || !dest.ll) return;
     if (this.state.routeOriginDraft) {
       this.setState({ trips: { key: null, options: [], pending: false, error: "Select a starting place from the search results." } });
@@ -1270,16 +1411,16 @@ export class AppLogic extends Component {
       return;
     }
     const request = (origin) => {
-      const key = `${dest.name}|${tripMode}|${origin.join(",")}`;
+      const key = `${dest.name}|${tripMode}|${tripAvoid || ""}|${origin.join(",")}`;
       if (this.state.trips.key === key && (this.state.trips.pending || this.state.trips.options.length)) {
         return Promise.resolve();
       }
       this._planOrigin = origin;
       this.setState({ trips: { key, options: [], pending: true, error: null } });
-      return getTripOptions(origin, dest.ll, tripMode, dest.name)
+      return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid })
       .then((options) => {
         if (this.state.dest !== dest || this.state.tripMode !== tripMode || this.state.trips.key !== key) return;
-        this.setState({ trips: { key, options, pending: false, error: null, recorded: !!options.recorded }, tripRoute: 0 });
+        this.setState({ trips: { key, options, pending: false, error: null, recorded: !!options.recorded, avoided: options.avoided || null }, tripRoute: 0 });
       })
       .catch((err) => {
         if (this.state.dest !== dest || this.state.trips.key !== key) return;
@@ -1333,7 +1474,12 @@ export class AppLogic extends Component {
         // A content-derived id, so "read" survives a reload and LTA's feed
         // reordering — an index into this array survives neither.
         const items = [...segmentItems, ...messageItems].map((item) => ({ ...item, id: alertId(item) }));
-        this.setState({ faults: { items, pending: false, error: null } }, this.reviewAlerts);
+        // A new alert can disrupt a commute that was fine when it was planned,
+        // so the reroute is reconsidered whenever the alert list changes.
+        this.setState({ faults: { items, pending: false, error: null } }, () => {
+          this.reviewAlerts();
+          this.loadReroute();
+        });
       })
       .catch((err) =>
         this.setState({ faults: { items: [], pending: false, error: String(err.message || err) } })
@@ -1960,12 +2106,12 @@ export class AppLogic extends Component {
       ].map((m) => {
         const on = s.tripMode === m.id;
         return {
-          ...m, pick: () => this.setState({ tripMode: m.id, tripRoute: 0 }),
+          ...m, pick: () => this.setState({ tripMode: m.id, tripAvoid: null, tripRoute: 0 }),
           tileStyle: "flex:none;padding:10px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;font:var(--weight-bold) 13px/1 var(--font-body);letter-spacing:-.005em;transition:background .15s,color .15s;" +
             (on ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);"),
         };
       }),
-      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripRoute: 0 }),
+      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripAvoid: null, tripRoute: 0 }),
       tripModeBlurb: {
         fast: "Ranked by total journey time from OneMap.",
         budget: "Ranked by the fare OneMap returns, bus-only options included.",
@@ -1990,6 +2136,12 @@ export class AppLogic extends Component {
       tripsError: trips.error || null,
       // Only after a request has actually resolved — the initial state is not "empty".
       tripsEmpty: !!trips.key && !trips.pending && !trips.error && tripOptions.length === 0,
+      // Nothing left after avoiding a disrupted line is a different answer from
+      // no route existing, and the sheet has to say which.
+      tripsEmptyNote: trips.avoided && trips.avoided.none
+        ? `Every route OneMap offers still uses ${trips.avoided.lines.join(" and ")}. Nothing here avoids the disruption.`
+        : "No public transport route found for this trip.",
+      tripsAvoiding: trips.avoided && !trips.avoided.none ? `Avoiding ${trips.avoided.lines.join(" and ")}` : "",
       retryTrips: () => { this.setState({ trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions); },
       isNav: sc === "nav",
       endTrip: () => { this.setState({ screen: "map", navTrip: null, navProgress: null, navFixStatus: null }); this.flash("Trip ended"); },

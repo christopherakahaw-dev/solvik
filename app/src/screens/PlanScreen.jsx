@@ -94,6 +94,26 @@ export function PlanScreen({ v }) {
               <span style={{ font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>{a.title}</span>
             </div>
           ))}
+          {v.rrHas && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-card)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 22, height: 22, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-soft)", color: "var(--text-accent)" }}>
+                  <Icon name="route" size={13} />
+                </span>
+                <SectionLabel>{v.rrPending ? "Finding another way" : "Another way"}</SectionLabel>
+              </div>
+              <div style={{ font: "var(--weight-bold) 14.5px/1.3 var(--font-body)", color: "var(--text-strong)", marginTop: 9, textWrap: "pretty" }}>{v.rrTitle}</div>
+              {v.rrDetail && (
+                <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 5, textWrap: "pretty" }}>{v.rrDetail}</div>
+              )}
+              {v.rrAdvice && (
+                <div style={{ font: "var(--type-caption)", color: "var(--text-body)", marginTop: 8, padding: "8px 10px", borderRadius: 12, background: "var(--accent-soft)", textWrap: "pretty" }}>{v.rrAdvice}</div>
+              )}
+              {v.rrCaveat && (
+                <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 8, textWrap: "pretty" }}>{v.rrCaveat}</div>
+              )}
+            </div>
+          )}
           {v.fgCoverage && (
             <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.fgCoverage}</div>
           )}

@@ -181,7 +181,12 @@ export function MapScreen({ v }) {
               )}
               {!v.tripsPending && !v.tripsError && v.tripsEmpty && (
                 <div style={{ padding: "18px 0", font: "var(--type-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
-                  No public transport route found for this trip.
+                  {v.tripsEmptyNote}
+                </div>
+              )}
+              {v.tripsAvoiding && (
+                <div style={{ font: "var(--weight-semibold) 11px/1 var(--font-body)", letterSpacing: ".05em", textTransform: "uppercase", color: "var(--text-accent)", padding: "2px 0 4px" }}>
+                  {v.tripsAvoiding}
                 </div>
               )}
               {v.tripOptions.map((o, i) => (
@@ -370,7 +375,20 @@ export function MapScreen({ v }) {
                   </div>
                   <div style={{ font: "var(--weight-bold) 14.5px/1.3 var(--font-body)", color: "var(--text-strong)", marginTop: 9, textWrap: "pretty" }}>{f.title}</div>
                   <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 5, textWrap: "pretty" }}>{f.detail}</div>
-                  <div style={{ font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".05em", textTransform: "uppercase", color: "var(--text-muted)", marginTop: 9 }}>{f.readLabel}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 9 }}>
+                    <span style={{ font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".05em", textTransform: "uppercase", color: "var(--text-muted)" }}>{f.readLabel}</span>
+                    {f.canReroute && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); f.reroute(); }}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); f.reroute(); } }}
+                        style={{ marginLeft: "auto", cursor: "pointer", font: "var(--weight-bold) 11.5px/1 var(--font-body)", color: "var(--text-accent)", padding: "6px 10px", borderRadius: 999, background: "var(--accent-soft)", whiteSpace: "nowrap" }}
+                      >
+                        Find another way
+                      </span>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>

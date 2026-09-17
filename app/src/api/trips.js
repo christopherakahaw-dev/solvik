@@ -20,7 +20,9 @@ function singaporeDateTime(now = new Date()) {
 
 // Journey options from /api/trip-options. Throws on failure so the caller can
 // show an explicit error state rather than substituting invented routes.
-export async function getTripOptions(from, to, mode, destName) {
+// `avoid` names a line the answer must not use — a disruption reroute. The
+// server filters rather than OneMap, which has no banned-routes parameter.
+export async function getTripOptions(from, to, mode, destName, opts = {}) {
   const { date, time } = singaporeDateTime();
   const body = {
     from: `${from[0]},${from[1]}`,
@@ -30,6 +32,7 @@ export async function getTripOptions(from, to, mode, destName) {
     time,
   };
   if (destName) body.destName = destName;
+  if (opts.avoid) body.avoid = Array.isArray(opts.avoid) ? opts.avoid.join(",") : opts.avoid;
   const res = await fetch("/api/trip-options", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -37,5 +40,7 @@ export async function getTripOptions(from, to, mode, destName) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Couldn't plan this trip");
-  return Object.assign(data.options || [], { recorded: !!data.recorded });
+  // `avoided` rides along on the array: an empty result with a reason attached
+  // ("every route still uses NSL") must not read as "no routes exist".
+  return Object.assign(data.options || [], { recorded: !!data.recorded, avoided: data.avoided || null });
 }
