@@ -10,6 +10,7 @@ import { nextBuses } from "./_lib/arrivals.js";
 import { resolveStopCode } from "./_lib/busStops.js";
 import { normalizeItinerary, crowdLevelOf, crowdScoreOf, signature, clockFrom } from "./_lib/itinerary.js";
 import { decodePolyline } from "./_lib/polyline.js";
+import { withoutLines, parseAvoid } from "./_lib/avoid.js";
 
 const MODES = {
   fast: { query: [{ mode: "transit", maxWalkDistance: 1000 }], rank: (a, b) => a.mins - b.mins, tag: "Fastest" },
@@ -19,6 +20,11 @@ const MODES = {
   few: { query: [{ mode: "transit", maxWalkDistance: 1200 }], rank: (a, b) => a.transfers - b.transfers || a.mins - b.mins, tag: "Fewest changes" },
   walk: { query: [{ mode: "transit", maxWalkDistance: 500 }], rank: (a, b) => a.walkSecs - b.walkSecs || a.mins - b.mins, tag: "Least walking" },
   bike: { cycle: true, tag: "Bike" },
+  // A disruption reroute. Bus-only is asked alongside transit because it is the
+  // answer when rail is down, and more itineraries are requested because the
+  // filter below throws some away — asking for three and dropping two leaves a
+  // card with nothing on it.
+  reroute: { query: [{ mode: "transit", maxWalkDistance: 1200 }, { mode: "bus", maxWalkDistance: 1200 }], rank: (a, b) => a.mins - b.mins, tag: "Avoids the disruption", itineraries: 6 },
 };
 
 const REALTIME = ["PCDRealTime", "PlatformCrowdDensityRealTime"];
@@ -161,7 +167,7 @@ async function cycleOption(start, end) {
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "private, no-store");
   const q = req.body && typeof req.body === "object" ? req.body : req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
-  const { from, to, mode = "fast", destName = "", date, time } = q;
+  const { from, to, mode = "fast", destName = "", date, time, avoid } = q;
   if (!from || !to) {
     res.status(400).json({ error: "Missing from or to (lat,lng)" });
     return;
@@ -175,7 +181,7 @@ export default async function handler(req, res) {
     }
 
     const settled = await Promise.allSettled(
-      spec.query.map((params) => oneMapRoute({ start: from, end: to, routeType: "pt", date, time, numItineraries: 3, ...params }))
+      spec.query.map((params) => oneMapRoute({ start: from, end: to, routeType: "pt", date, time, numItineraries: spec.itineraries ?? 3, ...params }))
     );
     const responses = settled.filter((r) => r.status === "fulfilled").map((r) => r.value);
     // Only surface a failure if nothing succeeded — one mode of a two-query
@@ -201,26 +207,44 @@ export default async function handler(req, res) {
         return true;
       });
 
-    await enrich(normalized);
-    const ranked = normalized.sort(spec.rank).slice(0, 3).map((opt) => ({ ...opt, note: noteFor(opt) }));
+    // Filtered before enrich(), so we don't fetch bus arrivals for options we
+    // are about to throw away.
+    const { kept, dropped, lines } = withoutLines(normalized, avoid);
+    const avoided = lines.length ? { lines, dropped, none: kept.length === 0 } : null;
+    if (!kept.length) {
+      // An empty list after filtering means "every way still uses the broken
+      // line", which is not the same as "there is no route" — and showing a
+      // route through the fault would be worse than either.
+      res.status(200).json({ mode, options: [], ...(avoided ? { avoided } : {}) });
+      return;
+    }
 
-    res.status(200).json({ mode, options: tagsFor(ranked, spec.tag) });
+    await enrich(kept);
+    const ranked = kept.sort(spec.rank).slice(0, 3).map((opt) => ({ ...opt, note: noteFor(opt) }));
+
+    res.status(200).json({ mode, options: tagsFor(ranked, spec.tag), ...(avoided ? { avoided } : {}) });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
     // OneMap says "no trip possible" with its own error id 404 and HTTP 200;
     // that genuinely means no route. Anything else is a fault worth showing.
     if (err && err.otpErrorId === 404) {
-      res.status(200).json({ mode, options: [] });
+      res.status(200).json({ mode, options: [], ...(parseAvoid(avoid).length ? { avoided: { lines: parseAvoid(avoid), dropped: 0, none: true } } : {}) });
       return;
     }
     // Recorded itineraries go through exactly the same mapping as live ones,
     // so a demo shows the real card, marked as recorded.
-    const recorded = (recordedRoute.plan.itineraries || [])
-      .map((itin) => normalizeItinerary(itin, ""))
-      .filter(Boolean)
+    // The recorded fixture is an NSL trip, so it has to face the same filter as
+    // a live answer: serving it while claiming to avoid NSL would be the one
+    // thing this feature must never do.
+    const sample = withoutLines(
+      (recordedRoute.plan.itineraries || []).map((itin) => normalizeItinerary(itin, "")).filter(Boolean),
+      avoid
+    );
+    const recorded = sample.kept
       .slice(0, 3)
       .map((opt) => ({ ...opt, recorded: true, tag: "Recorded example", note: "Sample itinerary from a different journey. Preview only; not directions to your destination." }));
-    if (!spec.cycle && serveRecorded(res, { mode, options: recorded })) return;
+    const sampleAvoided = sample.lines.length ? { lines: sample.lines, dropped: sample.dropped, none: recorded.length === 0 } : null;
+    if (!spec.cycle && serveRecorded(res, { mode, options: recorded, ...(sampleAvoided ? { avoided: sampleAvoided } : {}) })) return;
     res.status(msg.includes("not configured") || msg.includes("credentials") ? 501 : 502).json({ error: msg });
   }
 }

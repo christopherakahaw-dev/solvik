@@ -278,3 +278,170 @@ test("erase all data removes saved places and local history", async ({ page }) =
   await expect(page.getByRole("button", { name: "Set up in a minute" })).toBeVisible();
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("solvik:")))).toEqual([]);
 });
+
+// A learned commute must not outlive the trips that justified it: the evidence
+// ages out at 90 days, so a conclusion drawn from it cannot be permanent.
+test("a learned commute whose trips stopped is retired on opening, and says so", async ({ page }) => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const auto = (sig, from, to, fromName, toName) => ({
+    from: `auto-from:${sig}`, to: `auto-to:${sig}`,
+    fromPlace: { id: `auto-from:${sig}`, label: fromName, place: "Learned from your trips", ll: from },
+    toPlace: { id: `auto-to:${sig}`, label: toName, place: "Learned from your trips", ll: to },
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri"], mins: 490, mode: "Comfort", legs: ["EWL"],
+    arriveBy: null, source: "auto", signature: sig,
+  });
+  const journeysFor = (from, to, toName, agoDays) =>
+    [0, 1, 2, 3].map((i) => ({
+      id: `j${toName}${i}`, at: Date.now() - (agoDays + i) * DAY, fromLL: from, toLL: to,
+      toName, mode: "Comfort", legs: ["EWL"], started: true, completed: true,
+    }));
+
+  await page.addInitScript(({ auto, oldTrips, freshTrips }) => {
+    if (localStorage.getItem("qa:memory")) return;
+    localStorage.setItem("solvik:commutes", JSON.stringify(auto));
+    localStorage.setItem("solvik:journeys", JSON.stringify(oldTrips.concat(freshTrips)));
+    localStorage.setItem("qa:memory", "1");
+  }, {
+    auto: [
+      auto("1.311,103.770>1.299,103.855|weekday", [1.311, 103.77], [1.299, 103.855], "Old home", "Old job"),
+      auto("1.348,103.683>1.323,103.767|weekday", [1.348, 103.683], [1.323, 103.767], "Campus", "New job"),
+      { from: "home", to: "school", fromPlace: { id: "home", label: "Home", ll: [1.311, 103.77] }, toPlace: { id: "school", label: "School", ll: [1.348, 103.683] }, days: ["Mon"], mins: 480, mode: "Fastest" },
+    ],
+    oldTrips: journeysFor([1.311, 103.77], [1.299, 103.855], "Old job", 60),
+    freshTrips: journeysFor([1.348, 103.683], [1.323, 103.767], "New job", 3),
+  });
+  await setup(page);
+
+  await expect(page.getByText(/Stopped watching Old home → Old job/)).toBeVisible();
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Campus → New job/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Home → School/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Old home → Old job/ })).toHaveCount(0);
+
+  // The retirement is written through, not just hidden for this session.
+  await page.reload();
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:commutes")).map((c) => c.toPlace.label));
+  expect(kept).toEqual(["New job", "School"]);
+  await noOverflow(page);
+});
+
+// A disruption on your line should arrive with an answer attached, not just bad
+// news. OneMap has no banned-routes parameter, so the alternative is produced by
+// filtering — which means the thing to check is that nothing NSL survives it.
+const nslOption = { mins: 38, eta: "09:10", fare: "$2.20", fareValue: 2.2, walk: "6 min", walkSecs: 360, transfers: 1, tag: "Fastest", geometry: [[1.43, 103.83], [1.28, 103.85]], legSpans: [{ from: 0, to: 1 }], legs: ["NSL", "EWL"], transitLegs: [{ legIndex: 0, label: "NSL", mode: "RAIL", service: "NS" }, { legIndex: 1, label: "EWL", mode: "RAIL", service: "EW" }], steps: [], note: "1 transfer" };
+const busOption = { mins: 52, eta: "09:24", fare: "$2.10", fareValue: 2.1, walk: "9 min", walkSecs: 540, transfers: 1, tag: "Avoids the disruption", geometry: [[1.43, 103.83], [1.28, 103.85]], legSpans: [{ from: 0, to: 1 }], legs: ["BUS 851", "CCL"], transitLegs: [{ legIndex: 0, label: "BUS 851", mode: "BUS", service: "851" }, { legIndex: 1, label: "CCL", mode: "RAIL", service: "CC" }], steps: [], note: "1 transfer" };
+
+async function disruptedCommute(page, { rerouteBody } = {}) {
+  await page.addInitScript(({ home, school }) => {
+    if (localStorage.getItem("qa:disrupt")) return;
+    localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
+      home: { id: "home", name: "Home", address: "Home", ll: home, source: "onemap", verified: true },
+      school: { id: "school", name: "School", address: "School", ll: school, source: "onemap", verified: true },
+    } }));
+    localStorage.setItem("solvik:commutes", JSON.stringify([{
+      from: "home", to: "school", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], mins: 480, mode: "Comfort", legs: ["NSL"],
+      fromPlace: { id: "home", label: "Home", place: "Home", ll: home }, toPlace: { id: "school", label: "School", place: "School", ll: school },
+    }]));
+    localStorage.setItem("qa:disrupt", "1");
+  }, { home: [1.311, 103.77], school: [1.348, 103.683] });
+
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const query = new URL(route.request().url()).searchParams;
+    let response = {};
+    if (path.endsWith("trip-options")) {
+      // The reroute is the request that carries `avoid` — answer it the way the
+      // server would, with NSL already filtered out.
+      response = body.avoid ? (rerouteBody || { mode: "reroute", options: [busOption], avoided: { lines: [body.avoid], dropped: 2, none: false } }) : { options: [nslOption] };
+    } else if (path.endsWith("lta") && String(query.get("endpoint")).includes("TrainServiceAlerts")) {
+      // DataMall nests the alert object under `value`, and callLta unwraps it.
+      response = { value: { Status: 2, AffectedSegments: [{ Line: "NSL", Direction: "Both", StartStation: "NS13", EndStation: "NS17", Stations: "NS13,NS14,NS15,NS16,NS17" }], Message: [{ Content: "NSL - Train fault between Yishun and Bishan. Free bridging buses are available at all affected stations.", CreatedDate: "Now" }] } };
+    } else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Plan", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+}
+
+test("a fault on your line brings an alternative that avoids it", async ({ page }) => {
+  await disruptedCommute(page);
+
+  await expect(page.getByText("BUS 851 · CCL", { exact: true })).toBeVisible();
+  await expect(page.getByText(/52 min · 14 min longer · avoids NSL entirely/)).toBeVisible();
+  // The alternative must never be presented as a live-adjusted time.
+  await expect(page.getByText(/timetable, which doesn't know about the disruption/)).toBeVisible();
+  // LTA's own bridging-bus text is better information than we can derive.
+  await expect(page.getByText(/Free bridging buses/)).toBeVisible();
+
+  // The point of the whole feature: the legs offered are exactly the ones that
+  // survived the filter, and the broken line is not among them.
+  await expect(page.getByText("BUS 851 · CCL", { exact: true })).toHaveText("BUS 851 · CCL");
+  await noOverflow(page);
+});
+
+test("when every route still uses the broken line, the app says so", async ({ page }) => {
+  // The honest failure: not "no route found", which would be a different claim.
+  await disruptedCommute(page, { rerouteBody: { mode: "reroute", options: [], avoided: { lines: ["NSL"], dropped: 4, none: true } } });
+
+  await expect(page.getByText(/No way around NSL right now/)).toBeVisible();
+  await expect(page.getByText(/Every route OneMap offers still uses NSL/)).toBeVisible();
+  await expect(page.getByText(/timetable, which doesn't know/)).toHaveCount(0);
+  await noOverflow(page);
+});
+
+test("an alert on a line you never ride offers no reroute", async ({ page }) => {
+  await setup(page, { home });
+  const planned = [];
+  page.on("request", r => { if (r.url().includes("trip-options")) planned.push(r.postDataJSON()); });
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(page.getByText(/Another way/)).toHaveCount(0);
+  expect(planned.some(b => b && b.avoid), "no reroute should have been requested").toBe(false);
+});
+
+// Two trips somewhere is enough to be told when that line breaks — the point of
+// learning places rather than waiting for a full commute to be promoted.
+test("two trips to a place is enough to be warned about its line", async ({ page }) => {
+  await page.addInitScript(({ office }) => {
+    if (localStorage.getItem("qa:places")) return;
+    localStorage.setItem("sv-auth:guest-session", "1");
+    localStorage.setItem("solvik:onboarded", "1");
+    localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
+    // Two visits on two days, well under the commute bar of four journeys.
+    localStorage.setItem("solvik:journeys", JSON.stringify([1, 3].map((n) => ({
+      id: `p${n}`, at: Date.now() - n * 86400000, fromLL: [1.4294, 103.835], toLL: office,
+      toName: "The Office", mode: "Comfort", legs: ["NSL"], started: true, completed: true,
+    }))));
+    localStorage.setItem("qa:places", "1");
+  }, { office: [1.3009, 103.8559] });
+
+  await page.route(url => url.pathname.startsWith("/api/"), async route => {
+    const path = new URL(route.request().url()).pathname;
+    const query = new URL(route.request().url()).searchParams;
+    let response = {};
+    if (path.endsWith("lta") && String(query.get("endpoint")).includes("TrainServiceAlerts")) {
+      response = { value: { Status: 2, AffectedSegments: [{ Line: "NSL", Direction: "Both", StartStation: "NS13", EndStation: "NS17", Stations: "NS13,NS17" }], Message: [] } };
+    } else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
+    else if (path.endsWith("forecast")) response = { slots: [], series: {} };
+    await route.fulfill({ json: response });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Plan", exact: true })).toBeVisible();
+
+  // No commute was ever promoted — the place alone carries the line.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:commutes") || "[]").length)).toBe(0);
+
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(page.getByText(/The Office/)).toBeVisible();
+  await expect(page.getByText(/2 visits · via NSL/)).toBeVisible();
+
+  // And the alert says which place it affects, not just which line.
+  await page.getByRole("button", { name: "Map", exact: true }).click();
+  await page.getByRole("button", { name: "Alerts" }).click();
+  await expect(page.getByText(/You use this line to get to The Office/)).toBeVisible();
+  await noOverflow(page);
+});

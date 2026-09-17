@@ -152,12 +152,64 @@ together, and a group becomes a commute only when it passes every one of these �
   can't disqualify a routine;
 - seen in the last 21 days.
 
+It un-learns too. A learned commute is retired once 35 days pass with none of
+its trips being made — long enough that a holiday doesn't erase your commute,
+well inside the 90 days the journeys themselves survive, so the evidence is
+still there to judge it by. An inference should be no more durable than what
+supports it: otherwise a job you left keeps its card on Today and keeps matching
+disruption alerts to lines you no longer ride. The retirement is announced the
+same way the promotion was, because a commute vanishing without a word is the
+thing the evidence line exists to prevent. Commutes you created or edited
+yourself are yours, and are never retired.
+
+Patterns are matched by where they go, not by the string that names them. The
+signature is anchored to the earliest trip in a group, so when that trip ages
+out the string moves while the commute stays the same — comparing strings would
+let a pattern you rejected come back, and a commute you already watch be added a
+second time.
+
 Only deliberate actions are recorded — a route you started, a destination you
 chose — never a background trace of where the device has been. Everything stays
 in the browser: no endpoint in `api/` receives any of it. Trips older than 90
 days fall away on their own, **Undo** makes a pattern stay gone however many
 more times it is seen, and **Forget everything** in the Today tab clears the
 journeys, the patterns and the commutes learned from them in one tap.
+
+What device-local does *not* mean: `localStorage` is plaintext, readable by
+anything running on the same origin, and on a shared phone readable by whoever
+picks it up. Nothing is transmitted — that is the claim, and it is the whole
+claim.
+
+It also learns **places**, on a much lower bar: somewhere you went twice, on two
+different days, within the last three weeks. That is a far weaker claim than a
+commute, and all it is used for is deciding whether a disruption is worth
+mentioning — so protection starts after two trips instead of waiting for a
+commute to be promoted. Each place carries the lines you used to reach it, which
+is what lets an alert say *"You use this line to get to the Office"* rather than
+only naming a line code. Places are derived from the journeys on demand, never
+stored separately, so forgetting the journeys forgets them too.
+
+### When a line breaks
+
+An alert that names a line you ride is turned into an alternative route rather
+than left as bad news. OneMap has no banned-routes parameter, so Solvik asks for
+six itineraries across transit and bus — bus-only being the answer when rail is
+out — and drops every one still using the broken line.
+
+Three things it will not do, because this is where a transit app would be
+tempted to guess:
+
+- The alternative's time is **OneMap's timetable**, which does not know a
+  disruption is happening. The card says so, and warns the route will be busier
+  than the number suggests. It is never presented as a live adjusted time.
+- When every route still uses the broken line, it says *that* — which is a
+  different claim from "no route found", and better than showing a route
+  through the fault.
+- LTA's own message often names the bridging buses. That text is shown
+  verbatim, because it is better information than anything we could derive.
+
+The Today card reroutes itself when the commute it is already showing is hit;
+the Alerts sheet offers it on a tap, and only for lines you actually use.
 
 Disruptions are matched against the lines those journeys actually used, so an
 alert on a line you never take stays in the Alerts sheet instead of interrupting

@@ -12,7 +12,7 @@ export async function ltaFetch(paths, params = {}) {
   if (!key) throw new Error("LTA_ACCOUNT_KEY is not configured on the server.");
 
   const candidates = Array.isArray(paths) ? paths : [paths];
-  let lastStatus = null;
+  const statuses = [];
   for (const path of candidates) {
     const url = new URL(BASE + path);
     for (const [k, v] of Object.entries(params)) {
@@ -20,11 +20,14 @@ export async function ltaFetch(paths, params = {}) {
     }
     const res = await fetch(url.toString(), { headers: { AccountKey: key, accept: "application/json" } });
     if (res.ok) return res.json();
-    lastStatus = res.status;
-    // Only a missing path is worth retrying under another spelling.
-    if (res.status !== 404) break;
+    statuses.push(res.status);
+    // A missing path is worth retrying under another spelling — and so is a
+    // server error, because DataMall answers a retired path with 500 as often
+    // as with 404. Anything else (401 for a bad key, 429 for rate limiting)
+    // says the same thing about every spelling, so stop.
+    if (res.status !== 404 && res.status < 500) break;
   }
-  throw new Error(`LTA DataMall request failed (${lastStatus})`);
+  throw new Error(`LTA DataMall request failed (${statuses.join(", ")})`);
 }
 
 // Paginated collections come back 500 rows at a time.
