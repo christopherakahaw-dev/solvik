@@ -90,11 +90,10 @@ using `tile.openstreetmap.org`, so OSM is served through MapTiler. Without the
 key the map still works, falling back to OneMap's own tiles — but those are the
 Singapore Land Authority's national map, not OpenStreetMap.
 
-Accounts use Supabase. Add `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_PUBLISHABLE_KEY`, then apply the migration in
-`app/supabase/migrations`. Account deletion additionally needs the server-only
-`SUPABASE_SERVICE_ROLE_KEY`; see [`app/README.md`](app/README.md) for the full
-setup.
+Accounts use Supabase. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
+and the server-only `SUPABASE_SERVICE_ROLE_KEY`, then apply the migrations in
+`app/supabase/migrations`. Every variable the app reads is listed in
+[`app/.env.example`](app/.env.example), split into required and optional.
 
 ## What's live
 

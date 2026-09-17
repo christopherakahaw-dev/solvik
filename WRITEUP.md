@@ -155,7 +155,7 @@ The submission rules require that a judge can check a claim without paying for
 anything or waiting for a disruption to happen.
 
 ```bash
-cd app && DEMO_MODE=1 VITE_DEMO_MODE=1 npm run dev
+cd app && VITE_DEMO_MODE=1 npm run dev
 ```
 
 With `LTA_ACCOUNT_KEY` unset, every LTA call fails and is answered from recorded

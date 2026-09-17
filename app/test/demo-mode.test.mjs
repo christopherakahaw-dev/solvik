@@ -57,3 +57,17 @@ test("the recorded forecast is anchored to the day it is asked for", () => {
   assert.ok(Object.values(morning.series.NS26).includes("busy"));
   assert.ok(recordedStations.every((st) => st.code && Number.isFinite(st.lat)));
 });
+
+test("VITE_DEMO_MODE alone turns demo mode on", () => {
+  // It has to be set for the browser bundle regardless, so requiring a second
+  // server-side variable saying the same thing was configuration for its own
+  // sake — and a demo that half-works because you set one of two is worse than
+  // one that does not run at all.
+  delete process.env.DEMO_MODE;
+  process.env.VITE_DEMO_MODE = "1";
+  assert.equal(demoMode(), true);
+  process.env.VITE_DEMO_MODE = "0";
+  assert.equal(demoMode(), false);
+  delete process.env.VITE_DEMO_MODE;
+  assert.equal(demoMode(), false);
+});

@@ -10,7 +10,7 @@ mobile build, implemented from the `Onward.dc.html` Claude Design handoff
 ## Stack
 
 - **React + Vite** — single-page app, no server-rendering.
-- **Leaflet + OneMap tiles** — the map surface (`src/components/OneMapCanvas.jsx`), falling back to OpenStreetMap tiles if OneMap tiles fail to load.
+- **Leaflet + OpenStreetMap** — the map surface (`src/components/OneMapCanvas.jsx`). OSM is served through MapTiler (`VITE_MAPTILER_KEY`), because the OSM tile policy forbids applications from using `tile.openstreetmap.org`; OneMap's own tiles are the fallback.
 - **`lucide`** for icons, matching the design system's icon set.
 - **Supabase Auth + Postgres** — verified email/password accounts and optional,
   row-level-secured sync for explicitly saved places, manual commutes and route
@@ -42,8 +42,10 @@ Copy `.env.example` to `.env` and fill in:
   alerts and the nearest-stop lookup.
 - **Supabase** — create a project, copy its URL and publishable key into
   `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, then apply
-  the tracked migrations with `supabase db push`. Set `SUPABASE_URL` and the
-  server-only `SUPABASE_SERVICE_ROLE_KEY` in Vercel to enable account deletion.
+  the tracked migrations with `supabase db push`. Set the server-only
+  `SUPABASE_SERVICE_ROLE_KEY` too — `/api/report` needs it to write past
+  row-level security after triage, and `/api/delete-account` to remove an
+  account.
   Add both the local and deployed app URLs under Authentication redirect URLs.
 
 The locate button uses the browser's own geolocation, which needs no keys but
@@ -79,9 +81,10 @@ Until a fix has placed you on the route, the timetable drives the screen and
 says so. Once your position leads, the clock never silently takes over again:
 losing GPS holds the last reading and shows that instead.
 
-Restart `npm run dev` after editing `.env`. **Both keys are needed for the
-app to be useful**: without them, search, journey planning, crowding and
+Restart `npm run dev` after editing `.env`. **The OneMap and LTA keys are what
+make the app useful**: without them, search, journey planning, crowding and
 alerts all report that they're unavailable rather than showing stand-in data.
+`.env.example` lists every variable, split into required and optional.
 
 ### What's live vs. sample
 
@@ -317,7 +320,7 @@ situation: a stage, a short slot, and a network nobody controls. Demo mode
 covers that, and nothing else:
 
 ```bash
-DEMO_MODE=1 VITE_DEMO_MODE=1 npm run dev
+VITE_DEMO_MODE=1 npm run dev
 ```
 
 With it on, a live call that **fails** is answered from recorded data —
