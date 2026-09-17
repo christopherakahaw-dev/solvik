@@ -6,7 +6,7 @@ the crush, and never makes a number up.**
 Live: <https://app-three-eta-97.vercel.app/> · Source for the app itself:
 [`app/`](app) · Full technical notes: [`app/README.md`](app/README.md)
 
-Plan a journey on a live OneMap map, see every leg of it — how far you walk,
+Plan a journey on a live map, see every leg of it — how far you walk,
 where you board, how many stops you ride, when the next bus actually leaves —
 then follow it turn by turn. Solvik learns the trips you repeat, works out when
 you need to leave, and tells you when a station on your way is forecast to be
@@ -111,10 +111,10 @@ setup.
 
 ## How it's built
 
-React + Vite, no framework beyond that. The map is Leaflet over OneMap's own
-raster tiles, falling back to OpenStreetMap if they fail.
+React + Vite, no framework beyond that. The map is Leaflet over OpenStreetMap,
+served through MapTiler, falling back to OneMap's own tiles if it fails.
 
-Twelve serverless functions in [`app/api/`](app/api) hold the credentials and do
+Fifteen serverless functions in [`app/api/`](app/api) hold the credentials and do
 the joining work — ranking journeys, attaching crowd levels and bus arrivals to
 the legs that need them, resolving station codes to positions. The browser only
 ever talks to those. `npm run dev` runs them locally too, so the whole thing
@@ -123,8 +123,10 @@ works without deploying anywhere.
 The interesting logic is pulled out into pure modules that can be tested without
 a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
-`tripDetail.js` (an itinerary → the step-by-step card). **157 tests** run against
-recorded API responses, so every parser is checked without touching the network.
+`tripDetail.js` (an itinerary → the step-by-step card), `persona.js` (who is
+reading → what changes), `lines.js` (the line-code canon the brief warns about).
+**216 tests** run against recorded API responses, so every parser is checked
+without touching the network, plus 31 in a real browser.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither
 prints a secret: `/api/diagnostics` reports exactly what OneMap did with a
