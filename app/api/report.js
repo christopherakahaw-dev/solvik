@@ -116,13 +116,18 @@ export default async function handler(req, res) {
 
   let vision = null;
   let visionNote = null;
-  try {
-    vision = await visionCheck(kind, photo);
-    if (!vision && demoMode()) vision = RECORDED_VISION;
-    if (!vision) visionNote = "The photo was not checked — no image model is configured on this deployment.";
-  } catch (err) {
-    if (demoMode()) vision = RECORDED_VISION;
-    else visionNote = String(err.message || err);
+  if (demoMode()) {
+    // Demo mode never calls the API, even when a key is configured. It used to
+    // try the live call first and fall back, which meant a demo quietly billed
+    // for every report filed on stage — the opposite of what demo mode is for.
+    vision = RECORDED_VISION;
+  } else {
+    try {
+      vision = await visionCheck(kind, photo);
+      if (!vision) visionNote = "The photo was not checked — no image model is configured on this deployment.";
+    } catch (err) {
+      visionNote = String(err.message || err);
+    }
   }
 
   const outcome = verdictFor({ checks, vision });

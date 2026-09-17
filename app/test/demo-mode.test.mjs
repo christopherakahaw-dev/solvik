@@ -71,3 +71,34 @@ test("VITE_DEMO_MODE alone turns demo mode on", () => {
   delete process.env.VITE_DEMO_MODE;
   assert.equal(demoMode(), false);
 });
+
+test("demo mode never calls a paid API, even with a key configured", async () => {
+  // The live call used to run first and the recorded verdict was only a
+  // fallback, so a demo with a key set billed for every report filed on stage.
+  process.env.VITE_DEMO_MODE = "1";
+  process.env.ANTHROPIC_API_KEY = "sk-ant-should-never-be-used";
+  let called = false;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("api.anthropic.com")) called = true;
+    return { ok: false, status: 503, json: async () => ({}) };
+  };
+  try {
+    const { default: handler } = await import("../api/report.js");
+    const res = {
+      headers: {}, statusCode: 0, body: null,
+      setHeader(k, v) { this.headers[k] = v; },
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.body = body; return this; },
+    };
+    // No Supabase configured, so this stops at the 503 — which is after the
+    // point where the vision call would have been made if it were going to be.
+    await handler({ method: "POST", headers: {}, body: { kind: "esc", stationCode: "NS17" } }, res);
+    assert.equal(called, false, "demo mode must not reach the Anthropic API");
+  } finally {
+    globalThis.fetch = realFetch;
+    delete globalThis.__viteDemo;
+    delete process.env.VITE_DEMO_MODE;
+    delete process.env.ANTHROPIC_API_KEY;
+  }
+});

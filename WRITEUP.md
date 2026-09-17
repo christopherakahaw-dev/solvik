@@ -175,6 +175,12 @@ second check catches the cheapest way to fake a report. It runs behind
 deterministic gates — fresh fix, accurate fix, at the right place, shutter within
 two minutes, under the hourly limit — which reject most bad input for free.
 
+**It costs a judge nothing to see.** Demo mode answers from a recorded verdict
+without calling the API at all, so the whole path — including a rejection — is
+walkable with no key and no spend, which is what the submission rules require of
+any claim. With no key configured the deterministic gates still run and the
+report says plainly that the photo was not checked.
+
 **Commute learning is deliberately not a model.** Grouping journeys by endpoint
 and counting them is a few dozen lines, runs offline in milliseconds, is unit
 tested, and means nobody's travel history goes to an inference endpoint. The
