@@ -148,6 +148,20 @@ export const recordedBusRouteChanges = {
   ],
 };
 
+// Congestion on the road the recorded bus legs use, with the incident behind it.
+export const recordedSpeedBands = {
+  value: [
+    { RoadName: "BISHAN ROAD", SpeedBand: 2, MinimumSpeed: 10, MaximumSpeed: 19 },
+    { RoadName: "THOMSON ROAD", SpeedBand: 4, MinimumSpeed: 30, MaximumSpeed: 39 },
+  ],
+};
+
+export const recordedIncidents = {
+  value: [
+    { Type: "Vehicle breakdown", Message: "Vehicle breakdown on Bishan Rd towards Thomson Rd.", Latitude: 1.3507, Longitude: 103.8481 },
+  ],
+};
+
 export const recordedBusStops = [
   { BusStopCode: "53061", RoadName: "Bishan Rd", Description: "Bishan Stn Exit C", Latitude: 1.35072, Longitude: 103.84853 },
   { BusStopCode: "53069", RoadName: "Bishan Rd", Description: "Blk 511", Latitude: 1.35548, Longitude: 103.84796 },

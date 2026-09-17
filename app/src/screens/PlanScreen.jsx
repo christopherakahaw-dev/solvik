@@ -231,6 +231,14 @@ export function PlanScreen({ v }) {
           {v.wxDetail && (
             <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.wxDetail}</div>
           )}
+          {v.roadLine && (
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 9 }}>
+              <span style={{ flex: "none", marginTop: 2, color: "var(--crowd-moderate)" }}><Icon name="traffic-cone" size={14} /></span>
+              <span style={{ font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>
+                {v.roadLine}{v.roadIncident ? ` ${v.roadIncident}` : ""}
+              </span>
+            </div>
+          )}
           {v.wxNote && (
             <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.wxNote}</div>
           )}

@@ -14,6 +14,8 @@ import { canonicalLine, sameLine } from "../lib/lines";
 import { learnedPlaces, linesForPlaces } from "../lib/places";
 import { getPlannedWorks } from "../api/planned";
 import { getWeather } from "../api/weather";
+import { getRoadConditions } from "../api/road";
+import { worstBandOn, roadLine, incidentNear } from "../lib/roadConditions";
 import { personaOf, personaList, modeFor, reasonFor, DEFAULT_PERSONA } from "../lib/persona";
 import { forecastAt, nowcastAt, weatherLine, isWet, walkAdjustment } from "../lib/weather";
 import { submitReport, loadReportGroups as fetchReportGroups, loadMyReports as fetchMyReports } from "../api/reports";
@@ -103,6 +105,7 @@ export class AppLogic extends Component {
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
     planned: { works: [], roadWorks: [], busChanges: [], pending: true, error: null },
     weather: { nowcast: null, outlook: null, pending: true, error: null },
+    road: { bands: [], incidents: [], pending: true, error: null },
     reportGroups: { groups: [], configured: true, pending: true, error: null },
     myReports: [],
     photo: null, cameraOpen: false, reportBusy: false, reportResult: null,
@@ -352,6 +355,14 @@ export class AppLogic extends Component {
     getWeather()
       .then((data) => this.setState({ weather: { ...data, pending: false, error: null } }))
       .catch((err) => this.setState({ weather: { nowcast: null, outlook: null, pending: false, error: String(err.message || err) } }));
+  };
+
+  // Speed bands move on a five-minute cadence, so this rides the same slow
+  // timer as the weather rather than polling on its own.
+  loadRoad = () => {
+    getRoadConditions()
+      .then((data) => this.setState({ road: { ...data, pending: false, error: null } }))
+      .catch((err) => this.setState({ road: { bands: [], incidents: [], pending: false, error: String(err.message || err) } }));
   };
 
   loadReportGroups = () => {
@@ -763,6 +774,7 @@ export class AppLogic extends Component {
       rrHas: false, rrPending: false, rrLine: "", rrTitle: "", rrDetail: "", rrCaveat: "", rrAdvice: "",
       mitHas: false, mitLines: [], mitNote: "",
       wxHas: false, wxTitle: "", wxDetail: "", wxNote: "", wxWet: false,
+      roadLine: "", roadIncident: "",
       pwHas: false, pwTitle: "", pwDetail: "", pwNote: "", pwBlocking: false, pwAction: () => {}, pwHasAction: false, pwActionLabel: "", pwScheduled: [],
     };
     if (!next) {
@@ -968,6 +980,20 @@ export class AppLogic extends Component {
       // disruption is happening, so this is a route that avoids the broken line
       // — not a live-adjusted time. Saying so is the whole point.
       rrCaveat: rrOption ? `${rrOption.mins} min is OneMap's timetable, which doesn't know about the disruption. Expect the alternative to be busier than usual.` : "",
+      // Road conditions on this journey's bus legs. Said only when slow enough
+      // to change a decision, and never converted into minutes — a speed band
+      // covers a segment, not a bus's run.
+      roadLine: (() => {
+        const roads = ((itinerary && itinerary.steps) || []).flatMap((step) => [step.road, step.fromRoad, step.toRoad]).filter(Boolean);
+        return roadLine(worstBandOn((s.road || {}).bands, roads));
+      })(),
+      roadIncident: (() => {
+        const board = ((itinerary && itinerary.transitLegs) || []).find((l) => l.mode === "BUS" && Number.isFinite(l.fromLat));
+        if (!board) return "";
+        const hit = incidentNear((s.road || {}).incidents, [board.fromLat, board.fromLng]);
+        return hit ? hit.message : "";
+      })(),
+
       // Weather. The brief names rain as something that must change the
       // recommendation, so this both warns and shifts the mode: a wet walk is
       // ranked differently, and the card says that is why.
@@ -1487,9 +1513,11 @@ export class AppLogic extends Component {
     this.loadPlanned();
     this.loadReportGroups();
     this.loadWeather();
+    this.loadRoad();
     this.weatherIv = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       this.loadWeather();
+      this.loadRoad();
     }, 30 * 60 * 1000);
     // Journeys outlive the session that recorded them, so the pattern has to be
     // re-read on opening too. Without this, the trip that tipped the balance
