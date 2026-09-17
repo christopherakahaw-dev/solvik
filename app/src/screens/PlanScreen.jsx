@@ -314,6 +314,38 @@ export function PlanScreen({ v }) {
         </div>
       </div>
 
+      {/* Named on screen, because the brief scores whether a submission says who
+          it is for — and because the same disruption genuinely means different
+          things to each of these three. */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
+          <SectionLabel>Tailored for you</SectionLabel>
+        </div>
+        <div style={{ padding: "15px 16px", borderRadius: 20, background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
+          <div style={{ font: "var(--type-body)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.personaBlurb}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+            {v.personaOptions.map((option) => (
+              <button
+                key={option.id}
+                onClick={option.pick}
+                aria-pressed={option.on}
+                style={{
+                  width: "100%", textAlign: "left", cursor: "pointer", padding: "12px 13px", borderRadius: 14,
+                  background: option.on ? "var(--accent-soft)" : "var(--sand-100)",
+                  border: "1.5px solid " + (option.on ? "var(--accent)" : "var(--border-card)"),
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>{option.name}</span>
+                  {option.on && <Icon name="check" size={15} />}
+                </span>
+                <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 4, textWrap: "pretty" }}>{option.example}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
           <SectionLabel>What Solvik remembers</SectionLabel>

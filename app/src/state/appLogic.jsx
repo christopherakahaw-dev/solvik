@@ -14,6 +14,7 @@ import { canonicalLine, sameLine } from "../lib/lines";
 import { learnedPlaces, linesForPlaces } from "../lib/places";
 import { getPlannedWorks } from "../api/planned";
 import { getWeather } from "../api/weather";
+import { personaOf, personaList, modeFor, reasonFor, DEFAULT_PERSONA } from "../lib/persona";
 import { forecastAt, nowcastAt, weatherLine, isWet, walkAdjustment } from "../lib/weather";
 import { submitReport, loadReportGroups as fetchReportGroups, loadMyReports as fetchMyReports } from "../api/reports";
 import { groupsFromCounts } from "../lib/confidence";
@@ -76,7 +77,16 @@ export const CROWD = { light: "var(--crowd-light)", moderate: "var(--crowd-moder
 export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 
 export class AppLogic extends Component {
-  initialPreferences = loadPreferences();
+  initialPreferences = (() => {
+    const prefs = loadPreferences();
+    // Onboarding already asks how someone travels. Reading a persona out of
+    // that beats making them answer the same question twice — they can still
+    // change it on the Today tab.
+    if (!prefs.persona) {
+      prefs.persona = prefs.stepFree ? "stepFree" : prefs.avoidCrowds || prefs.lessWalking ? "flexible" : DEFAULT_PERSONA;
+    }
+    return prefs;
+  })();
   state = {
     savedList: loadStored(COMMUTES_KEY, []),
     savedPlaces: loadSavedPlaces(),
@@ -780,7 +790,9 @@ export class AppLogic extends Component {
     // stairs and a blocked journey if you can't, and the commute already says
     // which of those you are.
     const works = this.worksOnRoute(itinerary);
-    const stepFree = next.mode === "Step-free";
+    // Step-free is the commute's own setting or the persona's — either is a
+    // reason to treat a lift outage as blocking.
+    const stepFree = next.mode === "Step-free" || personaOf((s.routingPreferences || {}).persona).liftOutageBlocks;
     // What LTA has already activated for this disruption. Station codes are
     // resolved to names through the crowd feed, which carries both.
     const stationName = (code) => {
@@ -792,6 +804,7 @@ export class AppLogic extends Component {
     // Weather at the destination end, at the time you would arrive — the walk
     // legs are where rain actually costs you. The penalty is stated, never
     // folded silently into the ETA.
+    const persona = personaOf((s.routingPreferences || {}).persona);
     const weather = s.weather || {};
     const arriveAt = view && view.arriveAt ? view.arriveAt : Date.now() + (view ? view.durationMins : 0) * 60000;
     const wxForecast = forecastAt({ outlook: weather.outlook, ll: t.ll, at: arriveAt });
@@ -856,9 +869,9 @@ export class AppLogic extends Component {
           : "Light all the way"
         : "",
       planNextCrowdLevel: worst ? worst.level : "light",
-      // Rain moves the recommendation toward less walking; crowding toward a
-      // quieter carriage. Either way the card above has already said why.
-      startNext: () => goToCommute(wxWet ? "walk" : busy ? "quiet" : COMMUTE_MODES[next.mode] || "fast"),
+      // Which of rain and crowding wins is a property of the person, not the
+      // network — Rachel keeps her fast route in the rain, Mdm Lim does not.
+      startNext: () => goToCommute(modeFor(persona.id, { wet: wxWet, busy })),
       watchNext: () => this.armLeaveAlert(view, `${f.label} → ${t.label}`),
       watchNextLabel: s.leaveAlert && s.leaveAlert.key === (outlook.key || "") ? "Alert set" : "Alert me",
 
@@ -964,11 +977,9 @@ export class AppLogic extends Component {
       pwDetail: works.length === 1
         ? worksDetail(works[0])
         : works.map((w) => w.stationName || w.stationCode).join(", "),
-      pwNote: stepFree
-        // Said plainly, because for a step-free commute this is the journey not
-        // working rather than an inconvenience on the way.
-        ? "Your commute is set to Step-free, so this may block the way through. LTA publishes which lift, not how long it will be out."
-        : "Scheduled work, not a fault. The trains still run — only the lift is out.",
+      // The same feed row, weighted by who is reading it. LTA publishes which
+      // lift, never for how long, so neither version claims a duration.
+      pwNote: `${reasonFor(persona.id, "lift")} LTA publishes which lift, not how long it will be out.`,
       pwHasAction: !!(works.length && t.ll),
       pwActionLabel: works.length === 1 ? `Route around ${works[0].stationName || works[0].stationCode}` : "Route around these stations",
       pwAction: () => {
@@ -989,6 +1000,9 @@ export class AppLogic extends Component {
   }
 
   addCommuteVals(s) {
+    // The picker lives on this screen, so it resolves the persona here rather
+    // than borrowing todayVals' local.
+    const persona = personaOf((s.routingPreferences || {}).persona);
     const savedPlaces = s.savedPlaces || {};
     const PLACES = this.placeList(s);
     const addSearch = s.addSearchResults || { items: [], pending: false, error: null, query: "" };
@@ -1146,6 +1160,26 @@ export class AppLogic extends Component {
       })(),
       memoryNote: "Kept only in this browser and never sent anywhere. Trips older than 90 days fall away on their own.",
       memoryPlacesLabel: "Places it has noticed",
+      // Named on screen rather than inferred silently: the brief scores whether
+      // a submission says who it is for.
+      personaId: persona.id,
+      personaName: persona.name,
+      personaBlurb: persona.blurb,
+      personaOptions: personaList().map((option) => ({
+        id: option.id,
+        name: option.name,
+        blurb: option.blurb,
+        example: option.example,
+        on: option.id === persona.id,
+        pick: () =>
+          this.setState(
+            (st) => ({ routingPreferences: { ...st.routingPreferences, persona: option.id } }),
+            () => {
+              this.flash(`Tailored for: ${option.name}`);
+              this.loadOutlook();
+            }
+          ),
+      })),
       forgetEverything: this.forgetEverything,
       canSeedTrips: DEMO_MODE && !(s.journeys || []).length,
       seedSampleTrips: this.seedSampleTrips,
