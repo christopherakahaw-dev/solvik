@@ -79,7 +79,7 @@ works without deploying anywhere.
 The interesting logic is pulled out into pure modules that can be tested without
 a browser: `outlook.js` (journey × forecast → when to leave), `patterns.js`
 (journeys → a commute), `navProgress.js` (GPS → how far along you are),
-`tripDetail.js` (an itinerary → the step-by-step card). **73 tests** run against
+`tripDetail.js` (an itinerary → the step-by-step card). **85 tests** run against
 recorded API responses, so every parser is checked without touching the network.
 
 Two diagnostics ship with it, both safe to paste into an issue because neither
