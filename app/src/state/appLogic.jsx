@@ -96,7 +96,7 @@ export class AppLogic extends Component {
     cloudSyncStatus: "off", cloudConflict: null, cloudSyncError: "",
     addEdit: null, placesOpen: false,
     addOpen: false, addFrom: "home", addTo: "work", addDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-    addMode: "Comfort", addMins: 462, addWhen: "leave", fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [],
+    addMode: "Comfort", addMins: 462, addWhen: "leave", fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [], crowdOn: false,
     hoverTab: null, pressTab: null, sheetH: 430, sheetDrag: false, navRoute: null, navStart: null,
     navPage: 0, stepsDrag: false, pin: null,
     screen: this.props.user?.isGuest
@@ -110,7 +110,7 @@ export class AppLogic extends Component {
     myReports: [],
     photo: null, cameraOpen: false, reportBusy: false, reportResult: null,
     navPhoto: null, navCameraOpen: false,
-    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripAvoidStations: null, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0,
+    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripAvoidStations: null, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0, tripCollapsed: true,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
@@ -780,7 +780,7 @@ export class AppLogic extends Component {
     if (!next) {
       return {
         ...base,
-        planHasNext: false, planNextName: "", planNextLeave: "", planNextIn: "", planNextRoute: "",
+        planHasNext: false, planNextName: "", planNextFrom: "", planNextTo: "", planNextLeave: "", planNextIn: "", planNextRoute: "",
         planNextNote: "", planNextCrowd: "", planNextCrowdLevel: "light", planNextPending: false, planNextError: null,
         startNext: () => {}, watchNext: () => {}, watchNextLabel: "Alert me",
       };
@@ -875,6 +875,8 @@ export class AppLogic extends Component {
       ...base,
       planHasNext: true,
       planNextName: `${f.label} → ${t.label}`,
+      planNextFrom: f.label,
+      planNextTo: t.label,
       planNextLeave: view ? view.departLabel : clock(next.mins),
       planNextIn: inLabel,
       planNextRoute: `${f.place} → ${t.place}`,
@@ -1180,8 +1182,15 @@ export class AppLogic extends Component {
         const learned = c.source === "auto" ? evidenceLine(c) : "";
         return {
           name: f.label + " → " + t.label,
+          from: f.label,
+          to: t.label,
           clock: clock(c.arriveBy != null ? c.arriveBy : c.mins),
-          sub: f.place + " → " + t.place + " · " + dl + " · " + anchored,
+          // The place names above already identify both ends. Repeating both
+          // postal addresses made this scan like a receipt instead of a
+          // commute, so the card keeps only the actionable schedule here.
+          sub: dl + " · " + anchored,
+          days: dl,
+          timingLabel: c.arriveBy != null ? "Arrive by" : "Leave at",
           learned,
           detail: f.place + " → " + t.place + " · " + dl + ", " + clock(c.mins),
           mode: c.mode,
@@ -1796,13 +1805,13 @@ export class AppLogic extends Component {
       searchPending: false,
       routeLocationPending: false,
       routeOriginDraft: false,
-      tripCollapsed: false,
+      tripCollapsed: true,
       trips: { key: null, options: [], pending: !!dest, error: null },
       arrivals: {},
       ...(extra || {}),
     });
-    // The first card is selected for you, so its breakdown is already open —
-    // count it as "seen" rather than scrolling the sheet on arrival.
+    // The first card is selected, but its breakdown stays closed until the
+    // user asks for the steps.
     this._detailsFor = 0;
     if (dest) {
       this.rememberSearch(dest);
@@ -1845,7 +1854,7 @@ export class AppLogic extends Component {
       return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid, avoidStations: tripAvoidStations })
       .then((options) => {
         if (this.state.dest !== dest || this.state.tripMode !== tripMode || this.state.trips.key !== key) return;
-        this.setState({ trips: { key, options, pending: false, error: null, recorded: !!options.recorded, avoided: options.avoided || null }, tripRoute: 0 });
+        this.setState({ trips: { key, options, pending: false, error: null, recorded: !!options.recorded, avoided: options.avoided || null }, tripRoute: 0, tripCollapsed: true });
       })
       .catch((err) => {
         if (this.state.dest !== dest || this.state.trips.key !== key) return;
@@ -2434,9 +2443,9 @@ export class AppLogic extends Component {
         style: { cursor: "pointer", borderRadius: "999px", padding: "8px 14px", font: "var(--weight-semibold) 13px/1 var(--font-body)", border: "1px solid " + (sc === id ? "var(--accent)" : "var(--border-hairline)"), background: sc === id ? "var(--accent)" : "var(--surface-card)", color: sc === id ? "var(--text-on-accent)" : "var(--text-muted)", transition: "background 150ms cubic-bezier(.2,.7,.3,1)" },
       })),
       ...this.introVals(s, sc),
-      isReport: sc === "report", isRewards: sc === "rewards", isPlan: sc === "plan",
-      showStatus: ["report", "rewards", "plan"].indexOf(sc) >= 0,
-      showTabs: ["map", "plan", "report", "rewards"].indexOf(sc) >= 0 && !(sc === "map" && !!s.dest),
+      isReport: sc === "report", isRewards: sc === "rewards", isPlan: sc === "plan", isAccount: sc === "account",
+      showStatus: ["report", "rewards", "plan", "account"].indexOf(sc) >= 0,
+      showTabs: ["map", "plan", "report", "rewards", "account"].indexOf(sc) >= 0 && !(sc === "map" && !!s.dest),
       isMap: sc === "map", mapSearch: !s.dest, mapRoute: !!s.dest,
       // The panel stays shut until there is a real query to answer — focusing
       // the field no longer surfaces the built-in place list.
@@ -2473,7 +2482,16 @@ export class AppLogic extends Component {
       routeOriginPlace: s.routeOrigin || null,
       routeOriginReset: s.routeOriginReset || 0,
       routeOriginName: resolvedOrigin?.name || "Choose a starting place",
-      setRouteOrigin: (place) => this.setState({ routeOrigin: place, routeOriginDraft: false, tripCollapsed: false, trips: { key: null, options: [], pending: false, error: null } }),
+      routeOriginDisplay: (() => {
+        const savedId = s.routeOrigin?.id;
+        if (savedId && ["home", "work", "school"].includes(savedId)) {
+          return { home: "Home", work: "Work", school: "School" }[savedId];
+        }
+        if (!s.routeOrigin && s.userLoc) return "My location";
+        if (!s.routeOrigin && s.savedPlaces?.home?.verified) return "Home";
+        return s.routeOrigin?.name || resolvedOrigin?.name || "";
+      })(),
+      setRouteOrigin: (place) => this.setState({ routeOrigin: place, routeOriginDraft: false, tripCollapsed: true, trips: { key: null, options: [], pending: false, error: null } }),
       setRouteOriginDraft: (draft) => this.setState({ routeOriginDraft: draft }),
       routeOriginInput: s.searchTarget === "origin" ? s.query : (resolvedOrigin?.name || "Current location"),
       searchPlaceholder: s.searchTarget === "origin" ? "Search starting place" : "Search address, stop or area",
@@ -2497,7 +2515,7 @@ export class AppLogic extends Component {
             icon: { home: "house", work: "briefcase", school: "graduation-cap" }[place.id],
             active: s.routeOrigin?.id === place.id || (!s.routeOrigin && !s.userLoc && place.id === "home"),
             disabled: false,
-            pick: () => this.setState({ routeOrigin: place, routeOriginDraft: false, trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions),
+            pick: () => this.setState({ routeOrigin: place, routeOriginDraft: false, tripCollapsed: true, trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions),
           })),
       ],
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
@@ -2574,12 +2592,12 @@ export class AppLogic extends Component {
       ].map((m) => {
         const on = s.tripMode === m.id;
         return {
-          ...m, pick: () => this.setState({ tripMode: m.id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0 }),
+          ...m, pick: () => this.setState({ tripMode: m.id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0, tripCollapsed: true }),
           tileStyle: "flex:none;padding:10px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;font:var(--weight-bold) 13px/1 var(--font-body);letter-spacing:-.005em;transition:background .15s,color .15s;" +
             (on ? "background:var(--accent);border:1px solid var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);border:1px solid var(--border-card);color:var(--text-body);"),
         };
       }),
-      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0 }),
+      tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0, tripCollapsed: true }),
       tripModeBlurb: {
         fast: "Ranked by total journey time from OneMap.",
         budget: "Ranked by the fare OneMap returns, bus-only options included.",
@@ -2618,7 +2636,7 @@ export class AppLogic extends Component {
       // Read by the app shell. The step-free persona asks for large text, and
       // the scale is one token rather than a list of overridden sizes.
       largeText: personaOf((s.routingPreferences || {}).persona).largeText,
-      headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today" }[sc] || "Solvik",
+      headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today", account: "Account" }[sc] || "Solvik",
       headerSub: {
         map: "OneMap · Singapore Land Authority",
         report: s.stop.data ? `${s.stop.data.name} · reports stay live 30 min` : "Reports stay live 30 min",
@@ -2628,6 +2646,7 @@ export class AppLogic extends Component {
           const today = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
           return `${today} · ${n} watched commute${n === 1 ? "" : "s"}`;
         })(),
+        account: "Profile, privacy and saved data",
       }[sc] || "",
       cloudSyncStatus: s.cloudSyncStatus,
       cloudSyncError: s.cloudSyncError,
@@ -2665,6 +2684,7 @@ export class AppLogic extends Component {
           labelStyle: { font: (on ? "var(--weight-bold)" : "var(--weight-regular)") + " 11px/1 var(--font-body)", letterSpacing: ".01em", opacity: on || hov ? 1 : 0.82, transition: "opacity var(--dur-base) var(--ease-standard)" },
         };
       }),
+      goAccount: () => this.go("account"),
       goRewards: () => this.go("rewards"),
       ...this.forecastVals(s),
       reportPick: s.rep === "pick", reportConfirm: s.rep === "confirm", reportDone: s.rep === "done",

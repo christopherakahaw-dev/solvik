@@ -1,13 +1,13 @@
 import { Icon, Button, SectionLabel } from "../design-system";
 import { PlacePicker } from "../components/PlacePicker";
 import { styleText } from "../lib/styleText";
+import { SolvikBrand } from "../components/SolvikBrand";
 
 export function Intro({ v }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "var(--sand-50)", display: "flex", flexDirection: "column", padding: "54px 20px 22px" }}>
       <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 9 }}>
-        <span style={{ width: 24, height: 24, borderRadius: "var(--radius-xs)", background: "var(--accent)", color: "var(--text-on-accent)", font: "var(--weight-heavy) 13px/24px var(--font-display)", textAlign: "center" }}>S</span>
-        <span style={{ font: "var(--weight-heavy) 20px/1 var(--font-display)", letterSpacing: "-.035em", color: "var(--text-strong)" }}>Solvik</span>
+        <SolvikBrand />
         <div style={{ marginLeft: "auto", display: "flex", gap: 5 }}>
           {v.introDots.map((d, i) => (
             <span key={i} style={d.style} />

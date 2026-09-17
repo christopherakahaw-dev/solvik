@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 // Safari's keyboard changes the visual viewport without changing 100vh.
-export function ViewportShell({ children, largeText = false }) {
+export function ViewportShell({ children, fluid = false, largeText = false }) {
   const ref = useRef(null);
 
   // On the document element rather than the shell: --size-* are defined on
@@ -32,5 +32,5 @@ export function ViewportShell({ children, largeText = false }) {
   }, []);
   // data-text drives the whole type scale from one token, so a reader who needs
   // larger text gets it everywhere rather than on the few strings we remembered.
-  return <div ref={ref} className="solvik-app-shell">{children}</div>;
+  return <div ref={ref} className={`solvik-app-shell${fluid ? " solvik-app-shell--fluid" : ""}`}>{children}</div>;
 }

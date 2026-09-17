@@ -1,4 +1,4 @@
-export function AppHeader({ title, subtitle, uppercase = false, action, sticky = true, style, ...rest }) {
+export function AppHeader({ title, subtitle, uppercase = false, leading, action, sticky = true, style, ...rest }) {
   return (
     <header
       style={{
@@ -15,6 +15,7 @@ export function AppHeader({ title, subtitle, uppercase = false, action, sticky =
       }}
       {...rest}
     >
+      {leading ? <div className="sv-header-leading-slot" style={{ flex: "none" }}>{leading}</div> : null}
       <div style={{ flex: 1, minWidth: 0 }}>
         <h1
           style={{

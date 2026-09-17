@@ -15,7 +15,7 @@ const bugis = { name: "BUGIS+", address: "201 VICTORIA STREET SINGAPORE 188067",
 const destination = { name: "CLEMENTI ARCADE", address: "41 SUNSET WAY CLEMENTI ARCADE SINGAPORE 597071", postal: "597071", lat: 1.323, lng: 103.767 };
 const option = { mins: 154, eta: "03:22", fare: "$0.00", walk: "154 min", walkOnly: true, walkSecs: 9240, transfers: 0, tag: "Walking only", geometry: [home.ll, [destination.lat, destination.lng]], legSpans: [{from: 0, to: 1}], transitLegs: [], legs: ["WALK 12.8 km"], steps: [{ mode: "WALK", icon: "flag", title: "Walk to CLEMENTI ARCADE", detail: "12.8 km on foot", metres: 12808, secs: 9240 }], note: "OneMap returned walking only for this departure." };
 
-async function setup(page, places = { home, school }) {
+async function setup(page, places = { home, school }, options = {}) {
   await page.addInitScript(({ places }) => {
     if (!localStorage.getItem("qa:seeded")) {
       localStorage.setItem("sv-auth:guest-session", "1");
@@ -36,7 +36,7 @@ async function setup(page, places = { home, school }) {
     let response = {};
     if (path.endsWith("onemap-search")) response = { results: /bugis/i.test(body.query) ? [bugis] : /nanyang|^nt/i.test(body.query) ? [{ ...school, lat: school.ll[0], lng: school.ll[1] }] : Array.from({ length: 8 }, (_, i) => ({ ...destination, name: i ? `CLEMENTI PLACE ${i}` : destination.name })) };
     else if (path.endsWith("trip-options")) response = { options: [option] };
-    else if (path.endsWith("crowding")) response = { stations: [{ code: "EW24", name: "Jurong East", lat: 1.333, lng: 103.742, level: "moderate" }], slots: [new Date(Date.now() - 1800000).toISOString(), new Date(Date.now() + 1800000).toISOString(), new Date(Date.now() + 3600000).toISOString()] };
+    else if (path.endsWith("crowding")) response = { stations: [{ code: "EW24", name: "Jurong East", lat: 1.333, lng: 103.742, level: "moderate" }], slots: (options.crowdOffsets || [-1800000, 1800000, 3600000]).map((offset) => new Date(Date.now() + offset).toISOString()) };
     else if (path.endsWith("forecast")) response = { slots: [], series: {} };
     await route.fulfill({ json: response });
   });
@@ -57,6 +57,8 @@ async function noOverflow(page) {
 test("the account gate remains usable when Supabase is not configured", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  expect(await page.locator(".sv-auth-screen").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "Auth screen has no horizontal scroll").toBe(true);
+  await noOverflow(page);
   await expect(page.getByText("Account setup is not connected yet.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in", exact: true }).last()).toBeDisabled();
   await page.getByRole("tab", { name: "Create account" }).click();
@@ -69,6 +71,8 @@ test("the account gate remains usable when Supabase is not configured", async ({
 test("map overlays remain separated and search is anchored to the field", async ({ page }, info) => {
   await setup(page);
   const bar = page.locator(".sv-crowd-bar");
+  await expect(bar).toBeHidden();
+  await page.getByRole("button", { name: "Crowding layer off" }).click();
   await expect(bar).toBeVisible();
   await expect.poll(async () => {
     const a = await bar.boundingBox(), b = await page.getByRole("button", { name: "Show my location" }).boundingBox();
@@ -91,8 +95,152 @@ test("map overlays remain separated and search is anchored to the field", async 
   await page.screenshot({ path: info.outputPath("search.png") });
 });
 
+test("tablet and laptop keep the map full-screen and reveal panels on demand", async ({ page }, info) => {
+  await setup(page);
+
+  for (const viewport of [{ width: 768, height: 720 }, { width: 1280, height: 800 }]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(async () => {
+      const shell = await page.locator(".solvik-app-shell--fluid").boundingBox();
+      const visibleHeight = await page.evaluate(() => window.visualViewport?.height || window.innerHeight);
+      return Math.max(Math.abs(shell.width - viewport.width), Math.abs(shell.height - visibleHeight));
+    }).toBeLessThanOrEqual(1);
+    await expect(page.getByRole("button", { name: "Open menu" })).toBeVisible();
+    await expect(page.locator(".sv-tab-bar")).toBeHidden();
+    const searchBox = await page.locator(".sv-map-search-wrap").boundingBox();
+    expect(searchBox.x).toBeGreaterThanOrEqual(117);
+    expect(searchBox.x).toBeLessThanOrEqual(120);
+    const actionButtons = await page.locator(".sv-map-top-actions > button").all();
+    const firstAction = await actionButtons[0].boundingBox(), secondAction = await actionButtons[1].boundingBox();
+    expect(Math.abs(firstAction.x - secondAction.x)).toBeLessThanOrEqual(1);
+    expect(secondAction.y).toBeGreaterThan(firstAction.y + firstAction.height);
+    expect(viewport.width - firstAction.x - firstAction.width).toBeLessThanOrEqual(17);
+    await noOverflow(page);
+  }
+
+  await page.getByRole("button", { name: "Open menu" }).click();
+  const menu = page.getByRole("dialog", { name: "Solvik menu" });
+  await expect(menu).toBeVisible();
+  expect((await menu.boundingBox()).width).toBeLessThanOrEqual(311);
+  await expect(menu.locator(".sv-brand-mark")).toBeVisible();
+  const accountTrigger = menu.locator(".sv-menu-account-trigger");
+  await expect(accountTrigger).toBeVisible();
+  const menuBox = await menu.boundingBox(), accountBox = await accountTrigger.boundingBox();
+  expect(menuBox.y + menuBox.height - accountBox.y - accountBox.height).toBeLessThanOrEqual(34);
+  await accountTrigger.click();
+  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  await expect(page.locator(".sv-account-page")).toBeVisible();
+  await page.screenshot({ path: info.outputPath("account-page.png") });
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("dialog", { name: "Solvik menu" }).getByRole("button", { name: "Map", exact: true }).click();
+
+  const crowdToggle = page.getByRole("button", { name: "Crowding layer off" });
+  await expect(crowdToggle).toBeVisible();
+  const pinHint = page.getByText("Tap anywhere to drop a pin");
+  await expect(pinHint).toBeVisible();
+  const hintBox = await pinHint.boundingBox();
+  expect(page.viewportSize().height - hintBox.y - hintBox.height).toBeLessThanOrEqual(36);
+  await page.screenshot({ path: info.outputPath("pin-hint.png") });
+  await crowdToggle.click();
+  await expect(page.getByRole("button", { name: "Crowding layer on" })).toBeVisible();
+  await expect(page.locator(".sv-crowd-bar")).toBeVisible();
+  await page.getByRole("button", { name: "Crowding layer on" }).click();
+
+  const search = page.getByRole("textbox", { name: "Search address, stop or area", exact: true });
+  const topbarBefore = await page.locator(".sv-map-topbar").boundingBox();
+  await search.fill("clem");
+  const results = page.locator(".sv-map-results");
+  await expect(results).toBeVisible();
+  expect((await results.boundingBox()).width).toBeLessThanOrEqual(541);
+  await page.getByRole("button", { name: /^CLEMENTI ARCADE/ }).click();
+
+  const routeSheet = page.locator(".sv-route-sheet-wrap");
+  await expect(routeSheet).toBeVisible();
+  expect((await routeSheet.boundingBox()).width).toBeLessThanOrEqual(421);
+  const topbarAfter = await page.locator(".sv-map-topbar").boundingBox();
+  expect(Math.abs(topbarAfter.x - topbarBefore.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(topbarAfter.width - topbarBefore.width)).toBeLessThanOrEqual(1);
+  await expect(page.locator(".sv-route-panel-backdrop")).toHaveCount(0);
+  await expect(routeSheet.getByRole("button", { name: "Show steps" })).toBeVisible();
+  await expect(routeSheet.getByRole("button", { name: "Hide steps" })).toHaveCount(0);
+  const mapCanvas = page.locator(".leaflet-container");
+  const mapCenterBefore = await mapCanvas.getAttribute("data-map-center");
+  await page.mouse.move(300, 650);
+  await page.mouse.down();
+  await page.mouse.move(430, 650, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => mapCanvas.getAttribute("data-map-center")).not.toBe(mapCenterBefore);
+  await page.screenshot({ path: info.outputPath("route-options-simplified.png") });
+  await routeSheet.getByRole("button", { name: "Show steps" }).click();
+  await expect(routeSheet.getByRole("button", { name: "Hide steps" })).toBeVisible();
+  await expect(routeSheet.locator(".sv-route-mode-primary > button")).toHaveCount(4);
+  await expect(routeSheet.getByRole("button", { name: "Cheapest", exact: true })).toHaveCount(0);
+  await routeSheet.getByRole("button", { name: "More options", exact: true }).click();
+  await expect(routeSheet.getByRole("button", { name: "Cheapest", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Collapse route options" }).last().click();
+  const summary = page.locator(".sv-route-summary");
+  await expect(summary).toBeVisible();
+  await noOverflow(page);
+  await page.screenshot({ path: info.outputPath("responsive-map.png") });
+});
+
+test("a sparse crowd forecast stays compact on wide screens", async ({ page }, info) => {
+  await setup(page, { home, school }, { crowdOffsets: [0] });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole("button", { name: "Crowding layer off" }).click();
+  const crowd = page.locator(".sv-crowd-bar.is-sparse");
+  await expect(crowd).toBeVisible();
+  const bounds = await crowd.boundingBox();
+  expect(bounds.width).toBeLessThan(430);
+  expect(bounds.height).toBeLessThan(105);
+  await page.screenshot({ path: info.outputPath("compact-crowd-bar.png") });
+});
+
+test("desktop content and active navigation use compact responsive layouts", async ({ page }, info) => {
+  await setup(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("dialog", { name: "Solvik menu" }).getByRole("button", { name: "Plan", exact: true }).click();
+  const plan = page.locator(".sv-plan-screen");
+  await expect(plan).toBeVisible();
+  await expect(page.locator(".sv-account-card")).toHaveCount(0);
+  const planBox = await plan.boundingBox();
+  expect(planBox.width).toBeGreaterThan(700);
+  expect(planBox.width).toBeLessThanOrEqual(1041);
+  await expect(page.locator(".sv-tab-bar")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Open menu" })).toBeVisible();
+  await expect(page.locator(".sv-page-brand")).toBeHidden();
+  await expect(page.locator(".sv-page-menu-button .sv-logo-menu-cue")).toBeVisible();
+  expect(parseFloat(await page.getByRole("heading", { name: "Today" }).evaluate(el => getComputedStyle(el).fontSize))).toBeLessThanOrEqual(32);
+  await noOverflow(page);
+  await page.screenshot({ path: info.outputPath("responsive-plan.png") });
+
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("dialog", { name: "Solvik menu" }).getByRole("button", { name: "Map", exact: true }).click();
+  await pickDestination(page);
+  await expect(page.locator(".sv-route-sheet-wrap")).toBeVisible();
+  await page.getByRole("button", { name: "Go", exact: true }).click();
+  const instruction = page.locator(".sv-nav-instruction");
+  const navSheet = page.locator(".sv-nav-sheet");
+  await expect(instruction).toBeVisible();
+  await expect(navSheet).toBeVisible();
+  expect((await instruction.boundingBox()).width).toBeLessThanOrEqual(411);
+  expect((await navSheet.boundingBox()).width).toBeLessThanOrEqual(441);
+  expect((await navSheet.boundingBox()).height).toBeLessThanOrEqual(231);
+  await noOverflow(page);
+  await page.screenshot({ path: info.outputPath("responsive-navigation.png") });
+});
+
 test("places fit small screens, cancel discards edits, and incomplete text cannot be saved", async ({ page }, info) => {
   await setup(page);
+  await page.getByRole("button", { name: "Plan", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Open menu" })).toBeHidden();
+  await expect(page.locator(".sv-page-brand .sv-brand-mark")).toBeHidden();
+  await page.screenshot({ path: info.outputPath("mobile-plan-navigation.png") });
+  await page.getByRole("button", { name: "Account", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  await expect(page.locator(".sv-account-page")).toBeVisible();
   await page.getByRole("button", { name: "Plan", exact: true }).click();
   await noOverflow(page);
   for (const card of await page.locator(".sv-saved-grid > button").all()) expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
@@ -143,7 +291,7 @@ test("manual commutes keep both endpoints after reload", async ({ page }) => {
   expect(commute.fromPlace.ll).toEqual(home.ll);
   expect(commute.toPlace.ll).toEqual([bugis.lat, bugis.lng]);
   await page.getByRole("button", { name: "Plan", exact: true }).click();
-  await expect(page.getByRole("button", { name: /Home → BUGIS/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Edit commute from Home to BUGIS/ })).toBeVisible();
   await noOverflow(page);
 });
 
@@ -158,18 +306,19 @@ test("origin search never queries Current location and route selection is privat
   await expect(page.getByText("Choose a starting place or use your location.")).toBeVisible();
   expect(await page.evaluate(() => window.qaLocationCalls)).toBe(0);
   await page.getByRole("button", { name: "My location", exact: true }).click();
-  await expect(page.getByText("From · Current location", { exact: true })).toBeVisible();
   const origin = page.getByRole("combobox", { name: "Search starting place" });
+  await expect(origin).toHaveValue("My location");
   await origin.fill("unselected");
   await page.getByRole("button", { name: "My location", exact: true }).click();
-  await expect(origin).toHaveValue("");
+  await expect(origin).toHaveValue("My location");
   await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
   await origin.focus();
+  await expect(origin).toHaveValue("");
   expect(queries).not.toContain("Current location");
   await origin.fill("bugis");
   await page.getByRole("option").first().click();
   await expect.poll(() => requests.at(-1)?.from).toBe("1.299,103.855");
-  await expect(page.getByText("From · BUGIS+", { exact: true })).toBeVisible();
+  await expect(origin).toHaveValue("BUGIS+");
   await noOverflow(page);
   await page.getByRole("button", { name: "Go", exact: true }).click();
   await expect(page.getByText("2 h 34 min", { exact: true }).first()).toBeVisible();
@@ -202,10 +351,11 @@ test("search errors recover and routing failures can be retried", async ({ page 
   await page.unroute("**/api/trip-options");
   await page.getByRole("button", { name: /Try again|Retry/ }).click();
   await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
-  await page.getByText("Hide steps", { exact: true }).click();
   await expect(page.getByText("Show steps", { exact: true })).toBeVisible();
   await page.getByText("Show steps", { exact: true }).click();
   await expect(page.getByText("Hide steps", { exact: true })).toBeVisible();
+  await page.getByText("Hide steps", { exact: true }).click();
+  await expect(page.getByText("Show steps", { exact: true })).toBeVisible();
 });
 
 test("denied location still allows a manual origin and unfinished text disables routing", async ({ page }) => {
@@ -227,6 +377,7 @@ test("forecast Now uses live data, not the first forecast interval", async ({ pa
   await setup(page);
   const requests = [];
   page.on("request", request => { if (new URL(request.url()).pathname === "/api/crowding") requests.push(new URL(request.url())); });
+  await page.getByRole("button", { name: "Crowding layer off" }).click();
   const slots = page.locator(".sv-crowd-bar button");
   await expect(slots.first()).toHaveText("Now");
   await slots.nth(1).click();
@@ -315,9 +466,9 @@ test("a learned commute whose trips stopped is retired on opening, and says so",
 
   await expect(page.getByText(/Stopped watching Old home → Old job/)).toBeVisible();
   await page.getByRole("button", { name: "Plan", exact: true }).click();
-  await expect(page.getByRole("button", { name: /Campus → New job/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Home → School/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Old home → Old job/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Edit commute from Campus to New job/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Edit commute from Home to School/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Edit commute from Old home to Old job/ })).toHaveCount(0);
 
   // The retirement is written through, not just hidden for this session.
   await page.reload();

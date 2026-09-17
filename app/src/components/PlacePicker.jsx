@@ -4,8 +4,8 @@ import { Icon, SearchField } from "../design-system";
 import { searchPlaces } from "../api/onemap";
 import { addressDetail } from "../lib/display";
 
-export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, onDraftChange, suggestions = [], showDetails = true }) {
-  const [query, setQuery] = useState(value?.name || "");
+export function PlacePicker({ value, displayValue, clearOnFocus = false, placeholder, icon = "map-pin", onChange, onDraftChange, suggestions = [], showDetails = true }) {
+  const [query, setQuery] = useState(displayValue || value?.name || "");
   const [results, setResults] = useState([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(null);
@@ -20,8 +20,8 @@ export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, on
 
   useEffect(() => {
     if (editing.current) { editing.current = false; return; }
-    setQuery(value?.name || "");
-  }, [value]);
+    setQuery(displayValue || value?.name || "");
+  }, [value, displayValue]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -99,8 +99,22 @@ export function PlacePicker({ value, placeholder, icon = "map-pin", onChange, on
     <div ref={anchor}>
       <SearchField value={query} placeholder={placeholder} icon={icon} onChange={updateQuery}
         onClear={() => { editing.current = false; onChange?.(null); onDraftChange?.(false); setQuery(""); setOpen(false); }}
-        onFocus={() => setOpen(true)}
-        onBlur={(event) => { if (event.relatedTarget && !popup.current?.contains(event.relatedTarget)) setOpen(false); }}
+        onFocus={() => {
+          if (clearOnFocus && !open) {
+            editing.current = true;
+            setQuery("");
+            onDraftChange?.(false);
+          }
+          setOpen(true);
+        }}
+        onBlur={(event) => {
+          if (event.relatedTarget && popup.current?.contains(event.relatedTarget)) return;
+          setOpen(false);
+          if (clearOnFocus && !query.trim()) {
+            editing.current = false;
+            setQuery(displayValue || value?.name || "");
+          }
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") { setOpen(false); event.preventDefault(); }
           if ((event.key === "ArrowDown" || event.key === "ArrowUp") && results.length) {

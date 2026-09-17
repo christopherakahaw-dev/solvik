@@ -4,7 +4,7 @@ import { styleText } from "../lib/styleText";
 
 export function ReportScreen({ v }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14 }}>
+    <div className="sv-report-screen" style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14 }}>
       {v.reportPick && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ position: "relative", overflow: "hidden", background: "var(--surface-dark)", color: "var(--text-on-dark)", borderRadius: "var(--radius-card)", padding: "16px 17px", display: "flex", alignItems: "center", gap: 13 }}>

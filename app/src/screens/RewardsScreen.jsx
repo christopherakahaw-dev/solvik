@@ -2,7 +2,7 @@ import { Icon, Card, SectionLabel, Button } from "../design-system";
 
 export function RewardsScreen({ v }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14 }}>
+    <div className="sv-rewards-screen" style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14 }}>
       <div style={{ position: "relative", overflow: "hidden", background: "var(--surface-dark)", color: "var(--text-on-dark)", borderRadius: "var(--radius-card)", padding: 20, boxShadow: "var(--shadow-card)" }}>
         <div style={{ position: "absolute", right: -38, top: -38, width: 150, height: 150, borderRadius: 999, background: "rgba(255,255,255,.06)" }} />
         <div style={{ position: "absolute", right: 6, bottom: -52, width: 110, height: 110, borderRadius: 999, background: "rgba(255,255,255,.05)" }} />

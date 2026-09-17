@@ -1,11 +1,37 @@
+import { useEffect, useState } from "react";
 import { Icon, IconButton, SearchField, Card, Tag, Button } from "../design-system";
 import { OneMapCanvas } from "../components/OneMapCanvas";
 import { PlacePicker } from "../components/PlacePicker";
+import { AppMenu } from "../components/AppMenu";
+import { SolvikBrand } from "../components/SolvikBrand";
 import { styleText } from "../lib/styleText";
 
 export function MapScreen({ v }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [openRouteFor, setOpenRouteFor] = useState(null);
+  const [dismissedRouteFor, setDismissedRouteFor] = useState(null);
+  const [moreModesOpen, setMoreModesOpen] = useState(false);
+  const routeSummary = v.tripOptions?.[0];
+  const routeReady = Boolean(v.destName && !v.tripsPending && routeSummary);
+  const routePanelOpen = Boolean(v.destName && (openRouteFor === v.destName || (routeReady && dismissedRouteFor !== v.destName)));
+  const primaryModes = v.tripModeTiles.filter((mode) => ["fast", "quiet", "step"].includes(mode.id));
+  const secondaryModes = v.tripModeTiles.filter((mode) => !["fast", "quiet", "step"].includes(mode.id));
+  const secondaryActive = secondaryModes.find((mode) => mode.id === v.tripMode);
+
+  useEffect(() => {
+    if (!menuOpen && !routePanelOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      setOpenRouteFor(null);
+      setDismissedRouteFor(v.destName);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [menuOpen, routePanelOpen, v.destName]);
+
   return (
-    <div style={{ position: "absolute", inset: 0 }}>
+    <div className={`sv-map-screen${v.mapRoute ? " has-route" : ""}${v.showCrowdBar ? " has-crowd" : ""}`} style={{ position: "absolute", inset: 0 }}>
       <OneMapCanvas
         center={v.mapCenter}
         zoom={12}
@@ -26,36 +52,52 @@ export function MapScreen({ v }) {
         height="100%"
       />
 
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "16px 14px 0", display: "flex", flexDirection: "column", gap: 10, maxHeight: "100%", pointerEvents: "none" }}>
-        {v.mapRoute && (
-          <div style={{ pointerEvents: "auto", display: "flex", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))", borderRadius: "var(--radius-pill,999px)", width: 44 }}>
-            <IconButton icon="arrow-left" label="Back to search" tone="plain" size="md" onClick={v.backToSearch} />
+      <div className="sv-map-overlay-stack">
+        <div className="sv-map-topbar">
+          <div className="sv-map-leading">
+            <button
+              type="button"
+              className="sv-map-control sv-map-menu-button sv-logo-menu-button"
+              aria-label="Open menu"
+              title="Open Solvik menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen(true)}
+            >
+              <Icon name="route" size={20} strokeWidth={2.35} />
+              <span className="sv-logo-menu-cue" aria-hidden="true"><Icon name="menu" size={13} strokeWidth={2.8} /></span>
+            </button>
+            <SolvikBrand compact className="sv-map-brand" />
           </div>
-        )}
 
-        {v.mapSearch && (
-          <div style={{ pointerEvents: "auto", display: "flex", alignItems: "flex-start", gap: 10 }}>
+          {v.mapSearch ? (
             <div
+              className={`sv-map-search-wrap${v.searchPending ? " is-searching" : ""}`}
               onFocusCapture={v.openSearch}
               onBlurCapture={v.closeSearch}
               onKeyDown={(e) => {
                 if (e.key === "Escape") v.dismissSearch();
               }}
-              style={{ flex: 1, minWidth: 0, borderRadius: "var(--radius-pill,999px)", boxShadow: "var(--shadow-nav,0 10px 30px rgba(32,30,29,.16))" }}
             >
               <SearchField value={v.query} placeholder={v.searchPlaceholder} icon="search" onChange={v.setQuery} onClear={v.clearQuery} />
             </div>
-            <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-              <button onClick={v.fcToggleAlerts} aria-label="Alerts" title="Alerts" style={styleText(v.fcBellStyle)}>
+          ) : (
+            <button type="button" className={`sv-map-route-search${v.tripsPending ? " is-planning" : ""}`} onClick={v.backToSearch} aria-label="Change destination">
+              <Icon name="search" size={18} />
+              <span>{v.destName || "Search address, stop or area"}</span>
+              <Icon name="x" size={18} />
+            </button>
+          )}
+
+          <div className="sv-map-top-actions">
+              <button className="sv-map-action sv-map-action-alert" onClick={v.fcToggleAlerts} aria-label="Alerts" title="Alerts" style={styleText(v.fcBellStyle)}>
                 <Icon name="bell" size={20} strokeWidth={2.1} />
                 {v.fcHasFaults && <span style={styleText(v.fcBellDotStyle)}>{v.fcFaultN}</span>}
               </button>
-              <button onClick={v.toggleCrowd} aria-label={v.crowdToggleLabel} title={v.crowdToggleLabel} style={styleText(v.crowdToggleStyle)}>
+              <button className={`sv-map-action sv-map-action-crowd${v.showCrowdBar ? " is-active" : ""}`} onClick={v.toggleCrowd} aria-label={v.crowdToggleLabel} title={v.crowdToggleLabel} style={styleText(v.crowdToggleStyle)}>
                 <Icon name="layers" size={19} strokeWidth={2.1} />
               </button>
-            </div>
           </div>
-        )}
+        </div>
 
         {v.showRecents && (
           <div className="sv-map-results">
@@ -121,31 +163,49 @@ export function MapScreen({ v }) {
         )}
       </div>
 
+      {menuOpen && <AppMenu v={v} onClose={() => setMenuOpen(false)} />}
+
+      {v.mapRoute && !routePanelOpen && (
+        <button
+          type="button"
+          className="sv-route-summary"
+          aria-expanded="false"
+          onClick={() => { setDismissedRouteFor(null); setOpenRouteFor(v.destName); }}
+        >
+          <span className="sv-route-summary-icon"><Icon name="route" size={17} /></span>
+          <span className="sv-route-summary-places">{v.routeOriginName} <span aria-hidden="true">→</span> {v.destName}</span>
+          <strong>{v.tripsPending ? "Finding route…" : routeSummary ? `${routeSummary.mins} min` : "View routes"}</strong>
+          <Icon name="chevron-up" size={17} />
+        </button>
+      )}
+
       {v.mapRoute && (
-        <div ref={v.setSheetRef} style={v.sheetWrapStyle}>
-          <section style={v.sheetStyle}>
+        <div ref={v.setSheetRef} className={`sv-route-sheet-wrap${routePanelOpen ? " is-open" : ""}`} style={v.sheetWrapStyle}>
+          <section className="sv-route-sheet" style={v.sheetStyle} aria-label="Route options">
+            <button type="button" className="sv-route-panel-close" aria-label="Collapse route options" onClick={() => { setOpenRouteFor(null); setDismissedRouteFor(v.destName); }}>
+              <Icon name="x" size={18} />
+            </button>
             <div onPointerDown={v.sheetDragStart} style={v.sheetGrabStyle}>
               <div style={{ width: 42, height: 4, borderRadius: 999, background: "var(--border-strong)", margin: "0 auto" }} />
             </div>
             <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 12, paddingBottom: 10 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="sv-origin-picker">
-                    <label>From · {v.routeOriginName}</label>
-                    <PlacePicker key={v.routeOriginReset} value={v.routeOriginPlace} placeholder="Search starting place" icon="circle-dot" onChange={v.setRouteOrigin} onDraftChange={v.setRouteOriginDraft} showDetails={false} />
-                    <div className="sv-origin-shortcuts">
-                      {v.originPresets.map((preset) => <button key={preset.id} type="button" disabled={preset.disabled} aria-pressed={preset.active} onClick={preset.pick}>
-                        <Icon name={preset.icon} size={14} />{preset.label}
-                      </button>)}
-                    </div>
-                  </div>
-                  <div style={{ font: "var(--type-heading)", letterSpacing: "var(--tracking-heading)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.destName}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
-                    <Icon name="map-pin" size={14} />
-                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{v.destDetail}</span>
+              <div className="sv-route-location-block">
+                <div className="sv-origin-picker">
+                  <PlacePicker key={v.routeOriginReset} value={v.routeOriginPlace} displayValue={v.routeOriginDisplay} clearOnFocus placeholder="Search starting place" icon="circle-dot" onChange={v.setRouteOrigin} onDraftChange={v.setRouteOriginDraft} showDetails={false} />
+                  <div className="sv-origin-shortcuts">
+                    {v.originPresets.map((preset) => <button key={preset.id} type="button" disabled={preset.disabled} aria-pressed={preset.active} onClick={preset.pick}>
+                      <Icon name={preset.icon} size={14} />{preset.label}
+                    </button>)}
                   </div>
                 </div>
-                <div style={{ marginLeft: "auto", flex: "none" }}>
+                <div className="sv-route-destination-head">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ font: "var(--type-heading)", letterSpacing: "var(--tracking-heading)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.destName}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
+                      <Icon name="map-pin" size={14} />
+                      <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{v.destDetail}</span>
+                    </div>
+                  </div>
                   <Button variant="ghost" size="sm" onClick={v.backToSearch}>
                     Change
                   </Button>
@@ -155,13 +215,28 @@ export function MapScreen({ v }) {
                 <div style={{ font: "var(--weight-heavy) 11px/1 var(--font-body)", letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text-muted)" }}>Prioritise</div>
                 <div style={{ flex: 1, height: 1, background: "var(--border-card)" }} />
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, padding: "2px 0 2px" }}>
-                {v.tripModeTiles.map((m) => (
-                  <button key={m.id} onClick={m.pick} style={styleText(m.tileStyle)}>
+              <div className="sv-route-mode-primary">
+                {primaryModes.map((m) => (
+                  <button key={m.id} aria-pressed={v.tripMode === m.id} onClick={m.pick} style={styleText(m.tileStyle)}>
                     {m.label}
                   </button>
                 ))}
+                <button type="button" className={`sv-route-mode-more${secondaryActive ? " is-active" : ""}`} aria-expanded={moreModesOpen} onClick={() => setMoreModesOpen((open) => !open)}>
+                  <Icon name="sliders-horizontal" size={15} />
+                  <span>{secondaryActive ? secondaryActive.label : "More options"}</span>
+                  <Icon name={moreModesOpen ? "chevron-up" : "chevron-down"} size={14} />
+                </button>
               </div>
+              {moreModesOpen && (
+                <div className="sv-route-mode-secondary" aria-label="More route preferences">
+                  {secondaryModes.map((m) => (
+                    <button key={m.id} aria-pressed={v.tripMode === m.id} onClick={() => { m.pick(); setMoreModesOpen(false); }}>
+                      <span>{m.label}</span>
+                      {v.tripMode === m.id && <Icon name="check" size={15} />}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>{v.tripModeBlurb}</div>
               {v.recordedNotice && (
                 <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 11px", borderRadius: 999, background: "var(--sand-100,rgba(32,30,29,.05))", font: "var(--weight-semibold) 11.5px/1.2 var(--font-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
@@ -192,7 +267,7 @@ export function MapScreen({ v }) {
                 </div>
               )}
               {v.tripOptions.map((o, i) => (
-                <Card key={i} tone={o.tone} padding="tight" interactive onClick={o.pick}>
+                <Card className="sv-route-option-card" key={i} tone={o.tone} padding="tight" interactive onClick={o.pick} style={{ "--sv-card-index": i }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
                     <span style={{ font: "var(--weight-heavy) 32px/1 var(--font-numeric)", letterSpacing: "-.022em", fontVariantNumeric: "tabular-nums", color: "var(--text-strong)" }}>{o.mins}</span>
                     <span style={{ font: "var(--type-body)", color: "var(--text-muted)" }}>min</span>
@@ -302,7 +377,7 @@ export function MapScreen({ v }) {
       )}
 
       {v.fcPinned && (
-        <div style={{ position: "absolute", left: 14, right: 14, bottom: 88, zIndex: 16, padding: "14px 15px 15px", borderRadius: 22, background: "var(--surface-card)", boxShadow: "var(--shadow-sheet)", animation: "sv-rise 300ms cubic-bezier(.16,1,.3,1) both" }}>
+        <div className="sv-map-card-overlay" style={{ position: "absolute", left: 14, right: 14, bottom: 88, zIndex: 16, padding: "14px 15px 15px", borderRadius: 22, background: "var(--surface-card)", boxShadow: "var(--shadow-sheet)", animation: "sv-rise 300ms cubic-bezier(.16,1,.3,1) both" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
             <span style={styleText(v.fcPinned.dotStyle)} />
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -337,9 +412,9 @@ export function MapScreen({ v }) {
       )}
 
       {v.fcAlertsOpen && (
-        <div style={{ position: "absolute", inset: 0, zIndex: 24, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+        <div className="sv-map-modal-layer" style={{ position: "absolute", inset: 0, zIndex: 24, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <div onClick={v.fcToggleAlerts} style={{ flex: 1 }} />
-          <section style={{ flex: "none", maxHeight: "76%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 16px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
+          <section className="sv-map-modal-sheet" style={{ flex: "none", maxHeight: "76%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 16px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             <div style={{ flex: "none", padding: "12px 0 6px", display: "flex", justifyContent: "center" }}>
               <div style={{ width: 42, height: 4, borderRadius: 999, background: "var(--border-strong)" }} />
             </div>
@@ -402,7 +477,7 @@ export function MapScreen({ v }) {
       )}
 
       {v.hasPin && (
-        <div style={{ position: "absolute", left: 14, right: 14, bottom: 88, background: "var(--surface-card)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-sheet)", padding: "14px 15px", display: "flex", flexDirection: "column", gap: 11 }}>
+        <div className="sv-map-card-overlay" style={{ position: "absolute", left: 14, right: 14, bottom: 88, background: "var(--surface-card)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-sheet)", padding: "14px 15px", display: "flex", flexDirection: "column", gap: 11 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
             <div style={{ flex: "none", width: 34, height: 34, borderRadius: 999, background: "var(--accent-soft)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Icon name="map-pin" size={18} />
@@ -425,19 +500,19 @@ export function MapScreen({ v }) {
       )}
 
       {v.showCrowdBar && (
-        <div ref={v.setCrowdBarRef} className="sv-crowd-bar" style={{ position: "absolute", left: 14, right: 14, bottom: "calc(94px + env(safe-area-inset-bottom))", zIndex: 14, padding: "11px 12px 12px", borderRadius: 20, background: "var(--surface-card)", boxShadow: "var(--shadow-sheet)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div ref={v.setCrowdBarRef} className={`sv-crowd-bar${v.fcSlots.length <= 2 ? " is-sparse" : ""}`} style={{ position: "absolute", left: 14, right: 14, bottom: "calc(94px + env(safe-area-inset-bottom))", zIndex: 14, padding: "11px 12px 12px", borderRadius: 20, background: "var(--surface-card)", boxShadow: "var(--shadow-sheet)" }}>
+          <div className="sv-crowd-summary" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {v.fcLegend.map((g, i) => (
               <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                 <span style={styleText(g.swatch)} />
                 <span style={{ font: "var(--weight-semibold) 10.5px/1 var(--font-body)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{g.short}</span>
               </span>
             ))}
-            <span style={{ flexBasis: "100%", font: "var(--weight-semibold) 10.5px/1.3 var(--font-body)", color: v.crowdError ? "var(--status-fault)" : "var(--text-muted)" }}>
+            <span className="sv-crowd-help" style={{ flexBasis: "100%", font: "var(--weight-semibold) 10.5px/1.3 var(--font-body)", color: v.crowdError ? "var(--status-fault)" : "var(--text-muted)" }}>
               {v.crowdError ? "Crowding unavailable" : v.crowdPending ? "Loading crowding…" : v.crowdEmpty ? "No crowding data" : "Tap a station for its level"}
             </span>
           </div>
-          <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginTop: 10, paddingBottom: 2 }}>
+          <div className="sv-crowd-slots" style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginTop: 10, paddingBottom: 2 }}>
             {v.fcSlots.map((h, i) => (
               <button key={i} onClick={h.pick} aria-pressed={h.active} style={styleText(h.style)}>
                 <span style={styleText(h.timeStyle)}>{h.label}</span>
@@ -449,13 +524,14 @@ export function MapScreen({ v }) {
       )}
 
       <button
+        className={`sv-map-locate${v.hasFix ? " has-fix" : ""}`}
         onClick={v.locateMe}
         aria-label="Show my location"
         title="Show my location"
         style={{
           position: "absolute",
           right: 14,
-          bottom: v.locateBottom,
+          "--sv-locate-mobile-bottom": v.locateBottom,
           maxHeight: 46,
           zIndex: 18,
           width: 46,
@@ -482,7 +558,7 @@ export function MapScreen({ v }) {
       </button>
 
       {v.showPinHint && (
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 120, display: "flex", alignItems: "center", gap: 7, background: "var(--surface-card)", borderRadius: 999, padding: "8px 14px", boxShadow: "var(--shadow-nav)", font: "var(--type-caption)", color: "var(--text-body)", whiteSpace: "nowrap" }}>
+        <div className="sv-map-pin-hint">
           <Icon name="map-pin" size={14} />
           Tap anywhere to drop a pin
         </div>
