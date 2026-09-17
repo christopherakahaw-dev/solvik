@@ -21,6 +21,21 @@ function readGuest() {
   }
 }
 
+// No session, no stored guest flag — a first visit. Browse as a guest rather
+// than meeting a credential form.
+//
+// That is not only a first-run nicety. A generic email-and-password form as the
+// very first paint, on a hosting subdomain with no reputation of its own, is
+// the shape Google Safe Browsing's social-engineering classifier looks for, and
+// it flagged this app as a "Dangerous site" on exactly that pattern. Signing in
+// is optional here — every feature works without an account, and only saved
+// places and preferences sync — so leading with the demand was wrong on its own
+// terms before it was ever a problem with Chrome.
+function guestFallback() {
+  writeGuest(true);
+  return GUEST_USER;
+}
+
 function writeGuest(enabled) {
   try {
     if (enabled) localStorage.setItem(GUEST_STORAGE_KEY, "1");
@@ -55,10 +70,14 @@ function userFrom(authUser, profile = null) {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => supabaseConfigured ? null : readGuest());
+  const [user, setUser] = useState(() => supabaseConfigured ? null : (readGuest() || guestFallback()));
   const [loading, setLoading] = useState(supabaseConfigured);
   const [recovery, setRecovery] = useState(false);
   const [profileError, setProfileError] = useState("");
+  // The account screen is somewhere you go, not a wall you are held behind.
+  // Without this, signing out would drop straight back into guest mode and the
+  // sign-in form would be unreachable.
+  const [wantsAuth, setWantsAuth] = useState(false);
 
   const hydrate = useCallback(async (authUser) => {
     const supabase = getSupabase();
@@ -100,7 +119,7 @@ export function AuthProvider({ children }) {
     let active = true;
     const applySession = async (session) => {
       if (!session?.user) {
-        if (active) setUser(readGuest());
+        if (active) setUser(readGuest() || guestFallback());
         return;
       }
       writeGuest(false);
@@ -119,7 +138,7 @@ export function AuthProvider({ children }) {
         return applySession(data.session);
       })
       .catch(() => {
-        if (active) setUser(readGuest());
+        if (active) setUser(readGuest() || guestFallback());
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -139,6 +158,7 @@ export function AuthProvider({ children }) {
     writeGuest(false);
     const next = await hydrate(data.user);
     setUser(next);
+    setWantsAuth(false);
     return next;
   }, [hydrate]);
 
@@ -157,6 +177,7 @@ export function AuthProvider({ children }) {
     if (!data.session) return { requiresConfirmation: true, email };
     const next = await hydrate(data.user);
     setUser(next);
+    setWantsAuth(false);
     return { user: next, requiresConfirmation: false };
   }, [hydrate]);
 
@@ -192,13 +213,23 @@ export function AuthProvider({ children }) {
   const loginAsGuest = useCallback(() => {
     writeGuest(true);
     setUser(GUEST_USER);
+    setWantsAuth(false);
     return GUEST_USER;
   }, []);
 
+  // Open the account screen deliberately, and leave it again without having to
+  // sign in to anything.
+  const showAuth = useCallback(() => setWantsAuth(true), []);
+  const hideAuth = useCallback(() => setWantsAuth(false), []);
+
   const logout = useCallback(async () => {
-    writeGuest(false);
     if (!user?.isGuest) await getSupabase()?.auth.signOut().catch(() => {});
-    setUser(null);
+    // Signing out drops to guest rather than to nothing, so the app is still
+    // usable afterwards — but the account screen is shown, because signing out
+    // and being silently handed a guest session would look like it failed.
+    writeGuest(true);
+    setUser(GUEST_USER);
+    setWantsAuth(true);
   }, [user]);
 
   const updateProfile = useCallback(async ({ name }) => {
@@ -270,6 +301,9 @@ export function AuthProvider({ children }) {
     user,
     loading,
     recovery,
+    wantsAuth,
+    showAuth,
+    hideAuth,
     profileError,
     login,
     register,
@@ -283,7 +317,7 @@ export function AuthProvider({ children }) {
     setCloudSync,
     clearCloudData,
     deleteAccount,
-  }), [user, loading, recovery, profileError, login, register, resendConfirmation, requestPasswordReset, updatePassword, loginAsGuest, logout, updateProfile, completeOnboarding, setCloudSync, clearCloudData, deleteAccount]);
+  }), [user, loading, recovery, wantsAuth, showAuth, hideAuth, profileError, login, register, resendConfirmation, requestPasswordReset, updatePassword, loginAsGuest, logout, updateProfile, completeOnboarding, setCloudSync, clearCloudData, deleteAccount]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

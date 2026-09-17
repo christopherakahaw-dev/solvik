@@ -41,13 +41,10 @@ test("demo data walkthrough", async ({ page }) => {
     }
   };
 
+  // A first visit lands on the intro, as a guest. No sign-in step.
   await page.goto("/");
-  await page.waitForTimeout(1200);
-  await shot("landing");
-
-  await page.getByRole("button", { name: /Continue as guest/i }).click();
-  await page.waitForTimeout(900);
-  await shot("onboarding");
+  await page.waitForTimeout(1500);
+  await shot("landing-no-login-wall");
 
   await page.getByRole("button", { name: /Skip for now/i }).click();
   await page.waitForTimeout(1200);

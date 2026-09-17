@@ -54,8 +54,25 @@ async function noOverflow(page) {
   expect(await page.locator("body").evaluate(el => el.scrollWidth <= window.innerWidth + 1)).toBe(true);
 }
 
-test("the account gate remains usable when Supabase is not configured", async ({ page }) => {
+test("a first visit reaches the app without being asked to sign in", async ({ page }) => {
+  // A credential form as the first paint, on a hosting subdomain with no
+  // reputation, is what Safe Browsing's phishing classifier matches on — and it
+  // flagged this app for exactly that. Signing in is optional here, so the way
+  // in is the app itself.
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "Set up in a minute" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toHaveCount(0);
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await noOverflow(page);
+});
+
+test("the account screen is reachable from inside the app, and usable unconfigured", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Open account" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   expect(await page.locator(".sv-auth-screen").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "Auth screen has no horizontal scroll").toBe(true);
   await noOverflow(page);
@@ -63,8 +80,10 @@ test("the account gate remains usable when Supabase is not configured", async ({
   await expect(page.getByRole("button", { name: "Sign in", exact: true }).last()).toBeDisabled();
   await page.getByRole("tab", { name: "Create account" }).click();
   await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
-  await page.getByRole("button", { name: "Continue as guest" }).click();
-  await expect(page.getByRole("button", { name: "Set up in a minute" })).toBeVisible();
+
+  // Somewhere you go, so there has to be a way back out without signing in.
+  await page.getByRole("button", { name: "Back to Solvik" }).click();
+  await expect(page.getByRole("navigation")).toBeVisible();
   await noOverflow(page);
 });
 
@@ -413,7 +432,9 @@ test("storage denial does not prevent skipping onboarding or browsing tabs", asy
     Storage.prototype.setItem = () => { throw new DOMException("Blocked", "SecurityError"); };
   });
   await page.reload();
-  await page.getByRole("button", { name: "Continue as guest" }).click();
+  // With storage blocked the guest flag cannot be persisted, so the fallback
+  // has to hold the session in memory for the tab rather than bouncing back to
+  // a sign-in wall on every render.
   await page.getByRole("button", { name: "Skip for now" }).click();
   for (const name of ["Plan", "Report", "Points", "Map"]) {
     await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();

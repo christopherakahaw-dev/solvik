@@ -11,7 +11,7 @@ const syncCopy = {
 };
 
 export function AccountScreen({ v }) {
-  const { user, profileError, logout, updateProfile, setCloudSync, clearCloudData, deleteAccount } = useAuth();
+  const { user, profileError, logout, showAuth, updateProfile, setCloudSync, clearCloudData, deleteAccount } = useAuth();
   const [name, setName] = useState(user.name || "");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -91,7 +91,12 @@ export function AccountScreen({ v }) {
           {!user.isGuest && <button type="button" disabled={Boolean(busy)} onClick={() => {
             if (window.confirm("Delete saved places, commutes and preferences from the cloud? Data on this device will remain.")) run("clear", clearCloudData, "Cloud data cleared");
           }}><span><Icon name="cloud-off" size={18} /><span><strong>Clear cloud data</strong><small>Keep the data on this device</small></span></span><Icon name="chevron-right" size={17} /></button>}
-          <button type="button" disabled={Boolean(busy)} onClick={() => run("logout", logout)}><span><Icon name="log-out" size={18} /><span><strong>{busy === "logout" ? "Signing out…" : "Sign out"}</strong><small>Return to the login page</small></span></span><Icon name="chevron-right" size={17} /></button>
+          {/* A guest has nothing to sign out of — offer the way in, not the way
+              out. Signing in is optional here, so this is the only route to the
+              account screen now that it no longer blocks the way in. */}
+          {user.isGuest
+            ? <button type="button" onClick={showAuth}><span><Icon name="log-in" size={18} /><span><strong>Sign in</strong><small>Sync saved places across your devices</small></span></span><Icon name="chevron-right" size={17} /></button>
+            : <button type="button" disabled={Boolean(busy)} onClick={() => run("logout", logout)}><span><Icon name="log-out" size={18} /><span><strong>{busy === "logout" ? "Signing out…" : "Sign out"}</strong><small>Return to the login page</small></span></span><Icon name="chevron-right" size={17} /></button>}
           {!user.isGuest && <button type="button" className="is-danger" disabled={Boolean(busy)} onClick={() => {
             if (window.confirm("Permanently delete your Solvik account and cloud data? This cannot be undone.")) run("delete", deleteAccount);
           }}><span><Icon name="trash-2" size={18} /><span><strong>Delete account</strong><small>Permanently remove your account</small></span></span><Icon name="chevron-right" size={17} /></button>}

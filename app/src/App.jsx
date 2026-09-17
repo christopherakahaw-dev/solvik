@@ -107,9 +107,13 @@ function LoadingScreen() {
 }
 
 export function App() {
-  const { user, loading, recovery, completeOnboarding } = useAuth();
+  const { user, loading, recovery, wantsAuth, completeOnboarding } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (!user || recovery) return <ViewportShell><AuthScreen /></ViewportShell>;
+  // The account screen appears when it is asked for, or when a password reset
+  // link brings someone here. A first visit goes straight to the app as a
+  // guest: signing in is optional, and a credential form has no business being
+  // the first thing a stranger sees.
+  if (!user || recovery || wantsAuth) return <ViewportShell><AuthScreen /></ViewportShell>;
   setStorageScope(user.isGuest ? "" : user.id);
   return <AuthenticatedApp user={user} onOnboardingComplete={completeOnboarding} key={user.id} />;
 }

@@ -215,7 +215,10 @@ function Confirmation({ email, onBack }) {
 }
 
 export function AuthScreen() {
-  const { configured, recovery, loginAsGuest } = useAuth();
+  const { configured, recovery, loginAsGuest, hideAuth, user } = useAuth();
+  // Reached from inside the app rather than met on the way in. A password
+  // recovery link is the exception — there is nothing to go back to yet.
+  const dismissible = !recovery && !!user;
   const [view, setView] = useState("login");
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const activeView = recovery ? "recovery" : confirmationEmail ? "confirmation" : view;
@@ -255,7 +258,15 @@ export function AuthScreen() {
         {(activeView === "login" || activeView === "register") && (
           <div className="sv-auth-guest">
             <span>or</span>
-            <Button variant="secondary" size="md" fullWidth iconLeft="user-round" onClick={loginAsGuest}>Continue as guest</Button>
+            <Button
+              variant="secondary"
+              size="md"
+              fullWidth
+              iconLeft={dismissible ? "arrow-left" : "user-round"}
+              onClick={dismissible ? hideAuth : loginAsGuest}
+            >
+              {dismissible ? "Back to Solvik" : "Continue as guest"}
+            </Button>
             <p>No account required. Guest places and commutes stay in this browser.</p>
           </div>
         )}

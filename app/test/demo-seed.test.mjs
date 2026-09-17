@@ -4,7 +4,7 @@
 // somewhere the same-day forecast can still say something about.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { seedSampleJourneys, SAMPLE_LEAD_MINS } from "../src/lib/journeys.js";
+import { seedSampleJourneys, sampleCommuteTime, SAMPLE_LEAD_MINS } from "../src/lib/journeys.js";
 import { inferCommutes, isConfident } from "../src/lib/patterns.js";
 
 const YISHUN = { name: "Yishun", ll: [1.42945, 103.83513] };
@@ -20,7 +20,8 @@ test("the seeded trips are timed from now, not a fixed morning", () => {
   // for most of the day. The crowd warning then correctly had nothing to say,
   // which is the one thing the seed exists to show.
   const seeded = seedSampleJourneys(YISHUN, RAFFLES, WEDNESDAY_2PM);
-  const target = new Date(WEDNESDAY_2PM + SAMPLE_LEAD_MINS * 60000);
+  const target = sampleCommuteTime(WEDNESDAY_2PM);
+  assert.equal(target.getTime(), WEDNESDAY_2PM + SAMPLE_LEAD_MINS * 60000, "mid-afternoon needs no clamp");
   for (const j of seeded) {
     const at = new Date(j.at);
     const minsFromTarget =
@@ -55,4 +56,27 @@ test("seeding late in the evening still produces a usable commute", () => {
   const seeded = seedSampleJourneys(YISHUN, RAFFLES, lateNight);
   const [pattern] = inferCommutes({ journeys: seeded, now: lateNight });
   assert.ok(pattern, "no commute inferred when seeded near midnight");
+});
+
+test("the seeded commute is not pushed over midnight while there is room today", () => {
+  // The whole point of timing it relative to now is that the same-day forecast
+  // can speak to it. A lead that tipped past midnight put it right back outside
+  // — which is how a run at 23:29 produced a 00:20 commute and "No forecast
+  // yet", the very thing this was meant to fix.
+  const lateEvening = new Date(2026, 8, 16, 22, 50).getTime();
+  const target = sampleCommuteTime(lateEvening);
+  assert.equal(target.getDate(), new Date(lateEvening).getDate(), "crossed midnight");
+  assert.ok(target.getTime() > lateEvening, "the commute must still be ahead");
+  assert.ok(target.getHours() <= 23 && target.getMinutes() <= 30);
+});
+
+test("past the end of the forecast day it does not pretend otherwise", () => {
+  // After about 23:20 there is no time that is both ahead of now and inside
+  // today's published forecast. Nothing here can invent one, so the lead is
+  // left alone and the app reports the trip as outside the forecast — which is
+  // exactly what LTA's same-day publishing means.
+  const nearlyMidnight = new Date(2026, 8, 16, 23, 29).getTime();
+  const target = sampleCommuteTime(nearlyMidnight);
+  assert.equal(target.getTime(), nearlyMidnight + SAMPLE_LEAD_MINS * 60000);
+  assert.ok(target.getTime() > nearlyMidnight);
 });

@@ -100,6 +100,23 @@ export function journeySummary(list) {
 // the next thing happening.
 export const SAMPLE_LEAD_MINS = 45;
 
+// LTA publishes crowding for the current day only, and the grid stops at 23:30.
+// A lead that pushes the seeded commute over midnight therefore lands it
+// outside the forecast — the exact problem timing it relative to now was meant
+// to solve, just at the other end of the day. Pull it back while there is still
+// room today.
+//
+// After about 23:00 there is no such time, and nothing here can invent one. The
+// app then says the trip falls outside the published forecast, which is true.
+const LAST_COVERED = { hour: 23, minute: 20 };
+
+export function sampleCommuteTime(now = Date.now()) {
+  const target = new Date(now + SAMPLE_LEAD_MINS * 60000);
+  const cap = new Date(now);
+  cap.setHours(LAST_COVERED.hour, LAST_COVERED.minute, 0, 0);
+  return target > cap && cap.getTime() > now ? cap : target;
+}
+
 // A week of sample trips, for showing the memory working without waiting a
 // week for it. Only reachable in a demo build (VITE_DEMO_MODE), and clearly
 // labelled in the UI — these are made up, which is why they are kept behind a
@@ -112,7 +129,7 @@ export const SAMPLE_LEAD_MINS = 45;
 // useless: the one feature the seed exists to show was invisible for most of
 // the day.
 export function seedSampleJourneys(from, to, now = Date.now()) {
-  const target = new Date(now + SAMPLE_LEAD_MINS * 60000);
+  const target = sampleCommuteTime(now);
   const past = [];
   const cursor = new Date(now);
   while (past.length < 4) {
