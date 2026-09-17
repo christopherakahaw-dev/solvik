@@ -1006,6 +1006,11 @@ export class AppLogic extends Component {
     this.loadFaults();
     this.loadCrowding();
     this.loadOutlook();
+    // Journeys outlive the session that recorded them, so the pattern has to be
+    // re-read on opening too. Without this, the trip that tipped the balance
+    // would only be noticed on the next one — and a commute you had already
+    // finished making would sit there unlearned.
+    this.reviewPatterns();
     // The forecast moves in 30-minute steps and the clock moves under it, so
     // the outlook is re-read a few times an hour rather than once a session.
     this.startAlertPoll();
