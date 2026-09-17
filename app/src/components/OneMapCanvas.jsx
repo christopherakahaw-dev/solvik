@@ -11,14 +11,26 @@ const isLL = (v) => Array.isArray(v) && v.length >= 2 && isFinite(v[0]) && isFin
 const ONEMAP_TILE_URL = "https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png";
 const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
+const SAVED_PLACE_GLYPHS = {
+  home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
+  work: '<rect width="18" height="14" x="3" y="7" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/>',
+  school: '<path d="m3 10 9-5 9 5-9 5Z"/><path d="M7 12v5c3 2 7 2 10 0v-5"/>',
+};
+
+function savedPlaceHtml(kind) {
+  return `<div class="sv-saved-place sv-saved-place-${kind}"><svg viewBox="0 0 24 24" aria-hidden="true">${SAVED_PLACE_GLYPHS[kind]}</svg></div>`;
+}
+
 export function OneMapCanvas({
   center,
   zoom,
   route,
   marker,
   markerAccuracy,
+  origin,
   dest,
   pin,
+  savedPlaces,
   zones,
   onMapClick,
   onZoneClick,
@@ -35,6 +47,9 @@ export function OneMapCanvas({
   const safeZoom = isFinite(zoom) ? zoom : 12;
   const safeRoute = Array.isArray(route) ? route.filter(isLL) : [];
   const safeZones = Array.isArray(zones) ? zones.filter((z) => z && isLL(z.ll)) : [];
+  const safeSavedPlaces = Array.isArray(savedPlaces)
+    ? savedPlaces.filter((place) => place && SAVED_PLACE_GLYPHS[place.id] && isLL(place.ll))
+    : [];
 
   const ref = useRef(null);
   const mapRef = useRef(null);
@@ -107,21 +122,34 @@ export function OneMapCanvas({
       if (fitRoute) map.fitBounds(line.getBounds(), { padding: [34, 34] });
     }
     if (isLL(marker)) {
-      // GPS accuracy ring, drawn under the position dot.
+      // GPS accuracy ring, drawn under the position dot — context, not the
+      // marker itself, so it stays faint.
       if (isFinite(markerAccuracy) && markerAccuracy > 0) {
         const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#437858";
-        const halo = L.circle(marker, {
+        const ring = L.circle(marker, {
           radius: Math.min(markerAccuracy, 2000),
           color: accent,
           weight: 1,
-          opacity: 0.45,
+          opacity: 0.3,
           fillColor: accent,
-          fillOpacity: 0.1,
+          fillOpacity: 0.06,
         }).addTo(map);
-        layersRef.current.push(halo);
+        layersRef.current.push(ring);
       }
-      const m = L.circleMarker(marker, { radius: 8, color: "#fff", weight: 3, fillColor: "#201e1d", fillOpacity: 1 }).addTo(map);
-      layersRef.current.push(m);
+      // An HTML marker rather than a circle, so the dot can carry the pulsing
+      // halo (CSS, see tokens/index.css) that a Leaflet vector can't.
+      const me = L.marker(marker, {
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: 800,
+        icon: L.divIcon({
+          className: "",
+          html: '<div class="sv-locate"><span class="sv-locate-halo"></span><span class="sv-locate-dot"></span></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        }),
+      }).addTo(map);
+      layersRef.current.push(me);
     }
     if (isLL(pin)) {
       const rust = getComputedStyle(document.documentElement).getPropertyValue("--crowd-busy").trim() || "#b3402c";
@@ -129,13 +157,40 @@ export function OneMapCanvas({
       const p = L.circleMarker(pin, { radius: 8, color: "#fff", weight: 3, fillColor: rust, fillOpacity: 1 }).addTo(map);
       layersRef.current.push(halo, p);
     }
+    if (isLL(origin)) {
+      const start = L.circleMarker(origin, {
+        radius: 8,
+        color: "#fff",
+        weight: 3,
+        fillColor: "#201e1d",
+        fillOpacity: 1,
+      }).addTo(map);
+      start.bindTooltip("Start", { direction: "top", offset: [0, -8] });
+      layersRef.current.push(start);
+    }
     if (isLL(dest)) {
       const d = L.circleMarker(dest, { radius: 9, color: "#fff", weight: 3, fillColor: green, fillOpacity: 1 }).addTo(map);
       layersRef.current.push(d);
     }
+    safeSavedPlaces.forEach((place) => {
+      const label = { home: "Home", work: "Work", school: "School" }[place.id];
+      const saved = L.marker(place.ll, {
+        keyboard: true,
+        zIndexOffset: 500,
+        title: label,
+        icon: L.divIcon({
+          className: "",
+          html: savedPlaceHtml(place.id),
+          iconSize: [38, 44],
+          iconAnchor: [19, 40],
+        }),
+      }).addTo(map);
+      saved.bindTooltip(label, { direction: "top", offset: [0, -35] });
+      layersRef.current.push(saved);
+    });
     if (safeZones.length) {
       const cs = getComputedStyle(document.documentElement);
-      const tone = (lv) => cs.getPropertyValue("--crowd-" + (lv || "light")).trim() || "#437858";
+      const tone = (lv) => cs.getPropertyValue("--crowd-" + lv).trim() || "#777974";
       safeZones.forEach((z) => {
         const c = tone(z.level);
         const sel = !!z.selected;
@@ -175,7 +230,7 @@ export function OneMapCanvas({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(safeRoute), JSON.stringify(marker), markerAccuracy, JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeZones)]);
+  }, [JSON.stringify(safeRoute), JSON.stringify(marker), markerAccuracy, JSON.stringify(origin), JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeSavedPlaces), JSON.stringify(safeZones)]);
 
   const lastTokenRef = useRef(recenterToken);
   useEffect(() => {

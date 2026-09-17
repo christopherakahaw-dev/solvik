@@ -24,15 +24,15 @@ export function NavScreen({ v }) {
             </div>
           )}
         </div>
-        <div style={{ background: "var(--accent)", color: "var(--text-on-accent)", borderRadius: "var(--radius-card)", padding: "15px 16px", boxShadow: "var(--shadow-nav)", display: "flex", alignItems: "flex-start", gap: 13 }}>
-          <div style={{ flex: "none", width: 42, height: 42, borderRadius: 999, background: "rgba(255,255,255,.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="sv-nav-instruction" style={{ background: "var(--accent)", color: "var(--text-on-accent)", borderRadius: "var(--radius-card)", padding: "15px 16px", boxShadow: "var(--shadow-nav)", display: "grid", gridTemplateColumns: "36px minmax(0, 1fr)", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ flex: "none", width: 36, height: 36, borderRadius: 999, background: "rgba(255,255,255,.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Icon name={v.navIcon} size={21} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ font: "var(--weight-heavy) 19px/1.25 var(--font-display)", letterSpacing: "-.02em", textWrap: "pretty" }}>{v.navTitle}</div>
             <div style={{ font: "var(--type-caption)", opacity: 0.74, marginTop: 5, textWrap: "pretty" }}>{v.navDetail}</div>
           </div>
-          <div style={{ flex: "none", textAlign: "right" }}>
+          <div style={{ gridColumn: 2, display: "flex", gap: 6, alignItems: "baseline" }}>
             <div style={{ font: "var(--weight-heavy) 20px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums" }}>{v.navCountdown}</div>
             <div style={{ font: "var(--weight-regular) 10px/1 var(--font-body)", opacity: 0.68, marginTop: 5 }}>to go</div>
           </div>

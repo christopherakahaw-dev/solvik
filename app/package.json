@@ -8,8 +8,10 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test 'test/**/*.test.mjs'",
-    "diagnose": "node scripts/diagnose.mjs"
+    "test": "node --import ./test/setup.mjs --test test/*.test.mjs",
+    "test:ui": "playwright test",
+    "diagnose": "node scripts/diagnose.mjs",
+    "stations": "node scripts/stations.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -22,6 +24,7 @@
     "uuid": "^14.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",

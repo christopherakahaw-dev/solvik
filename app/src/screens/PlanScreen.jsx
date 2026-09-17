@@ -1,82 +1,48 @@
 import { Icon, IconButton, Button, SectionLabel, SearchField, Tag } from "../design-system";
 import { styleText } from "../lib/styleText";
-import { useAuth } from "../auth/AuthContext";
+import { PlacePicker } from "../components/PlacePicker";
 
 export function PlanScreen({ v }) {
-  const { user, logout } = useAuth();
-  const agentTone = v.agent.level === "disruption" ? "var(--status-fault)" : v.agent.level === "network" ? "var(--status-warn)" : "var(--accent)";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14, paddingBottom: 104 }}>
+      <div style={{ padding: "0 4px" }}>
+        <div style={{ font: "var(--weight-heavy) 22px/1.2 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", textWrap: "pretty" }}>{v.planGreeting}</div>
+        {v.recordedNotice && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 7, padding: "6px 10px", borderRadius: 999, background: "var(--sand-100,rgba(32,30,29,.05))", font: "var(--weight-semibold) 11.5px/1.2 var(--font-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
+            <Icon name="circle-dot-dashed" size={13} />
+            {v.recordedNotice}
+          </div>
+        )}
+        {v.alertCatchUpLine && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, font: "var(--type-caption)", color: "var(--status-fault)", textWrap: "pretty" }}>
+            <Icon name="triangle-alert" size={13} />
+            {v.alertCatchUpLine}
+          </div>
+        )}
+      </div>
 
-      {/* ── Account card ── */}
-      {user && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 13,
-            padding: "14px 15px",
-            borderRadius: "var(--radius-card)",
-            background: "var(--surface-card)",
-            border: "1px solid var(--border-card)",
-            boxShadow: "var(--shadow-card)",
-          }}
-        >
-          <span
-            style={{
-              flex: "none",
-              width: 42,
-              height: 42,
-              borderRadius: 999,
-              background: "var(--accent)",
-              color: "var(--text-on-accent)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              font: "var(--weight-heavy) 18px/1 var(--font-display)",
-            }}
-          >
-            {(user.name || user.email).charAt(0).toUpperCase()}
-          </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)" }}>
-              {user.name || "My account"}
+      {v.justAdded && (
+        <div style={{ borderRadius: "var(--radius-card)", background: "var(--accent-soft)", border: "1px solid var(--accent)", padding: "15px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent)", color: "var(--text-on-accent)" }}>
+              <Icon name="sparkles" size={14} />
             </span>
-            <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 2 }}>
-              {user.isGuest ? "Browsing as guest" : user.email}
-            </span>
-          </span>
-          <Button variant="ghost" size="sm" iconLeft="log-out" onClick={logout}>
-            Sign out
-          </Button>
+            <SectionLabel>Learned from your trips</SectionLabel>
+          </div>
+          <div style={{ font: "var(--weight-heavy) 16px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 10, textWrap: "pretty" }}>{v.justAdded.title}</div>
+          <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 4, textWrap: "pretty" }}>{v.justAdded.when}</div>
+          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 6, textWrap: "pretty" }}>{v.justAdded.evidence}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 13 }}>
+            <Button variant="secondary" size="sm" onClick={v.justAdded.undo}>
+              Undo
+            </Button>
+            <Button variant="ghost" size="sm" onClick={v.justAdded.dismiss}>
+              Keep it
+            </Button>
+          </div>
         </div>
       )}
 
-      <section style={{ overflow: "hidden", borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: `1px solid ${agentTone}`, boxShadow: "var(--shadow-card)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 15px 11px", background: "var(--accent-soft)" }}>
-          <span style={{ width: 32, height: 32, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: agentTone, color: "var(--text-on-accent)" }}><Icon name="sparkles" size={16} /></span>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ font: "var(--weight-bold) 10px/1 var(--font-body)", letterSpacing: ".1em", color: "var(--text-muted)", textTransform: "uppercase" }}>FlowGuard agent · on-device</div>
-            <div style={{ font: "var(--type-body-strong)", color: "var(--text-strong)", marginTop: 4 }}>{v.agent.title}</div>
-          </div>
-          <button onClick={v.agent.refresh} aria-label="Refresh alerts" style={{ cursor: "pointer", border: "none", background: "transparent", color: "var(--text-muted)", padding: 6 }}><Icon name="refresh-cw" size={17} /></button>
-        </div>
-        <div style={{ padding: "13px 15px 14px" }}>
-          <p style={{ margin: 0, font: "var(--type-body)", color: "var(--text-body)", lineHeight: 1.45, textWrap: "pretty" }}>{v.agent.message}</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 13 }}>
-            {v.agent.canViewRoutes && <Button size="sm" iconRight="arrow-right" onClick={v.agent.viewRoutes}>View alternatives</Button>}
-            <span style={{ font: "var(--type-caption)", color: "var(--text-muted)" }}>{v.agent.monitored ? `Watching ${v.agent.monitored} commute${v.agent.monitored === 1 ? "" : "s"} in the next 90 min` : "Private by design · no location history stored"}</span>
-          </div>
-          {v.agent.learned.length > 0 && (
-            <div style={{ marginTop: 12, paddingTop: 11, borderTop: "1px solid var(--border-card)" }}>
-              <div style={{ font: "var(--weight-bold) 10px/1 var(--font-body)", letterSpacing: ".09em", color: "var(--text-muted)", textTransform: "uppercase" }}>Learned destinations</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                {v.agent.learned.slice(0, 3).map((place) => <Tag key={place.key} tone="soft">{place.name} · {place.count}×</Tag>)}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
       {v.planHasNext && (
         <div style={{ position: "relative", overflow: "hidden", background: "var(--surface-dark)", color: "var(--text-on-dark)", borderRadius: "var(--radius-card)", padding: 20, boxShadow: "var(--shadow-card)", animation: "sv-rise 420ms cubic-bezier(.16,1,.3,1) both" }}>
           <div style={{ position: "absolute", right: -46, top: -58, width: 180, height: 180, borderRadius: 999, background: "rgba(255,255,255,.05)" }} />
@@ -98,13 +64,46 @@ export function PlanScreen({ v }) {
             </Button>
             <button onClick={v.watchNext} style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 16px", height: 44, borderRadius: 999, cursor: "pointer", background: "rgba(255,255,255,.14)", border: "none", color: "var(--text-on-dark)", font: "var(--weight-bold) 14px/1 var(--font-body)" }}>
               <Icon name="bell" size={16} />
-              Alert me
+              {v.watchNextLabel}
             </button>
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "0 13px", height: 44, borderRadius: 999, background: "rgba(255,255,255,.09)", font: "var(--weight-bold) 12px/1 var(--font-body)" }}>
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--crowd-moderate)" }} />
-              {v.planNextCrowd}
-            </div>
+            {v.planNextCrowd && (
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "0 13px", height: 44, borderRadius: 999, background: "rgba(255,255,255,.09)", font: "var(--weight-bold) 12px/1 var(--font-body)" }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: "var(--crowd-" + (v.planNextCrowdLevel || "light") + ")" }} />
+                {v.planNextCrowd}
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {v.fgHas && (
+        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-soft)", color: v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--text-accent)" }}>
+              <Icon name="chart-no-axes-column-increasing" size={15} />
+            </span>
+            <SectionLabel>Network forecast</SectionLabel>
+          </div>
+          <div style={{ font: "var(--weight-heavy) 17px/1.25 var(--font-display)", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 11, textWrap: "pretty" }}>{v.fgTitle}</div>
+          {v.fgDetail && (
+            <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.fgDetail}</div>
+          )}
+          {v.fgAlerts.map((a, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 9 }}>
+              <span style={{ flex: "none", padding: "3px 8px", borderRadius: 999, background: "var(--status-warn)", color: "#fff", font: "var(--weight-heavy) 11px/1.3 var(--font-body)" }}>{a.line}</span>
+              <span style={{ font: "var(--type-caption)", color: "var(--text-body)", textWrap: "pretty" }}>{a.title}</span>
+            </div>
+          ))}
+          {v.fgCoverage && (
+            <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.fgCoverage}</div>
+          )}
+          {v.fgHasAction && (
+            <div style={{ marginTop: 13 }}>
+              <Button variant="secondary" size="md" iconRight="arrow-right" onClick={v.fgAction}>
+                {v.fgActionLabel}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -117,7 +116,7 @@ export function PlanScreen({ v }) {
             </Button>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 9 }}>
+        <div className="sv-saved-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 9 }}>
           {v.placeRows.map((p, i) => (
             <button key={i} onClick={v.openPlaces} style={{ display: "flex", flexDirection: "column", gap: 8, textAlign: "left", padding: "13px 12px", borderRadius: 20, cursor: "pointer", background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
               <span style={{ flex: "none", width: 30, height: 30, borderRadius: 999, background: "var(--accent-soft)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -152,10 +151,44 @@ export function PlanScreen({ v }) {
               <span style={{ minWidth: 0, flex: 1 }}>
                 <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)" }}>{s.name}</span>
                 <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{s.sub}</span>
+                {s.learned && (
+                  <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-accent)", marginTop: 3, textWrap: "pretty" }}>Learned · {s.learned}</span>
+                )}
               </span>
               <Tag tone="soft">{s.mode}</Tag>
             </button>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
+          <SectionLabel>What Solvik remembers</SectionLabel>
+        </div>
+        <div style={{ padding: "15px 16px", borderRadius: 20, background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
+          <div style={{ font: "var(--type-body)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.memorySummary}</div>
+          {v.memoryLines.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 10 }}>
+              {v.memoryLines.map((line, i) => (
+                <span key={i} style={{ font: "var(--weight-medium) 11px/1 var(--font-body)", color: "var(--text-muted)", background: "var(--accent-soft)", borderRadius: 999, padding: "5px 9px", whiteSpace: "nowrap" }}>
+                  {line}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.memoryNote}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 13, flexWrap: "wrap" }}>
+            {v.memoryCount > 0 && (
+              <Button variant="secondary" size="sm" iconLeft="trash-2" onClick={v.forgetEverything}>
+                Forget everything
+              </Button>
+            )}
+            {v.canSeedTrips && (
+              <Button variant="secondary" size="sm" iconLeft="sparkles" onClick={v.seedSampleTrips}>
+                Add a week of sample trips
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -170,7 +203,7 @@ export function PlacesSheet({ v }) {
       {v.placesOpen && (
         <div style={{ position: "absolute", inset: 0, zIndex: 32, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <div onClick={v.closePlaces} style={{ flex: 1 }} />
-          <section style={{ flex: "none", maxHeight: "80%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
+          <section role="dialog" aria-modal="true" aria-label="Your places" className="sv-modal-sheet" style={{ flex: "none", maxHeight: "92%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             <div style={{ flex: "none", padding: "12px 0 6px", display: "flex", justifyContent: "center" }}>
               <div style={{ width: 42, height: 4, borderRadius: 999, background: "var(--sand-400)" }} />
             </div>
@@ -182,19 +215,28 @@ export function PlacesSheet({ v }) {
                 </Button>
               </div>
             </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
-              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>These set the Home and Work chips on every commute, and the routes Solvik watches for you.</div>
+            <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
+              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Selected places stay in this browser. Search text goes to OneMap while you search, and place coordinates only when you request a route. Solvik does not keep the search query.</div>
               {v.placeRows.map((p, i) => (
                 <div key={i}>
                   <SectionLabel>{p.label}</SectionLabel>
                   <div style={{ marginTop: 8 }}>
-                    <SearchField value={p.value} placeholder={p.placeholder} icon={p.icon} onChange={p.set} />
+                    <PlacePicker value={p.value} placeholder={p.placeholder} icon={p.icon} onChange={p.set} onDraftChange={p.draft} />
                   </div>
                 </div>
               ))}
+              <button type="button" onClick={v.toggleSavedPlaces} aria-pressed={v.showSavedPlaces} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 13px", cursor: "pointer", textAlign: "left", background: "var(--sand-100)", border: "1px solid var(--border-card)", borderRadius: "var(--radius-card)", color: "var(--text-body)" }}>
+                <Icon name={v.showSavedPlaces ? "eye" : "eye-off"} size={17} />
+                <span style={{ flex: 1, font: "var(--type-body-strong)" }}>Show saved places on the map</span>
+                <span style={{ font: "var(--type-caption)", color: "var(--text-muted)" }}>{v.showSavedPlaces ? "On" : "Off"}</span>
+              </button>
+              <Button variant="ghost" size="md" fullWidth iconLeft="trash-2" onClick={v.clearAllData}>
+                Erase all data from this device
+              </Button>
             </div>
             <div style={{ flex: "none", paddingTop: 14 }}>
-              <Button size="lg" fullWidth onClick={v.savePlaces}>
+              {v.placesInvalid && <p className="sv-place-detail" role="status">Select a search result for each edited place, or clear its field.</p>}
+              <Button size="lg" fullWidth disabled={v.placesInvalid} onClick={v.savePlaces}>
                 Save addresses
               </Button>
             </div>
@@ -211,7 +253,7 @@ export function AddCommuteSheet({ v }) {
       {v.addOpen && (
         <div style={{ position: "absolute", inset: 0, zIndex: 30, background: "rgba(32,30,29,.34)", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
           <div onClick={v.closeAdd} style={{ flex: 1 }} />
-          <section style={{ position: "relative", flex: "none", maxHeight: "86%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
+          <section role="dialog" aria-modal="true" aria-label={v.addSheetTitle} className="sv-modal-sheet" style={{ position: "relative", flex: "none", maxHeight: "92%", display: "flex", flexDirection: "column", background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", boxShadow: "var(--shadow-sheet)", padding: "0 18px 18px", animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             {v.addSearchOpen && (
               <div style={{ position: "absolute", inset: 0, zIndex: 4, background: "var(--surface-card)", borderRadius: "var(--radius-sheet) var(--radius-sheet) 0 0", padding: "12px 18px 18px", display: "flex", flexDirection: "column" }}>
                 <div style={{ flex: "none", display: "flex", justifyContent: "center", paddingBottom: 10 }}>
@@ -263,7 +305,7 @@ export function AddCommuteSheet({ v }) {
                 </Button>
               </div>
             </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
+            <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <SectionLabel>From</SectionLabel>
@@ -277,6 +319,7 @@ export function AddCommuteSheet({ v }) {
                       {p.label}
                     </button>
                   ))}
+                  <Button variant="secondary" size="sm" iconLeft="search" onClick={v.addSearchFrom}>Search start</Button>
                 </div>
               </div>
               <div>
@@ -292,11 +335,18 @@ export function AddCommuteSheet({ v }) {
                       {p.label}
                     </button>
                   ))}
+                  <Button variant="secondary" size="sm" iconLeft="search" onClick={v.addSearchTo}>Search destination</Button>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 15px", borderRadius: "var(--radius-card)", background: "var(--accent-soft)" }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ font: "var(--weight-bold) 11px/1 var(--font-body)", letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text-muted)" }}>Leave by</div>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 2 }}>
+                    {v.addWhenOpts.map((o, i) => (
+                      <button key={i} onClick={o.pick} style={styleText(o.style)}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
                   <div style={{ font: "var(--weight-heavy) 30px/1 var(--font-numeric)", fontVariantNumeric: "tabular-nums", letterSpacing: "-.02em", color: "var(--text-strong)", marginTop: 8 }}>{v.addTime}</div>
                   <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 6, textWrap: "pretty" }}>{v.addArrive}</div>
                 </div>

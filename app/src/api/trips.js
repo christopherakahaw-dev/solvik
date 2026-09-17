@@ -22,16 +22,20 @@ function singaporeDateTime(now = new Date()) {
 // show an explicit error state rather than substituting invented routes.
 export async function getTripOptions(from, to, mode, destName) {
   const { date, time } = singaporeDateTime();
-  const params = new URLSearchParams({
+  const body = {
     from: `${from[0]},${from[1]}`,
     to: `${to[0]},${to[1]}`,
     mode,
     date,
     time,
+  };
+  if (destName) body.destName = destName;
+  const res = await fetch("/api/trip-options", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
-  if (destName) params.set("destName", destName);
-  const res = await fetch(`/api/trip-options?${params.toString()}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Couldn't plan this trip");
-  return data.options || [];
+  return Object.assign(data.options || [], { recorded: !!data.recorded });
 }

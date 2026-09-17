@@ -2,8 +2,12 @@
 // parameters suited to the chosen mode, enriches them with live LTA crowding
 // and accessibility, ranks them by what the mode actually promises, and
 // returns at most three cards in the shape the UI already renders.
+import { serveRecorded } from "./_lib/demo.js";
+import { recordedRoute } from "./_lib/recorded/index.js";
 import { oneMapRoute } from "./_lib/onemap.js";
-import { ltaFetch, busLoadLevel, crowdLevelFrom } from "./_lib/lta.js";
+import { ltaFetch, crowdLevelFrom } from "./_lib/lta.js";
+import { nextBuses } from "./_lib/arrivals.js";
+import { resolveStopCode } from "./_lib/busStops.js";
 import { normalizeItinerary, crowdLevelOf, crowdScoreOf, signature, clockFrom } from "./_lib/itinerary.js";
 import { decodePolyline } from "./_lib/polyline.js";
 
@@ -37,21 +41,22 @@ async function railCrowdByCode(lines = ["NSL", "EWL", "CCL", "DTL", "NEL", "TEL"
   return byCode;
 }
 
-async function busInfo(stopCode, service) {
-  if (!stopCode || !service) return null;
-  try {
-    const data = await ltaFetch(["v3/BusArrival", "BusArrivalv2"], { BusStopCode: stopCode, ServiceNo: service });
-    const svc = (data.Services || [])[0];
-    const next = svc && svc.NextBus;
-    if (!next) return null;
-    return {
-      crowdLevel: busLoadLevel(next.Load),
-      accessible: next.Feature === "WAB",
-      etaMins: next.EstimatedArrival ? Math.max(0, Math.round((new Date(next.EstimatedArrival) - Date.now()) / 60000)) : null,
-    };
-  } catch {
-    return null;
-  }
+// Live arrivals for one bus leg. The stop code a routing reply gives is not
+// always the five digits DataMall wants, and a wrong code answers with an empty
+// list rather than an error — so it is resolved (by code, else by the leg's own
+// coordinates) before asking.
+async function busInfo(leg) {
+  if (!leg || !leg.service) return null;
+  const code = await resolveStopCode(leg.stopCode, leg.lat, leg.lng);
+  if (!code) return { buses: [], reason: "unknown-stop", stopCode: null };
+  const answer = await nextBuses(code, leg.service);
+  const first = answer.buses[0];
+  return {
+    ...answer,
+    crowdLevel: first ? first.load : null,
+    accessible: first ? first.accessible : false,
+    etaMins: first ? first.etaMins : null,
+  };
 }
 
 async function enrich(options) {
@@ -59,20 +64,38 @@ async function enrich(options) {
 
   await Promise.all(
     options.map(async (opt) => {
+      // Each leg's enrichment also lands on the step that renders it, so the
+      // card's breakdown can show arrivals and crowding without a second fetch.
+      const stepFor = (leg) => (opt.steps || []).find((st) => st.legIndex === leg.legIndex) || null;
       await Promise.all(
         opt.transitLegs.map(async (leg) => {
+          const step = stepFor(leg);
           if (leg.mode === "BUS") {
-            const info = await busInfo(leg.fromStopCode, leg.service);
-            if (info) {
-              leg.crowdLevel = info.crowdLevel;
-              leg.accessible = info.accessible;
-              leg.etaMins = info.etaMins;
+            const info = await busInfo({
+              service: leg.service,
+              stopCode: leg.fromStopCode,
+              lat: leg.fromLat,
+              lng: leg.fromLng,
+            });
+            if (!info) return;
+            leg.crowdLevel = info.crowdLevel;
+            leg.accessible = info.accessible;
+            leg.etaMins = info.etaMins;
+            leg.stopCode = info.stopCode;
+            if (step) {
+              step.stopCode = info.stopCode;
+              step.arrivals = { buses: info.buses, reason: info.reason, at: Date.now() };
+              step.crowdLevel = info.crowdLevel;
+              step.accessible = info.accessible;
             }
             return;
           }
           if (byCode && leg.fromStopCode) {
             const level = byCode.get(String(leg.fromStopCode).toUpperCase());
-            if (level) leg.crowdLevel = level;
+            if (level) {
+              leg.crowdLevel = level;
+              if (step) step.crowdLevel = level;
+            }
           }
         })
       );
@@ -87,6 +110,7 @@ async function enrich(options) {
 }
 
 function noteFor(opt) {
+  if (opt.walkOnly) return "OneMap returned walking only for this departure. Try another departure time or check transit service hours.";
   const bits = [];
   bits.push(opt.transfers === 0 ? "No transfers" : `${opt.transfers} transfer${opt.transfers === 1 ? "" : "s"}`);
   if (opt.walkSecs) bits.push(`${Math.round(opt.walkSecs / 60)} min on foot`);
@@ -100,6 +124,7 @@ function tagsFor(options, modeTag) {
   const fastest = options.reduce((a, b) => (a.mins <= b.mins ? a : b), options[0]);
   return options.map((opt, i) => {
     let tag = i === 0 ? modeTag : opt === fastest ? "Fastest" : opt === cheapest ? "Cheapest" : opt.transfers === 0 ? "Direct" : "Alternative";
+    if (opt.walkOnly) tag = "Walking only";
     return { ...opt, tag, tagTone: i === 0 ? "soft" : i === 1 ? "outline" : "neutral" };
   });
 }
@@ -134,7 +159,8 @@ async function cycleOption(start, end) {
 }
 
 export default async function handler(req, res) {
-  const q = req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
+  res.setHeader("Cache-Control", "private, no-store");
+  const q = req.body && typeof req.body === "object" ? req.body : req.query ?? Object.fromEntries(new URL(req.url, "http://localhost").searchParams);
   const { from, to, mode = "fast", destName = "", date, time } = q;
   if (!from || !to) {
     res.status(400).json({ error: "Missing from or to (lat,lng)" });
@@ -178,7 +204,6 @@ export default async function handler(req, res) {
     await enrich(normalized);
     const ranked = normalized.sort(spec.rank).slice(0, 3).map((opt) => ({ ...opt, note: noteFor(opt) }));
 
-    res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=60");
     res.status(200).json({ mode, options: tagsFor(ranked, spec.tag) });
   } catch (err) {
     const msg = String(err && err.message ? err.message : err);
@@ -188,6 +213,14 @@ export default async function handler(req, res) {
       res.status(200).json({ mode, options: [] });
       return;
     }
+    // Recorded itineraries go through exactly the same mapping as live ones,
+    // so a demo shows the real card, marked as recorded.
+    const recorded = (recordedRoute.plan.itineraries || [])
+      .map((itin) => normalizeItinerary(itin, ""))
+      .filter(Boolean)
+      .slice(0, 3)
+      .map((opt) => ({ ...opt, recorded: true, tag: "Recorded example", note: "Sample itinerary from a different journey. Preview only; not directions to your destination." }));
+    if (!spec.cycle && serveRecorded(res, { mode, options: recorded })) return;
     res.status(msg.includes("not configured") || msg.includes("credentials") ? 501 : 502).json({ error: msg });
   }
 }

@@ -2,6 +2,7 @@
 // turn-by-turn steps the UI renders. Kept separate from the endpoint so the
 // mapping can be tested against recorded fixtures without any network.
 import { decodePolyline } from "./polyline.js";
+import { singaporeClock } from "../../src/lib/display.js";
 
 const CROWD_SCORE = { light: 0, moderate: 1, busy: 2 };
 
@@ -17,12 +18,12 @@ export function legLabel(leg) {
 
 export function clockFrom(ms) {
   if (!ms) return "";
-  const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return singaporeClock(ms);
 }
 
 function fareOf(itin) {
   const raw = itin.fare ?? (itin.fareProducts && itin.fareProducts[0] && itin.fareProducts[0].amount);
+  if (raw == null || raw === "") return null;
   const n = Number(raw);
   return isFinite(n) ? n : null;
 }
@@ -67,9 +68,13 @@ export function stepsOf(itin, destName) {
       const last = i === legs.length - 1;
       const metres = Math.round(leg.distance || 0);
       steps.push({
+        legIndex: i,
+        mode: "WALK",
         icon: last ? "flag" : "footprints",
         title: last ? `Walk to ${destName || toName}` : `Walk to ${toName}`,
-        detail: metres ? `${metres} m on foot` : "Walk",
+        detail: metres ? `${metres >= 1000 ? `${(metres / 1000).toFixed(1)} km` : `${metres} m`} on foot` : "Walk",
+        toName: last ? destName || toName : toName,
+        metres,
         secs,
       });
       return;
@@ -79,13 +84,26 @@ export function stepsOf(itin, destName) {
     const alight = toName || stops[stops.length - 1] || "";
     const label = legLabel(leg);
     const headsign = leg.headsign || leg.tripHeadsign || alight;
+    // The stops you ride: every intermediate stop plus the one you get off at.
+    // The boarding stop is where you already are, so it isn't counted.
+    const ridden = stops.concat(alight ? [alight] : []);
     steps.push({
+      legIndex: i,
+      mode,
       icon: mode === "BUS" ? "bus" : "train-front",
+      label,
       title: `Board ${label}${headsign ? ` toward ${headsign}` : ""}`,
-      detail: `${stops.length + 1} stop${stops.length === 0 ? "" : "s"} · alight at ${alight}`,
-      stops: stops.concat(alight ? [alight] : []),
+      detail: `${ridden.length} stop${ridden.length === 1 ? "" : "s"} · alight at ${alight}`,
+      stops: ridden,
+      stopCount: ridden.length,
       alight,
       boardStopCode: (leg.from && (leg.from.stopCode || leg.from.stopId)) || null,
+      // The crowd feed is keyed by station code, so a leg needs the codes it
+      // passes through, not just the names it shows.
+      alightStopCode: (leg.to && (leg.to.stopCode || leg.to.stopId)) || null,
+      stopCodes: (leg.intermediateStops || []).map((st) => st.stopCode || st.stopId || null).filter(Boolean),
+      boardLat: (leg.from && (leg.from.lat ?? leg.from.latitude)) ?? null,
+      boardLng: (leg.from && (leg.from.lon ?? leg.from.lng ?? leg.from.longitude)) ?? null,
       service: mode === "BUS" ? String(leg.routeShortName || leg.route || "") : null,
       from: fromName,
       secs,
@@ -115,12 +133,18 @@ export function normalizeItinerary(itin, destName) {
     transfers: itin.transfers != null ? itin.transfers : Math.max(0, legs.length - 1),
     walkOnly,
     legs: walkOnly ? [`WALK ${((itin.walkDistance || 0) / 1000).toFixed(1)} km`] : legs.map(legLabel),
+    // legIndex ties each transit leg back to its step, so enrichment fetched
+    // once (crowding, arrivals) can be written onto both.
     transitLegs: legs.map((leg) => ({
+      legIndex: allLegs.indexOf(leg),
       label: legLabel(leg),
       mode: String(leg.mode || "").toUpperCase(),
       service: String(leg.routeShortName || leg.route || ""),
       fromName: (leg.from && leg.from.name) || "",
       fromStopCode: (leg.from && (leg.from.stopCode || leg.from.stopId)) || null,
+      toStopCode: (leg.to && (leg.to.stopCode || leg.to.stopId)) || null,
+      fromLat: (leg.from && (leg.from.lat ?? leg.from.latitude)) ?? null,
+      fromLng: (leg.from && (leg.from.lon ?? leg.from.lng ?? leg.from.longitude)) ?? null,
     })),
     geometry: path.coords,
     legSpans: path.spans,

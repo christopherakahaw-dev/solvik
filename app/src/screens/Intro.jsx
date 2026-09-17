@@ -1,4 +1,5 @@
-import { Icon, Button, SearchField, SectionLabel } from "../design-system";
+import { Icon, Button, SectionLabel } from "../design-system";
+import { PlacePicker } from "../components/PlacePicker";
 import { styleText } from "../lib/styleText";
 
 export function Intro({ v }) {
@@ -66,19 +67,16 @@ export function Intro({ v }) {
           <div style={{ animation: "sv-rise 320ms cubic-bezier(.16,1,.3,1) both" }}>
             <div style={{ font: "var(--weight-heavy) 30px/1.15 var(--font-display)", letterSpacing: "-.028em", color: "var(--text-strong)", textWrap: "pretty" }}>Where do you go most?</div>
             <div style={{ font: "var(--type-body)", color: "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>Two or three places is enough. Solvik watches the lines between them.</div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 9, marginTop: 14, padding: "11px 12px", borderRadius: "var(--radius-card)", background: "var(--accent-soft)", color: "var(--text-body)" }}>
+              <Icon name="shield-check" size={17} style={{ flex: "none", marginTop: 1 }} />
+              <span style={{ font: "var(--type-caption)", textWrap: "pretty" }}>Selected places stay in this browser. Search text goes to OneMap while you search, and coordinates only when you ask for a route. Location remains off until you ask to use it.</span>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 22 }}>
               {v.introPlaces.map((f, i) => (
                 <div key={i}>
                   <SectionLabel>{f.label}</SectionLabel>
                   <div style={{ marginTop: 8 }}>
-                    <SearchField value={f.value} placeholder={f.placeholder} icon={f.icon} onChange={f.set} />
-                  </div>
-                  <div style={{ display: "flex", gap: 7, marginTop: 9, flexWrap: "wrap" }}>
-                    {f.suggestions.map((g, gi) => (
-                      <button key={gi} onClick={g.pick} style={styleText(g.style)}>
-                        {g.label}
-                      </button>
-                    ))}
+                    <PlacePicker value={f.value} placeholder={f.placeholder} icon={f.icon} onChange={f.set} onDraftChange={f.draft} suggestions={f.suggestions} />
                   </div>
                 </div>
               ))}
@@ -105,7 +103,8 @@ export function Intro({ v }) {
       </div>
 
       <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 9, paddingTop: 14 }}>
-        <Button size="lg" fullWidth onClick={v.introNext}>
+        {v.introInvalid && <div className="sv-place-detail" role="status">Select a search result or clear the unfinished address.</div>}
+        <Button size="lg" fullWidth disabled={v.introInvalid} onClick={v.introNext}>
           {v.introCta}
         </Button>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

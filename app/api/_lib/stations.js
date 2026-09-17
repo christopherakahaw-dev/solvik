@@ -1,10 +1,32 @@
 // Resolves MRT station codes (the only identifier LTA's crowd feed returns)
-// to a name and coordinates, using OneMap search as the authority. Nothing is
-// hardcoded: a code that can't be resolved is dropped rather than guessed.
+// to a name and coordinates.
+//
+// The positions come from OneMap, but they are resolved once and kept in
+// stations.json rather than looked up per request: LTA publishes ~224 codes,
+// and searching for every one of them inside a single request is both slow and
+// unreliable — a live probe found 218 of 224 being dropped, which showed on the
+// map as six crowding circles instead of a network. Station geography is stable
+// reference data, so caching it is honest; crowd levels never are, and are
+// still read live every time.
+//
+// Run `npm run stations` to build or refresh the file. Codes missing from it
+// still fall back to a live search, and a code that resolves to nothing is
+// dropped rather than guessed.
 import { oneMapSearch } from "./onemap.js";
+import directory from "./stations.json" with { type: "json" };
 
 const cache = new Map(); // code -> { code, name, lat, lng } | null
 const CONCURRENCY = 6;
+
+function fromDirectory(code) {
+  const hit = directory && directory[code];
+  if (!hit || !isFinite(hit.lat) || !isFinite(hit.lng)) return null;
+  return { code, name: hit.name, lat: hit.lat, lng: hit.lng };
+}
+
+export function directorySize() {
+  return Object.keys(directory || {}).length;
+}
 
 function pickMatch(code, results) {
   const upper = code.toUpperCase();
@@ -20,6 +42,11 @@ function pickMatch(code, results) {
 
 async function resolveOne(code) {
   if (cache.has(code)) return cache.get(code);
+  const known = fromDirectory(code);
+  if (known) {
+    cache.set(code, known);
+    return known;
+  }
   try {
     const results = await oneMapSearch(`${code} station`);
     const hit = pickMatch(code, results);
