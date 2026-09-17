@@ -249,6 +249,15 @@ export function PlanScreen({ v }) {
           {v.pwDetail && (
             <div style={{ font: "var(--type-body)", color: "var(--text-body)", marginTop: 6, textWrap: "pretty" }}>{v.pwDetail}</div>
           )}
+          {v.pwScheduled.map((item, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 9 }}>
+              <span style={{ flex: "none", marginTop: 2, color: "var(--text-accent)" }}><Icon name="calendar-clock" size={14} /></span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)", textWrap: "pretty" }}>{item.label}</span>
+                {item.detail && <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 2, textWrap: "pretty" }}>{item.detail}</span>}
+              </span>
+            </div>
+          ))}
           <div style={{ font: "var(--type-caption)", color: v.pwBlocking ? "var(--crowd-busy)" : "var(--text-muted)", marginTop: 10, textWrap: "pretty" }}>{v.pwNote}</div>
           {v.pwHasAction && (
             <div style={{ marginTop: 13 }}>

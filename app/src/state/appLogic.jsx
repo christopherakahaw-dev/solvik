@@ -7,7 +7,7 @@ import { getNearestStop } from "../api/stop";
 import { getArrivals } from "../api/arrivals";
 import { arrivalKeys, detailRows } from "../lib/tripDetail";
 import { commuteOutlook, outlookCodes } from "../lib/outlook";
-import { worksLabel, worksDetail, mitigationsFor } from "../lib/planned";
+import { worksLabel, worksDetail, mitigationsFor, roadWorksOnRoute, roadWorkLabel, roadWorkDetail, busChangesOnRoute, busChangeLabel, busChangeDetail } from "../lib/planned";
 import { loadJourneys, recordJourney, completeJourney, clearJourneys, journeySummary, seedSampleJourneys } from "../lib/journeys";
 import { inferCommutes, commuteFromPattern, evidenceLine, staleCommutes, RETIRE_MS } from "../lib/patterns";
 import { canonicalLine, sameLine } from "../lib/lines";
@@ -101,7 +101,7 @@ export class AppLogic extends Component {
       ? (loadStored(ONBOARDED_KEY, false) ? "map" : "intro")
       : (this.props.user?.onboardingComplete ? "map" : "intro"),
     rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
-    planned: { works: [], pending: true, error: null },
+    planned: { works: [], roadWorks: [], busChanges: [], pending: true, error: null },
     weather: { nowcast: null, outlook: null, pending: true, error: null },
     reportGroups: { groups: [], configured: true, pending: true, error: null },
     myReports: [],
@@ -321,8 +321,8 @@ export class AppLogic extends Component {
   // three requests an hour for an answer that does not move.
   loadPlanned = () => {
     getPlannedWorks()
-      .then(({ works, recorded }) => this.setState({ planned: { works, recorded, pending: false, error: null } }))
-      .catch((err) => this.setState({ planned: { works: [], pending: false, error: String(err.message || err) } }));
+      .then((data) => this.setState({ planned: { ...data, pending: false, error: null } }))
+      .catch((err) => this.setState({ planned: { works: [], roadWorks: [], busChanges: [], pending: false, error: String(err.message || err) } }));
   };
 
   // The planned works that fall on the stations this journey actually passes
@@ -426,6 +426,20 @@ export class AppLogic extends Component {
         this.flash(String(err.message || err));
       });
   };
+
+  // Road works and bus route changes that fall on this journey's own bus legs.
+  // Matched by the road a stop sits on and by the service ridden — never by
+  // proximity, for the same reason a lift is matched by station.
+  roadEventsOnRoute(itinerary) {
+    const planned = this.state.planned || {};
+    if (!itinerary) return { roadWorks: [], busChanges: [] };
+    const roads = (itinerary.steps || []).flatMap((step) => [step.road, step.fromRoad, step.toRoad]).filter(Boolean);
+    const services = (itinerary.transitLegs || []).filter((l) => l.mode === "BUS").map((l) => l.service);
+    return {
+      roadWorks: roadWorksOnRoute(planned.roadWorks, roads),
+      busChanges: busChangesOnRoute(planned.busChanges, services),
+    };
+  }
 
   // An alert is actionable when it names a rail line you use and there is a
   // commute with a known destination to re-plan towards.
@@ -749,7 +763,7 @@ export class AppLogic extends Component {
       rrHas: false, rrPending: false, rrLine: "", rrTitle: "", rrDetail: "", rrCaveat: "", rrAdvice: "",
       mitHas: false, mitLines: [], mitNote: "",
       wxHas: false, wxTitle: "", wxDetail: "", wxNote: "", wxWet: false,
-      pwHas: false, pwTitle: "", pwDetail: "", pwNote: "", pwBlocking: false, pwAction: () => {}, pwHasAction: false, pwActionLabel: "",
+      pwHas: false, pwTitle: "", pwDetail: "", pwNote: "", pwBlocking: false, pwAction: () => {}, pwHasAction: false, pwActionLabel: "", pwScheduled: [],
     };
     if (!next) {
       return {
@@ -790,6 +804,11 @@ export class AppLogic extends Component {
     // stairs and a blocked journey if you can't, and the commute already says
     // which of those you are.
     const works = this.worksOnRoute(itinerary);
+    const roadEvents = this.roadEventsOnRoute(itinerary);
+    const scheduled = [
+      ...roadEvents.roadWorks.map((w) => ({ label: roadWorkLabel(w), detail: roadWorkDetail(w) })),
+      ...roadEvents.busChanges.map((c) => ({ label: busChangeLabel(c), detail: busChangeDetail(c) })),
+    ];
     // Step-free is the commute's own setting or the persona's — either is a
     // reason to treat a lift outage as blocking.
     const stepFree = next.mode === "Step-free" || personaOf((s.routingPreferences || {}).persona).liftOutageBlocks;
@@ -971,15 +990,31 @@ export class AppLogic extends Component {
 
       // Planned works — scheduled, not a fault, so stated separately from the
       // disruption above rather than blended into it.
-      pwHas: works.length > 0,
+      pwHas: works.length > 0 || scheduled.length > 0,
+      // Road works and bus route changes sit alongside lift maintenance: all
+      // three are scheduled rather than faults, and the brief treats that
+      // distinction as the differentiator.
+      pwScheduled: scheduled.slice(0, 3),
       pwBlocking: stepFree && works.length > 0,
-      pwTitle: works.length === 1 ? worksLabel(works[0]) : `Lifts out at ${works.length} stations on your way`,
+      pwTitle: works.length === 1
+        ? worksLabel(works[0])
+        : works.length > 1
+          ? `Lifts out at ${works.length} stations on your way`
+          : scheduled.length === 1
+            ? scheduled[0].label
+            : `${scheduled.length} planned changes on your way`,
       pwDetail: works.length === 1
         ? worksDetail(works[0])
-        : works.map((w) => w.stationName || w.stationCode).join(", "),
+        : works.length > 1
+          ? works.map((w) => w.stationName || w.stationCode).join(", ")
+          : scheduled.length === 1
+            ? scheduled[0].detail
+            : "",
       // The same feed row, weighted by who is reading it. LTA publishes which
       // lift, never for how long, so neither version claims a duration.
-      pwNote: `${reasonFor(persona.id, "lift", { blocking: stepFree })} LTA publishes which lift, not how long it will be out.`,
+      pwNote: works.length
+        ? `${reasonFor(persona.id, "lift", { blocking: stepFree })} LTA publishes which lift, not how long it will be out.`
+        : "Scheduled by LTA and published in advance, so it can be planned around.",
       pwHasAction: !!(works.length && t.ll),
       pwActionLabel: works.length === 1 ? `Route around ${works[0].stationName || works[0].stationCode}` : "Route around these stations",
       pwAction: () => {
@@ -1775,7 +1810,10 @@ export class AppLogic extends Component {
         return Promise.resolve();
       }
       this._planOrigin = origin;
-      this.setState({ trips: { key, options: [], pending: true, error: null } });
+      // Hold on to what was being shown, so an avoid-route can be drawn against
+      // the route it replaced rather than appearing out of nowhere.
+      const before = !tripAvoid && !(tripAvoidStations || []).length ? null : (this.state.trips.options || [])[0] || this.state.tripBefore || null;
+      this.setState({ trips: { key, options: [], pending: true, error: null }, tripBefore: before });
       return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid, avoidStations: tripAvoidStations })
       .then((options) => {
         if (this.state.dest !== dest || this.state.tripMode !== tripMode || this.state.trips.key !== key) return;
@@ -2445,6 +2483,20 @@ export class AppLogic extends Component {
       // No destination, no line: the map must not keep drawing the plan you
       // just backed out of.
       routeCoords: dest ? (tripOptions[s.tripRoute] || tripOptions[0] || {}).geometry || [] : [],
+      // When the shown route avoids something, the route it replaced is drawn
+      // faint behind it: 3.2.3 wants the trade-off visible, not asserted.
+      compareRouteCoords: dest && (s.tripAvoid || (s.tripAvoidStations || []).length) ? ((s.tripBefore && s.tripBefore.geometry) || []) : [],
+      // Which spans of the shown route are disrupted. A leg on a line named in
+      // a current alert is drawn in the fault colour over the route.
+      affectedSpans: (() => {
+        const option = dest ? tripOptions[s.tripRoute] || tripOptions[0] : null;
+        if (!option || !option.legSpans) return [];
+        const hit = (label) => ((s.faults && s.faults.items) || []).some((f) => canonicalLine(f.line) && sameLine(label, f.line));
+        return (option.transitLegs || [])
+          .filter((leg) => hit(leg.label))
+          .map((leg) => option.legSpans[leg.legIndex])
+          .filter(Boolean);
+      })(),
       userAccuracy: s.userLoc ? s.userAccuracy : null,
       recenterToken: s.recenterToken || 0,
       locating: !!s.locating,

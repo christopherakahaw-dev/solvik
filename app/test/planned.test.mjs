@@ -171,3 +171,83 @@ test("alerts without mitigation drop out of the list", () => {
   assert.equal(out.length, 2);
   assert.deepEqual(out.map((m) => m.line), ["NSL", "CCL"]);
 });
+
+// --- The other half of "planned": road works and route changes ---------------
+import { parseRoadWorks, currentRoadWorks, roadWorksOnRoute, roadWorkLabel, roadWorkDetail,
+         parseBusRouteChanges, busChangesOnRoute, busChangeLabel, busChangeDetail } from "../src/lib/planned.js";
+
+const DAY = 86400000;
+const NOW = Date.UTC(2026, 8, 17, 9, 0, 0);
+const work = (extra = {}) => ({ EventID: "RW1", RoadName: "BISHAN ROAD", Other: "Resurfacing", StartDate: new Date(NOW - DAY).toISOString(), EndDate: new Date(NOW + 7 * DAY).toISOString(), ...extra });
+
+test("a road work keeps its road, dates and description", () => {
+  const [w] = parseRoadWorks({ value: [work()] });
+  assert.equal(w.kind, "roadwork");
+  assert.equal(w.road, "BISHAN ROAD");
+  assert.equal(w.other, "Resurfacing");
+  assert.ok(w.startsAt < NOW && w.endsAt > NOW);
+});
+
+test("openings are tagged apart from works", () => {
+  const [o] = parseRoadWorks({ value: [work()] }, "roadopening");
+  assert.equal(o.kind, "roadopening");
+  assert.match(roadWorkLabel(o), /^Road opening on/);
+  assert.match(roadWorkLabel(parseRoadWorks({ value: [work()] })[0]), /^Road works on/);
+});
+
+test("a work with no road is dropped", () => {
+  assert.equal(parseRoadWorks({ value: [work({ RoadName: "" })] }).length, 0);
+  assert.deepEqual(parseRoadWorks(null), []);
+});
+
+test("finished works and ones far in the future are not current", () => {
+  const rows = [
+    work({ EventID: "past", EndDate: new Date(NOW - DAY).toISOString() }),
+    work({ EventID: "soon", StartDate: new Date(NOW + 2 * 3600_000).toISOString(), EndDate: new Date(NOW + 5 * DAY).toISOString() }),
+    work({ EventID: "far", StartDate: new Date(NOW + 30 * DAY).toISOString(), EndDate: new Date(NOW + 40 * DAY).toISOString() }),
+  ];
+  const out = currentRoadWorks(parseRoadWorks({ value: rows }), NOW);
+  assert.deepEqual(out.map((w) => w.id), ["soon"], "only what is running now or starting within the day");
+});
+
+test("works are matched to the roads the journey actually uses", () => {
+  const works = parseRoadWorks({ value: [work()] });
+  assert.equal(roadWorksOnRoute(works, ["BISHAN ROAD"]).length, 1);
+  assert.equal(roadWorksOnRoute(works, ["bishan road"]).length, 1, "case does not matter");
+  assert.equal(roadWorksOnRoute(works, ["ORCHARD ROAD"]).length, 0, "a road you don't use is not your problem");
+  assert.equal(roadWorksOnRoute(works, []).length, 0);
+});
+
+test("a work already under way says when it ends, not when it started", () => {
+  const [w] = parseRoadWorks({ value: [work()] });
+  assert.match(roadWorkDetail(w, NOW), /Until/);
+  const [later] = parseRoadWorks({ value: [work({ StartDate: new Date(NOW + 2 * 3600_000).toISOString() })] });
+  assert.match(roadWorkDetail(later, NOW), /Starts/);
+});
+
+test("one service changing at many stops is one change", () => {
+  const out = parseBusRouteChanges({ value: [
+    { ServiceNo: "410", EffectiveDate: new Date(NOW + 10 * DAY).toISOString() },
+    { ServiceNo: "410", EffectiveDate: new Date(NOW + 10 * DAY).toISOString() },
+    { ServiceNo: "851", EffectiveDate: new Date(NOW + 3 * DAY).toISOString() },
+  ] });
+  assert.equal(out.length, 2);
+  assert.equal(out.find((c) => c.service === "410").stops, 2);
+});
+
+test("only changes to services you ride, and only ones still ahead", () => {
+  const changes = parseBusRouteChanges({ value: [
+    { ServiceNo: "410", EffectiveDate: new Date(NOW + 10 * DAY).toISOString() },
+    { ServiceNo: "851", EffectiveDate: new Date(NOW - 10 * DAY).toISOString() },
+    { ServiceNo: "999", EffectiveDate: new Date(NOW + 5 * DAY).toISOString() },
+  ] });
+  const out = busChangesOnRoute(changes, ["410", "851"], NOW);
+  assert.deepEqual(out.map((c) => c.service), ["410"], "851's change already happened; 999 is not ridden");
+});
+
+test("a route change says its date, because being ahead of time is the point", () => {
+  const [c] = parseBusRouteChanges({ value: [{ ServiceNo: "410", EffectiveDate: new Date(NOW + 10 * DAY).toISOString() }] });
+  assert.equal(busChangeLabel(c), "Bus 410 route changes");
+  assert.match(busChangeDetail(c), /From /);
+  assert.match(busChangeDetail(c), /before it takes effect/);
+});

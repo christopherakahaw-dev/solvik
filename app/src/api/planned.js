@@ -5,5 +5,10 @@ export async function getPlannedWorks() {
   const res = await fetch("/api/planned");
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Couldn't check for planned works");
-  return { works: data.works || [], recorded: !!data.recorded };
+  return {
+    works: data.works || [],
+    roadWorks: data.roadWorks || [],
+    busChanges: data.busChanges || [],
+    recorded: !!data.recorded,
+  };
 }

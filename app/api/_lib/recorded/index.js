@@ -133,6 +133,21 @@ export function recordedOutlook(now = Date.now()) {
   return { data: { records: [{ general: { forecast: { text: "Thundery Showers" } }, periods }] } };
 }
 
+// Road works on Bishan Road, which the recorded commute's bus legs run along,
+// and a bus route change published ahead of its date.
+export const recordedRoadWorks = {
+  value: [
+    { EventID: "RW-REC-1", RoadName: "BISHAN ROAD", Other: "Resurfacing works, one lane closed", StartDate: new Date(Date.now() - 3 * 86400000).toISOString(), EndDate: new Date(Date.now() + 14 * 86400000).toISOString(), SvcDept: "LTA" },
+  ],
+};
+
+export const recordedBusRouteChanges = {
+  value: [
+    { ServiceNo: "410", EffectiveDate: new Date(Date.now() + 10 * 86400000).toISOString(), Operator: "SBST" },
+    { ServiceNo: "410", EffectiveDate: new Date(Date.now() + 10 * 86400000).toISOString(), Operator: "SBST" },
+  ],
+};
+
 export const recordedBusStops = [
   { BusStopCode: "53061", RoadName: "Bishan Rd", Description: "Bishan Stn Exit C", Latitude: 1.35072, Longitude: 103.84853 },
   { BusStopCode: "53069", RoadName: "Bishan Rd", Description: "Blk 511", Latitude: 1.35548, Longitude: 103.84796 },

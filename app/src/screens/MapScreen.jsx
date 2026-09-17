@@ -10,6 +10,8 @@ export function MapScreen({ v }) {
         center={v.mapCenter}
         zoom={12}
         route={v.routeCoords}
+        compareRoute={v.compareRouteCoords}
+        affected={v.affectedSpans}
         marker={v.userMarker}
         markerAccuracy={v.userAccuracy}
         origin={v.routeOriginCoord}

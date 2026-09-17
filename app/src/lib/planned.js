@@ -18,6 +18,13 @@
 // fine for production. Same direction as itinerary.js importing display.js.
 
 export const FACILITIES_PATHS = ["v2/FacilitiesMaintenance", "FacilitiesMaintenance"];
+// The other half of "planned": works and route changes published before they
+// bite. RoadWorks and RoadOpenings are the brief's own words for "the planned
+// event half of the brief"; PlannedBusRoutes is the only feed here that is
+// genuinely ahead of time, carrying changes before their effective date.
+export const ROADWORK_PATHS = ["RoadWorks"];
+export const ROADOPENING_PATHS = ["RoadOpenings"];
+export const BUSROUTE_PATHS = ["PlannedBusRoutes"];
 
 const upper = (v) => String(v || "").trim().toUpperCase();
 
@@ -134,4 +141,102 @@ export function mitigationOf(alert, nameFor = (code) => code) {
 // Across every current alert, the mitigations that touch a line this trip rides.
 export function mitigationsFor(alerts, nameFor) {
   return (alerts || []).map((a) => mitigationOf(a, nameFor)).filter(Boolean);
+}
+
+// --- Road works and openings --------------------------------------------------
+//
+// These affect a bus leg, not a station, so they are matched to the roads a
+// journey's bus legs actually use rather than to anything nearby. A road work
+// two streets away is not this commuter's problem.
+
+const dateOf = (raw) => {
+  const parsed = Date.parse(String(raw || ""));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+export function parseRoadWorks(payload, kind = "roadwork") {
+  const rows = (payload && (payload.value || payload.Value)) || [];
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      kind,
+      id: String(row.EventID || row.EventId || "").trim() || null,
+      road: String(row.RoadName || "").trim(),
+      other: String(row.Other || "").trim(),
+      startsAt: dateOf(row.StartDate),
+      endsAt: dateOf(row.EndDate),
+      svcDept: String(row.SvcDept || "").trim(),
+    }))
+    .filter((w) => w.road);
+}
+
+// Only the ones running now, or starting soon enough to matter to a trip today.
+export function currentRoadWorks(works, now = Date.now(), aheadMs = 24 * 60 * 60 * 1000) {
+  return (works || []).filter((w) => {
+    if (w.endsAt && w.endsAt < now) return false;
+    if (w.startsAt && w.startsAt > now + aheadMs) return false;
+    return true;
+  });
+}
+
+// A bus leg names the roads it runs along only loosely, so matching is by road
+// name against the stops the leg uses — never by distance, for the same reason
+// lifts are matched by station rather than proximity.
+export function roadWorksOnRoute(works, roadNames) {
+  const wanted = new Set((roadNames || []).map((r) => String(r).trim().toUpperCase()).filter(Boolean));
+  if (!wanted.size) return [];
+  return (works || []).filter((w) => wanted.has(w.road.toUpperCase()));
+}
+
+export function roadWorkLabel(work) {
+  if (!work) return "";
+  const what = work.kind === "roadopening" ? "Road opening" : "Road works";
+  return `${what} on ${work.road}`;
+}
+
+export function roadWorkDetail(work, now = Date.now()) {
+  if (!work) return "";
+  const bits = [work.other].filter(Boolean);
+  if (work.startsAt && work.startsAt > now) {
+    bits.push(`Starts ${new Date(work.startsAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}.`);
+  } else if (work.endsAt) {
+    bits.push(`Until ${new Date(work.endsAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}.`);
+  }
+  return bits.join(" ");
+}
+
+// --- Bus route changes, published in advance ---------------------------------
+
+export function parseBusRouteChanges(payload) {
+  const rows = (payload && (payload.value || payload.Value)) || [];
+  const byService = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const service = String(row.ServiceNo || "").trim();
+    if (!service) return;
+    const effective = dateOf(row.EffectiveDate);
+    const entry = byService.get(service) || { kind: "busroute", service, effectiveAt: effective, operator: String(row.Operator || "").trim(), stops: 0 };
+    entry.stops += 1;
+    if (effective && (!entry.effectiveAt || effective < entry.effectiveAt)) entry.effectiveAt = effective;
+    byService.set(service, entry);
+  });
+  return [...byService.values()];
+}
+
+// Changes to services this journey actually rides, and only ones still ahead.
+export function busChangesOnRoute(changes, services, now = Date.now()) {
+  const wanted = new Set((services || []).map((s) => String(s).trim()).filter(Boolean));
+  if (!wanted.size) return [];
+  return (changes || []).filter((c) => wanted.has(c.service) && (!c.effectiveAt || c.effectiveAt >= now));
+}
+
+export function busChangeLabel(change) {
+  if (!change) return "";
+  return `Bus ${change.service} route changes`;
+}
+
+export function busChangeDetail(change) {
+  if (!change) return "";
+  if (!change.effectiveAt) return "LTA has published a change to this service.";
+  const when = new Date(change.effectiveAt).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  // Ahead of time is the whole point of this feed — say the date.
+  return `From ${when}. Published before it takes effect, so you can plan around it.`;
 }
