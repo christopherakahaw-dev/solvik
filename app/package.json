@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@meteocons/svg": "^0.1.0",
+    "@supabase/supabase-js": "^2.116.0",
     "leaflet": "^1.9.4",
     "lucide": "^1.46.0",
     "react": "^19.2.8",

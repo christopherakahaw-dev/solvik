@@ -34,8 +34,14 @@ export const DEFAULT_PREFERENCES = {
   showSavedPlaces: true,
 };
 
+let activeScope = "";
+
+export function setStorageScope(scope) {
+  activeScope = String(scope || "").replace(/[^a-zA-Z0-9_-]/g, "");
+}
+
 export function storageKey(key) {
-  return key;
+  return activeScope ? `${key}:account:${activeScope}` : key;
 }
 
 export function loadStored(key, fallback) {

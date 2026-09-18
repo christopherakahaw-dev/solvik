@@ -11,7 +11,10 @@ import { TabBar } from "./screens/TabBar";
 import { ViewportShell } from "./components/ViewportShell";
 import { AppMenu } from "./components/AppMenu";
 import { SolvikBrand } from "./components/SolvikBrand";
+import { AuthScreen } from "./screens/AuthScreen";
 import { AccountScreen } from "./screens/AccountScreen";
+import { useAuth } from "./auth/AuthContext";
+import { setStorageScope } from "./lib/storage";
 import "./app.css";
 
 function ResponsivePageHeader({ v }) {
@@ -45,7 +48,7 @@ function ResponsivePageHeader({ v }) {
   );
 }
 
-class LocalApp extends AppLogic {
+class AuthenticatedApp extends AppLogic {
   render() {
     const v = this.renderVals();
     return (
@@ -90,6 +93,27 @@ class LocalApp extends AppLogic {
   }
 }
 
+function LoadingScreen() {
+  return (
+    <ViewportShell fluid>
+      <div className="sv-auth-screen" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="sv-opening-lockup" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, color: "var(--text-muted)" }} role="status">
+          <SolvikBrand compact className="is-loading" />
+          <span style={{ font: "var(--type-body-strong)" }}>Opening Solvik…</span>
+        </div>
+      </div>
+    </ViewportShell>
+  );
+}
+
 export function App() {
-  return <LocalApp />;
+  const { user, loading, recovery, wantsAuth, completeOnboarding } = useAuth();
+  if (loading) return <LoadingScreen />;
+  // The account screen appears when it is asked for, or when a password reset
+  // link brings someone here. A first visit goes straight to the app as a
+  // guest: signing in is optional, and a credential form has no business being
+  // the first thing a stranger sees.
+  if (!user || recovery || wantsAuth) return <ViewportShell><AuthScreen /></ViewportShell>;
+  setStorageScope(user.isGuest ? "" : user.id);
+  return <AuthenticatedApp user={user} onOnboardingComplete={completeOnboarding} key={user.id} />;
 }

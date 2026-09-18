@@ -659,11 +659,12 @@ export function MapScreen({ v }) {
         </div>
       )}
 
-      {v.showMapAttrib && (
-        <div style={{ position: "absolute", left: 16, bottom: 92, font: "var(--weight-regular) 10px/1.3 var(--font-body)", color: "var(--sand-700)", textShadow: "0 1px 2px rgba(255,255,255,.9)" }}>
-          Map data © OneMap · Singapore Land Authority
-        </div>
-      )}
+      {/* No hardcoded map credit here. Leaflet's own attribution control already
+          renders one, so this drew a second, overlapping line — and it named
+          OneMap whatever was actually on screen. Once VITE_MAPTILER_KEY is set
+          the base is OpenStreetMap, and crediting SLA for OSM's data is both
+          false and a licence breach in the other direction. The control in
+          OneMapCanvas carries whichever base is live. */}
     </div>
   );
 }
