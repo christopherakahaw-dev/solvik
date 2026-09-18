@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
-// The demo, driven the way it is actually used: a cold browser, guest mode,
-// onboarding skipped, one tap on the seed button. Every other e2e file here
+// The demo, driven the way it is actually used: a cold browser, required local
+// onboarding, one tap on the seed button. Every other e2e file here
 // pre-seeds localStorage to get straight to the feature under test, which is
 // right for those tests and hides the thing this one is for — whether the
 // features are reachable at all by someone starting from nothing.
@@ -15,8 +15,12 @@ test("every headline feature is reachable from a cold start", async ({ page }) =
   };
 
   await page.goto("/");
-  await page.getByRole("button", { name: /Continue as guest/i }).click();
-  await page.getByRole("button", { name: /Skip for now/i }).click();
+  await page.getByRole("button", { name: "Choose a commuter" }).click();
+  await page.getByRole("button", { name: /^Rachel · fixed schedule/ }).click();
+  await page.getByRole("button", { name: /^Continue with Rachel/ }).click();
+  await page.getByRole("button", { name: "Review this setup" }).click();
+  await page.getByRole("button", { name: "Show my route" }).click();
+  await page.getByRole("button", { name: "Change destination", exact: true }).click();
   await page.getByRole("button", { name: "Plan", exact: true }).click();
   await page.waitForTimeout(1500);
 

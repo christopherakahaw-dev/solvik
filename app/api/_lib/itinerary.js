@@ -87,6 +87,16 @@ export function stepsOf(itin, destName) {
     // The stops you ride: every intermediate stop plus the one you get off at.
     // The boarding stop is where you already are, so it isn't counted.
     const ridden = stops.concat(alight ? [alight] : []);
+    const stopPoints = [leg.from, ...(leg.intermediateStops || []), leg.to]
+      .filter(Boolean)
+      .map((stop) => {
+        const ll = [Number(stop.lat ?? stop.latitude), Number(stop.lon ?? stop.lng ?? stop.longitude)];
+        return {
+          code: stop.stopCode || stop.stopId || null,
+          name: stop.name || "",
+          ll: ll.every(Number.isFinite) ? ll : null,
+        };
+      });
     steps.push({
       legIndex: i,
       mode,
@@ -102,6 +112,7 @@ export function stepsOf(itin, destName) {
       // passes through, not just the names it shows.
       alightStopCode: (leg.to && (leg.to.stopCode || leg.to.stopId)) || null,
       stopCodes: (leg.intermediateStops || []).map((st) => st.stopCode || st.stopId || null).filter(Boolean),
+      stopPoints,
       boardLat: (leg.from && (leg.from.lat ?? leg.from.latitude)) ?? null,
       boardLng: (leg.from && (leg.from.lon ?? leg.from.lng ?? leg.from.longitude)) ?? null,
       service: mode === "BUS" ? String(leg.routeShortName || leg.route || "") : null,

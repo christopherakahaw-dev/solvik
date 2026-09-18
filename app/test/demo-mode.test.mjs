@@ -109,11 +109,11 @@ test("demo mode never calls a paid API, even with a key configured", async () =>
   // The live call used to run first and the recorded verdict was only a
   // fallback, so a demo with a key set billed for every report filed on stage.
   process.env.VITE_DEMO_MODE = "1";
-  process.env.ANTHROPIC_API_KEY = "sk-ant-should-never-be-used";
+  process.env.GEMINI_API_KEY = "AIza-should-never-be-used";
   let called = false;
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
-    if (String(url).includes("api.anthropic.com")) called = true;
+    if (String(url).includes("generativelanguage.googleapis.com")) called = true;
     return { ok: false, status: 503, json: async () => ({}) };
   };
   try {
@@ -124,14 +124,14 @@ test("demo mode never calls a paid API, even with a key configured", async () =>
       status(code) { this.statusCode = code; return this; },
       json(body) { this.body = body; return this; },
     };
-    // No Supabase configured, so this stops at the 503 — which is after the
-    // point where the vision call would have been made if it were going to be.
+    // The request can fail its deterministic checks; it must still never make
+    // a paid vision call while demo mode is active.
     await handler({ method: "POST", headers: {}, body: { kind: "esc", stationCode: "NS17" } }, res);
-    assert.equal(called, false, "demo mode must not reach the Anthropic API");
+    assert.equal(called, false, "demo mode must not reach the Gemini API");
   } finally {
     globalThis.fetch = realFetch;
     delete globalThis.__viteDemo;
     delete process.env.VITE_DEMO_MODE;
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.GEMINI_API_KEY;
   }
 });

@@ -5,6 +5,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeItinerary } from "../api/_lib/itinerary.js";
 import { otpError, oneMapRoute } from "../api/_lib/onemap.js";
+import { tokenExpiresSoon } from "../api/_lib/onemapAuth.js";
 
 const realFetch = globalThis.fetch;
 
@@ -17,6 +18,15 @@ afterEach(() => {
 });
 
 const ptArgs = { start: "1.0,103.0", end: "1.1,103.1", date: "09-15-2026", time: "08:00:00" };
+
+test("an expired configured JWT is ignored before a route request", () => {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const expired = `${encode({ alg: "none" })}.${encode({ exp: 1 })}.signature`;
+  const current = `${encode({ alg: "none" })}.${encode({ exp: Math.floor(Date.now() / 1000) + 3600 })}.signature`;
+  assert.equal(tokenExpiresSoon(expired), true);
+  assert.equal(tokenExpiresSoon(current), false);
+  assert.equal(tokenExpiresSoon("opaque-token"), false);
+});
 
 test("a walk-only itinerary is a walking option, not a dropped result", () => {
   const opt = normalizeItinerary(

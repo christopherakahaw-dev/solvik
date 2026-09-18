@@ -6,7 +6,6 @@ import { test, expect } from "@playwright/test";
 
 async function openMap(page) {
   await page.addInitScript(() => {
-    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
   });

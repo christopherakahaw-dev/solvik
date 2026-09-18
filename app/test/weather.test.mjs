@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   conditionOf, isWet, parseNowcast, parseOutlook, regionFor,
-  forecastAt, nowcastAt, walkAdjustment, weatherLine, WET, SHOWERS, DRY,
+  forecastAt, nowcastAt, walkAdjustment, weatherLine, routeWeatherProfile, rankRoutesForWeather, weatherIconName, singaporeDayPhase, WET, SHOWERS, DRY,
 } from "../src/lib/weather.js";
 import { recordedNowcast, recordedOutlook } from "../api/_lib/recorded/index.js";
 
@@ -94,4 +94,52 @@ test("fair weather says nothing at all", () => {
   // A card that fires on every dry day is noise, and trains people to ignore it.
   assert.equal(weatherLine({ forecast: { condition: DRY, text: "Fair" }, walkSecs: 720 }), "");
   assert.equal(weatherLine({ forecast: null, walkSecs: 720 }), "");
+});
+
+test("the map weather icon follows the published condition", () => {
+  assert.equal(weatherIconName("Heavy Thundery Showers"), "cloud-lightning");
+  assert.equal(weatherIconName("Moderate Rain"), "cloud-rain");
+  assert.equal(weatherIconName("Partly Cloudy"), "cloud-sun");
+  assert.equal(weatherIconName("Fair (Day)"), "sun");
+  assert.equal(weatherIconName("Hazy"), "cloud-fog");
+  assert.equal(weatherIconName(""), "cloud-off");
+  assert.equal(weatherIconName("Partly Cloudy", "night"), "cloud-moon");
+  assert.equal(weatherIconName("Fair (Night)", "night"), "moon");
+});
+
+test("Singapore time selects day and night weather themes", () => {
+  assert.equal(singaporeDayPhase(Date.parse("2026-09-18T04:00:00Z")), "day");
+  assert.equal(singaporeDayPhase(Date.parse("2026-09-18T13:00:00Z")), "night");
+});
+
+test("rain can move a slightly slower route with less walking into first place", () => {
+  const nowcast = { areas: [
+    { name: "Start", ll: [1.3, 103.8], text: "Heavy Rain", condition: WET },
+    { name: "End", ll: [1.31, 103.81], text: "Heavy Rain", condition: WET },
+  ] };
+  const options = [
+    { mins: 20, walkSecs: 900, legs: ["EWL"] },
+    { mins: 22, walkSecs: 120, legs: ["EWL", "TEL"] },
+  ];
+  const ranked = rankRoutesForWeather(options, { nowcast, outlook: null, from: [1.3, 103.8], to: [1.31, 103.81], departureAt: Date.now() });
+  assert.equal(ranked[0].originalIndex, 1);
+  assert.equal(ranked[0].weather.wet, true);
+  assert.match(ranked[0].weather.detail, /walking may take/i);
+});
+
+test("dry weather preserves OneMap's route order and is still visible", () => {
+  const nowcast = { areas: [{ name: "City", ll: [1.3, 103.8], text: "Partly Cloudy", condition: DRY }] };
+  const options = [{ mins: 20, walkSecs: 900, legs: ["EWL"] }, { mins: 22, walkSecs: 60, legs: ["BUS 10"] }];
+  const ranked = rankRoutesForWeather(options, { nowcast, outlook: null, from: [1.3, 103.8], to: [1.31, 103.81], departureAt: Date.now() });
+  assert.equal(ranked[0].originalIndex, 0);
+  assert.equal(ranked[0].weather.title, "Partly Cloudy on this route");
+  assert.match(ranked[0].weather.detail, /No rain adjustment/i);
+});
+
+test("wet cycling is placed behind a usable transit route", () => {
+  const nowcast = { areas: [{ name: "City", ll: [1.3, 103.8], text: "Showers", condition: SHOWERS }] };
+  const options = [{ mins: 18, walkSecs: 0, legs: ["CYCLE 8 km"] }, { mins: 26, walkSecs: 180, legs: ["NEL"] }];
+  const ranked = rankRoutesForWeather(options, { nowcast, outlook: null, from: [1.3, 103.8], to: [1.31, 103.81], departureAt: Date.now() });
+  assert.equal(ranked[0].originalIndex, 1);
+  assert.match(ranked[1].weather.detail, /Cycling is deprioritised/i);
 });

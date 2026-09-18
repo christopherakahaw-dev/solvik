@@ -4,7 +4,6 @@ import { test, expect } from "@playwright/test";
 // different commuters. This drives that through the real UI.
 async function withCommute(page) {
   await page.addInitScript(() => {
-    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
       home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },

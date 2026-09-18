@@ -10,10 +10,10 @@ Technical detail: [`app/README.md`](app/README.md)
 
 ## 1. Who it is for
 
-**All three personas are supported, and the app says which one you are.** The
-Today tab carries a picker — *Fixed schedule*, *Flexible and multi-modal*,
-*Step-free access* — and it is read out of what onboarding already asks, so
-nobody answers the same question twice. It follows the account, not the device.
+**The mandatory intro starts with a real commuter and a real journey.** Rachel,
+Arjun and Mdm Lim are selectable scenarios, each with a saved origin,
+destination, schedule and route priority. The choice is saved on the current
+device and immediately opens that door-to-door route.
 
 That is not hedging. The same LTA row genuinely produces different advice:
 
@@ -24,9 +24,12 @@ That is not hedging. The same LTA row genuinely produces different advice:
 | Rain on the walking leg | route unchanged | route changes | route changes |
 | Crowded platform | quieter carriage | quieter carriage | step-free first |
 
-**The demo walks Mdm Lim end to end**, because hers is the journey the app
-serves best and the brief calls `FacilitiesMaintenance` "essential" to her.
-Spreading a five-minute demo across three personas would show none of them.
+**The full demo walks Rachel end to end:** Tampines to Raffles Place, leaving at
+07:40 for an 08:45 desk arrival. Her fixed deadline, EWL dependency and
+15-minute interruption threshold are all testable with the available feeds.
+Arjun and Mdm Lim remain useful preference previews, while the UI states the
+limits of bike-carriage, sheltered-path and day-before lift information rather
+than pretending those feeds exist.
 
 ## 2. The four scored words
 
@@ -81,7 +84,8 @@ own test file: `outlook.js` (journey × forecast → when to leave), `patterns.j
 is reading → what changes), `lines.js` (the line-code canon), `weather.js`,
 `planned.js`, `roadConditions.js`, `baseline.js`, `avoid.js`.
 
-Accounts and sync are Supabase, with row-level security on every table.
+Solvik is local-first: onboarding, preferences, watched commutes and learned
+journeys use browser storage and are not tied to an account.
 
 ## 4. Data used, and what each one changes
 
@@ -117,12 +121,12 @@ them.
 | "Busy at Bishan from 08:30" | `PCDForecast` for that station, read at the 30-minute interval the journey reaches it. A join, not a prediction — and never phrased finer than the feed's own resolution. |
 | "Leaving 20 min earlier would put you there while it's moderate" | The same forecast, re-read at shifted departure times (±10/20/30 min) in `outlook.js`. |
 | "52 min · 14 min longer · avoids NSL entirely" | Two OneMap itineraries, differenced. The 52 is OneMap's **timetable**, which does not know about the disruption — the card says so. |
-| "Reported by 4 commuters" | `count(distinct reporter)` over reports in the last 30 minutes, from the Supabase view. Distinct **accounts**, never submissions. |
+| A checked report | Deterministic location and time gates, plus an optional photo-consistency check; the result is stored only in this browser. |
 | "Free bus boarding at Yishun, Khatib" | Quoted verbatim from `AffectedSegments.FreePublicBus`. Not computed, so no caveat. |
 | "Your 12 min on foot will take about 4 min longer" | `walkSecs × 1.35` for heavy rain, `× 1.15` for showers. **These two multipliers are our own assumption, not measured** — see limitations. |
 | "Bishan Road is congested (10–19 km/h)" | `TrafficSpeedBands` band 2, with the feed's own published speed range. Never converted into minutes. |
 | "236 tests" | `npm test` in `app/`. 33 browser tests: `npx playwright test`. |
-| Points in the wallet | Summed from reports you filed that were corroborated. The **vouchers are sample data** and labelled as such. |
+| Points in the wallet | Summed from checked reports saved on this device. The **vouchers are sample data** and labelled as such. |
 
 ## 6. Assumptions
 
@@ -132,9 +136,9 @@ them.
 - **A report's photo establishes consistency, not truth.** A model cannot tell a
   broken lift from a working one with a sign taped to it. Nothing in the app is
   labelled *verified*.
-- **Distinct accounts approximate distinct people.** One person with two accounts
-  could manufacture agreement; the rate limit and the LTA cross-check are what
-  stand against that.
+- **Local reports are not a community signal.** Without accounts or a shared
+  report store, they document what this device filed but cannot corroborate one
+  commuter against another.
 - **Station footprints in the provided GeoJSON carry no line codes**, so they are
   joined by name and only where the name is unambiguous.
 

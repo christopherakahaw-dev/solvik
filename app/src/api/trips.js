@@ -23,7 +23,9 @@ function singaporeDateTime(now = new Date()) {
 // `avoid` names a line the answer must not use — a disruption reroute. The
 // server filters rather than OneMap, which has no banned-routes parameter.
 export async function getTripOptions(from, to, mode, destName, opts = {}) {
-  const { date, time } = singaporeDateTime();
+  const now = singaporeDateTime();
+  const date = opts.date || now.date;
+  const time = opts.time || now.time;
   const body = {
     from: `${from[0]},${from[1]}`,
     to: `${to[0]},${to[1]}`,

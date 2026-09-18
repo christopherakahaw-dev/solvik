@@ -104,7 +104,7 @@ export function ReportScreen({ v }) {
                 <span style={{ font: "var(--type-body-strong)", color: "var(--text-strong)" }}>Open the camera</span>
                 {/* The old copy said faces were blurred automatically. Nothing
                     blurred anything, so it says what is true instead. */}
-                <span style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>The photo has to be taken here, now — it can't be chosen from your files. It is checked and then discarded.</span>
+                <span style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>The photo has to be taken here, now — it can't be chosen from your files. If Gemini is enabled, it is sent to Google for this check, then discarded.</span>
               </button>
             )}
             {v.hasPhoto && (
@@ -121,8 +121,7 @@ export function ReportScreen({ v }) {
           <Button size="lg" fullWidth disabled={v.noPhoto || v.reportBusy} onClick={v.submitReport}>
             {v.reportCta}
           </Button>
-          {/* "Anonymously" stopped being true when accounts arrived. */}
-          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textAlign: "center", textWrap: "pretty" }}>Filed under your account, shown to other commuters without your name. Your photo is checked and discarded, never stored.</div>
+          <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textAlign: "center", textWrap: "pretty" }}>The report is saved only in this browser. The photo may be checked by Google Gemini, then discarded and never stored by Solvik.</div>
         </div>
       )}
 
@@ -132,7 +131,7 @@ export function ReportScreen({ v }) {
             <Icon name={v.reportAccepted ? "check" : "x"} size={34} />
           </div>
           <div style={{ font: "var(--type-title)", letterSpacing: "var(--tracking-title)", color: "var(--text-strong)" }}>
-            {v.reportAccepted ? "Filed" : "Not filed"}
+            {v.reportAccepted ? "Saved" : "Not saved"}
           </div>
           <div style={{ font: "var(--type-body)", color: "var(--text-muted)", maxWidth: 320, textWrap: "pretty" }}>{v.reportReason}</div>
           {v.reportPhotoNote && (

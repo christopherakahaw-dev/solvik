@@ -22,7 +22,7 @@ export function PlanScreen({ v }) {
       </div>
 
       {v.justAdded && (
-        <div style={{ borderRadius: "var(--radius-card)", background: "var(--accent-soft)", border: "1px solid var(--accent)", padding: "15px 16px" }}>
+        <div className="sv-plan-learned" style={{ borderRadius: "var(--radius-card)", background: "var(--accent-soft)", border: "1px solid var(--accent)", padding: "15px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent)", color: "var(--text-on-accent)" }}>
               <Icon name="sparkles" size={14} />
@@ -89,7 +89,7 @@ export function PlanScreen({ v }) {
       )}
 
       {v.fgHas && (
-        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+        <div className="sv-plan-forecast" style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-soft)", color: v.fgTone === "busy" ? "var(--crowd-busy)" : v.fgTone === "moderate" ? "var(--crowd-moderate)" : "var(--text-accent)" }}>
               <Icon name="chart-no-axes-column-increasing" size={15} />
@@ -154,7 +154,7 @@ export function PlanScreen({ v }) {
       )}
 
       {v.wxHas && (
-        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.wxWet ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+        <div className="sv-plan-weather" style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.wxWet ? "var(--crowd-moderate)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-soft)", color: v.wxWet ? "var(--crowd-moderate)" : "var(--text-accent)" }}>
               <Icon name={v.wxWet ? "cloud-rain" : "sun"} size={15} />
@@ -180,7 +180,7 @@ export function PlanScreen({ v }) {
       )}
 
       {v.pwHas && (
-        <div style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.pwBlocking ? "var(--crowd-busy)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
+        <div className="sv-plan-work" style={{ borderRadius: "var(--radius-card)", background: "var(--surface-card)", border: "1px solid " + (v.pwBlocking ? "var(--crowd-busy)" : "var(--border-card)"), padding: "16px 16px 15px", boxShadow: "var(--shadow-card)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 26, height: 26, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: v.pwBlocking ? "var(--crowd-busy)" : "var(--accent-soft)", color: v.pwBlocking ? "#fff" : "var(--text-accent)" }}>
               <Icon name="construction" size={15} />
@@ -211,7 +211,7 @@ export function PlanScreen({ v }) {
         </div>
       )}
 
-      <div>
+      <div className="sv-plan-places">
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
           <SectionLabel>Your places</SectionLabel>
           <div style={{ marginLeft: "auto", flex: "none" }}>
@@ -236,7 +236,7 @@ export function PlanScreen({ v }) {
         </div>
       </div>
 
-      <div>
+      <div className="sv-plan-watched">
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
           <SectionLabel>Watched daily</SectionLabel>
           <div style={{ marginLeft: "auto", flex: "none" }}>
@@ -282,7 +282,7 @@ export function PlanScreen({ v }) {
       {/* Named on screen, because the brief scores whether a submission says who
           it is for — and because the same disruption genuinely means different
           things to each of these three. */}
-      <div>
+      <div className="sv-plan-persona">
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
           <SectionLabel>Tailored for you</SectionLabel>
         </div>
@@ -311,12 +311,18 @@ export function PlanScreen({ v }) {
         </div>
       </div>
 
-      <div>
+      <div className="sv-plan-memory">
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 4px 9px" }}>
           <SectionLabel>What Solvik remembers</SectionLabel>
         </div>
         <div style={{ padding: "15px 16px", borderRadius: 20, background: "var(--surface-card)", border: "1px solid var(--border-card)" }}>
           <div style={{ font: "var(--type-body)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.memorySummary}</div>
+          {v.memoryAiLabel && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9, color: "var(--text-accent)", font: "var(--weight-bold) 10.5px/1.3 var(--font-body)", letterSpacing: ".035em", textTransform: "uppercase" }}>
+              <Icon name="sparkles" size={13} />{v.memoryAiLabel}
+            </div>
+          )}
+          {v.memoryAiSummary && <div style={{ marginTop: 7, color: "var(--text-body)", font: "var(--type-caption)", textWrap: "pretty" }}>{v.memoryAiSummary}</div>}
           {v.memoryLines.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 10 }}>
               {v.memoryLines.map((line, i) => (
@@ -379,7 +385,7 @@ export function PlacesSheet({ v }) {
               </div>
             </div>
             <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
-              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Search text goes to OneMap only while you search. Selected places stay in this browser unless you explicitly enable cloud sync; live location and search history are never synced.</div>
+              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>Search text goes to OneMap only while you search. Selected places, preferences and commute memory stay in this browser.</div>
               {v.placeRows.map((p, i) => (
                 <div key={i}>
                   <SectionLabel>{p.label}</SectionLabel>

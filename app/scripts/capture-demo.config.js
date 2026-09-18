@@ -43,9 +43,6 @@ export default {
       ...process.env,
       // The seed button only exists in a demo build.
       VITE_DEMO_MODE: "1",
-      // Guest mode, so the recording never depends on a Supabase project.
-      VITE_SUPABASE_URL: "",
-      VITE_SUPABASE_PUBLISHABLE_KEY: "",
     },
   },
 };

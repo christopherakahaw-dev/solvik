@@ -1,7 +1,7 @@
-// One serverless function, fifteen endpoints.
+// One serverless function, sixteen endpoints.
 //
 // Vercel's Hobby plan allows twelve serverless functions per deployment, and
-// `api/` had fifteen files in it — one per endpoint — so the build failed. A
+// `api/` had one file per endpoint — so the build failed. A
 // directory whose name starts with `_` is not scanned for functions (which is
 // why `api/_lib/` has always been safe), so every handler now lives in
 // `api/_handlers/` and this catch-all route dispatches to them. Every public
@@ -11,12 +11,12 @@
 // A template-literal import would be invisible to Vercel's dependency tracer
 // and the handler files would be left out of the bundle; written this way they
 // are traced at build time but still only loaded when their route is asked
-// for, so a request for /api/weather does not pay to parse the other fourteen.
+// for, so a request for /api/weather does not pay to parse every other handler.
 const ROUTES = {
+  ai: () => import("./_handlers/ai.js"),
   arrivals: () => import("./_handlers/arrivals.js"),
   coverage: () => import("./_handlers/coverage.js"),
   crowding: () => import("./_handlers/crowding.js"),
-  "delete-account": () => import("./_handlers/delete-account.js"),
   diagnostics: () => import("./_handlers/diagnostics.js"),
   forecast: () => import("./_handlers/forecast.js"),
   lta: () => import("./_handlers/lta.js"),

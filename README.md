@@ -12,6 +12,13 @@ then follow it turn by turn. Solvik learns the trips you repeat, works out when
 you need to leave, and tells you when a station on your way is forecast to be
 crowded at the time you'd be standing in it.
 
+The first-run flow offers three concrete journeys. Rachel is the fully worked
+end-to-end demo: Tampines to Raffles Place at 07:40, with an 08:45 deadline.
+Choosing a scenario opens its scheduled route immediately; route cards explain
+why the recommendation fits that commuter and why each alternative ranks lower.
+Disruptions, lift faults and nearby road incidents that touch the selected
+route are pinned at their actual location on the map.
+
 ## What makes it different
 
 **It never invents data.** Every figure comes from OneMap or LTA DataMall. When
@@ -65,10 +72,9 @@ background trace of where your phone has been. That journey history, and the
 commutes and places inferred from it, are held in the browser and sent to no
 endpoint: there is no journeys table to sync them to. Trips older than 90 days
 fall away on their own, and one tap forgets all of it. Saved places, watched
-commutes and preferences do sync, to your own account, if you make one — and a
-report you file deliberately sends its station, coordinates and your account id,
-which is the one thing here that is meant to leave the device. Your API
-keys stay server-side and never reach the browser.
+commutes, preferences and checked reports remain in browser storage. There is
+no login, remote profile or cloud sync. Your API keys stay server-side and
+never reach the browser.
 
 ## Try it
 
@@ -92,10 +98,8 @@ Singapore Land Authority's national map, not OpenStreetMap. Note that `VITE_`
 values are compiled into the bundle at build time, so setting this on a host
 only takes effect on the next deploy.
 
-Accounts use Supabase. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
-and the server-only `SUPABASE_SERVICE_ROLE_KEY`, then apply the migrations in
-`app/supabase/migrations`. Every variable the app reads is listed in
-[`app/.env.example`](app/.env.example), split into required and optional.
+Every variable the app reads is listed in [`app/.env.example`](app/.env.example),
+split into required and optional.
 
 ## What's live
 

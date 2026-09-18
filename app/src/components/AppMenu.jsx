@@ -1,14 +1,7 @@
 import { Icon, IconButton } from "../design-system";
-import { useAuth } from "../auth/AuthContext";
 import { SolvikBrand } from "./SolvikBrand";
 
 export function AppMenu({ v, onClose }) {
-  const { user } = useAuth();
-
-  const displayName = user.isGuest ? "Guest mode" : user.name || "My account";
-  const secondary = user.isGuest ? "Saved on this device" : user.email;
-  const initial = (user.name || user.email || "G").charAt(0).toUpperCase();
-
   return (
     <div className="sv-map-menu-layer">
       <button className="sv-overlay-dismiss" type="button" aria-label="Close menu" onClick={onClose} />
@@ -41,11 +34,11 @@ export function AppMenu({ v, onClose }) {
           <button
             type="button"
             className="sv-menu-account-trigger"
-            aria-label="Open account"
+            aria-label="Open device data"
             onClick={() => { v.goAccount(); onClose(); }}
           >
-            <span className="sv-account-avatar">{initial}</span>
-            <span className="sv-account-identity"><strong>{displayName}</strong><span>{secondary}</span></span>
+            <span className="sv-account-avatar"><Icon name="shield-check" size={19} /></span>
+            <span className="sv-account-identity"><strong>Your data</strong><span>Saved on this device</span></span>
             <span className="sv-menu-account-arrow"><Icon name="chevron-right" size={18} /></span>
           </button>
         </div>

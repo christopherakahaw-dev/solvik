@@ -35,6 +35,33 @@ export function conditionOf(text) {
   return DRY;
 }
 
+// The map control is glanceable, so preserve useful distinctions that the
+// route-ranking buckets intentionally collapse. "Partly cloudy" and "fair"
+// are both dry for routing, but should not look identical in the toolbar.
+export function singaporeDayPhase(now = Date.now()) {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Singapore",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(now)));
+  return hour >= 7 && hour < 19 ? "day" : "night";
+}
+
+export function weatherIconName(text, phase = "day") {
+  const value = String(text || "").trim().toLowerCase();
+  if (!value) return "cloud-off";
+  const night = phase === "night";
+  if (/thunder|lightning/.test(value)) return night ? "cloud-lightning-night" : "cloud-lightning";
+  if (/heavy rain|heavy shower/.test(value)) return night ? "cloud-rain-wind-night" : "cloud-rain-wind";
+  if (/rain|shower|drizzle/.test(value)) return "cloud-rain";
+  if (/haze|hazy|mist|fog/.test(value)) return night ? "cloud-fog-night" : "cloud-fog";
+  if (/wind|gust/.test(value)) return "wind";
+  if (/partly|cloud.*sun|sun.*cloud/.test(value)) return night ? "cloud-moon" : "cloud-sun";
+  if (/cloud|overcast/.test(value)) return "cloud";
+  if (/fair|sun|clear/.test(value)) return night ? "moon" : "sun";
+  return night ? "cloud-moon" : "cloud-sun";
+}
+
 export function isWet(condition) {
   return condition === WET || condition === SHOWERS;
 }
@@ -144,4 +171,96 @@ export function weatherLine({ forecast, walkSecs }) {
   return adj.extraMins > 0
     ? `${forecast.text}${when}. Your ${walk} min on foot will take about ${adj.extraMins} min longer.`
     : `${forecast.text}${when}. You have ${walk} min on foot.`;
+}
+
+const CONDITION_RANK = { [DRY]: 0, [SHOWERS]: 1, [WET]: 2 };
+
+// Weather attached to one complete route. The feed is coarse, so we compare
+// the conditions nearest the start and destination instead of pretending to
+// know what happens on every metre of track. Near-term trips can use the
+// two-hour nowcast; scheduled trips use the 24-hour regional outlook.
+export function routeWeatherProfile({ nowcast, outlook, from, to, departureAt, option, now = Date.now() }) {
+  const leaveAt = Number(departureAt) || now;
+  const arriveAt = leaveAt + Math.max(0, Number(option?.mins) || 0) * 60_000;
+  const candidates = [];
+  const add = (forecast, where, source) => {
+    if (!forecast || !forecast.condition) return;
+    candidates.push({ ...forecast, where, source });
+  };
+
+  // The nowcast is useful only for a trip that is about to happen. For a
+  // future scenario, the period forecast is the honest source.
+  if (Math.abs(leaveAt - now) <= 2 * 60 * 60 * 1000) {
+    add(nowcastAt(nowcast, from), "near the start", "Nowcast");
+    add(nowcastAt(nowcast, to), "near the destination", "Nowcast");
+  }
+  add(forecastAt({ outlook, ll: from, at: leaveAt }), "near the start", "Forecast");
+  add(forecastAt({ outlook, ll: to, at: arriveAt }), "near the destination", "Forecast");
+
+  const forecast = candidates.sort(
+    (a, b) => (CONDITION_RANK[b.condition] ?? -1) - (CONDITION_RANK[a.condition] ?? -1)
+  )[0] || null;
+  if (!forecast) {
+    return {
+      available: false,
+      condition: null,
+      wet: false,
+      extraMins: 0,
+      adjustedMins: Number(option?.mins) || 0,
+      cycling: false,
+      title: "Weather unavailable",
+      detail: "The route is ranked without a weather adjustment.",
+    };
+  }
+
+  const walkSecs = Number(option?.walkSecs) || 0;
+  const adjustment = walkAdjustment({ walkSecs, condition: forecast.condition });
+  const cycling = (option?.legs || []).some((leg) => /cycle|bike/i.test(String(leg)));
+  const walkMins = Math.round(walkSecs / 60);
+  const when = forecast.label ? ` · ${forecast.label}` : "";
+  let detail = `${forecast.source} ${forecast.where}${when}.`;
+  if (cycling && adjustment.wet) {
+    detail += " Cycling is deprioritised because rain is expected.";
+  } else if (adjustment.wet && walkMins) {
+    detail += adjustment.extraMins
+      ? ` ${walkMins} min walking may take about ${adjustment.extraMins} min longer.`
+      : ` ${walkMins} min walking is exposed to rain.`;
+  } else if (!adjustment.wet) {
+    detail += " No rain adjustment is needed.";
+  }
+
+  return {
+    available: true,
+    condition: forecast.condition,
+    wet: adjustment.wet,
+    text: forecast.text,
+    source: forecast.source,
+    where: forecast.where,
+    extraMins: adjustment.extraMins,
+    adjustedMins: (Number(option?.mins) || 0) + adjustment.extraMins,
+    walkMins,
+    cycling,
+    title: `${forecast.text || "Weather"} on this route`,
+    detail,
+  };
+}
+
+// Preserve OneMap's order in dry weather. In rain, compare the journey time
+// after the walking penalty and put a wet cycling option behind a usable
+// transit route. The original ETA remains visible; the adjustment is stated
+// separately instead of silently changing OneMap's number.
+export function rankRoutesForWeather(options, context) {
+  const profiled = (options || []).map((option, originalIndex) => ({
+    option,
+    originalIndex,
+    weather: routeWeatherProfile({ ...context, option }),
+  }));
+  if (!profiled.some((entry) => entry.weather.wet)) return profiled;
+  return profiled.sort((a, b) => {
+    const aCycle = a.weather.cycling && a.weather.wet ? 1 : 0;
+    const bCycle = b.weather.cycling && b.weather.wet ? 1 : 0;
+    return aCycle - bCycle
+      || a.weather.adjustedMins - b.weather.adjustedMins
+      || a.originalIndex - b.originalIndex;
+  });
 }

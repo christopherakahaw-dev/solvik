@@ -23,6 +23,19 @@ export const PERSONAS = {
     largeText: false,
     wetMode: "fast",
     busyMode: "quiet",
+    featured: true,
+    route: {
+      from: { id: "home", name: "Tampines", address: "Tampines, Singapore", ll: [1.3531, 103.9453] },
+      to: { id: "work", name: "Raffles Place", address: "Raffles Place, Singapore", ll: [1.2841, 103.8515] },
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      leaveMins: 7 * 60 + 40,
+      arriveBy: 8 * 60 + 45,
+      label: "Tampines → Raffles Place",
+      schedule: "Leave 07:40 · arrive by 08:45",
+      expected: "EWL with the walk at both ends",
+    },
+    fit: "Fast, dependable and quiet unless a delay threatens the 08:45 arrival.",
+    limitation: "Five-minute delays stay quiet; Solvik interrupts only when the impact reaches 15 minutes.",
   },
   flexible: {
     id: "flexible",
@@ -37,6 +50,18 @@ export const PERSONAS = {
     largeText: false,
     wetMode: "walk",
     busyMode: "quiet",
+    route: {
+      from: { id: "home", name: "Punggol", address: "Punggol, Singapore", ll: [1.4053, 103.9023] },
+      to: { id: "work", name: "one-north", address: "one-north, Singapore", ll: [1.2998, 103.7874] },
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      leaveMins: 8 * 60,
+      flexibleMins: 60,
+      label: "Punggol → one-north",
+      schedule: "Flexible start · within about 1 hour",
+      expected: "Comfort-first transit, bus or cycling",
+    },
+    fit: "Comfort and predictability rank ahead of raw speed; a quieter departure may win.",
+    limitation: "Bike carriage and sheltered-path availability are not published consistently, so Solvik identifies rather than guarantees them.",
   },
   stepFree: {
     id: "stepFree",
@@ -52,6 +77,18 @@ export const PERSONAS = {
     largeText: true,
     wetMode: "walk",
     busyMode: "step",
+    route: {
+      from: { id: "home", name: "Bedok", address: "Bedok, Singapore", ll: [1.3239, 103.9300] },
+      to: { id: "work", name: "Singapore General Hospital", address: "Outram Road, Singapore General Hospital", ll: [1.2797, 103.8359] },
+      days: ["Wed"],
+      leaveMins: 9 * 60,
+      arriveBy: 10 * 60,
+      label: "Bedok → Singapore General Hospital",
+      schedule: "Fortnightly appointment · arrive by 10:00",
+      expected: "Step-free, low-walking door-to-door route",
+    },
+    fit: "Step-free access, fewer changes and short walks outrank a faster arrival.",
+    limitation: "LTA publishes lift maintenance but not complete sheltered-walkway or every exit-accessibility detail.",
   },
 };
 
@@ -63,6 +100,77 @@ export function personaOf(id) {
 
 export function personaList() {
   return Object.values(PERSONAS);
+}
+
+export function scenarioCommute(id) {
+  const persona = personaOf(id);
+  const route = persona.route;
+  return {
+    from: route.from.id,
+    to: route.to.id,
+    days: route.days,
+    mins: route.leaveMins,
+    ...(route.arriveBy != null ? { arriveBy: route.arriveBy } : {}),
+    ...(route.flexibleMins ? { flexibleMins: route.flexibleMins } : {}),
+    mode: persona.id === "stepFree" ? "Step-free" : persona.id === "flexible" ? "Comfort" : "Fastest",
+    legs: persona.id === "fixed" ? ["EWL"] : persona.id === "flexible" ? ["PGL", "NEL", "CCL"] : ["EWL", "NEL"],
+    source: "scenario",
+    signature: `scenario:${persona.id}`,
+    fromPlace: { id: route.from.id, label: route.from.name, place: route.from.address, ll: route.from.ll },
+    toPlace: { id: route.to.id, label: route.to.name, place: route.to.address, ll: route.to.ll },
+  };
+}
+
+export function scenarioDeparture(id, now = new Date()) {
+  const persona = personaOf(id);
+  const route = persona.route;
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const departure = new Date(now);
+  departure.setSeconds(0, 0);
+  departure.setHours(Math.floor(route.leaveMins / 60), route.leaveMins % 60, 0, 0);
+  for (let offset = 0; offset < 8; offset += 1) {
+    if (route.days.includes(dayNames[departure.getDay()]) && departure.getTime() > now.getTime()) break;
+    departure.setDate(departure.getDate() + 1);
+  }
+  const pad = (value) => String(value).padStart(2, "0");
+  return {
+    date: `${pad(departure.getMonth() + 1)}-${pad(departure.getDate())}-${departure.getFullYear()}`,
+    time: `${pad(departure.getHours())}:${pad(departure.getMinutes())}:00`,
+    label: `${dayNames[departure.getDay()]} ${pad(departure.getHours())}:${pad(departure.getMinutes())}`,
+    at: departure.getTime(),
+  };
+}
+
+const crowdRank = { light: 0, moderate: 1, busy: 2 };
+
+// One concise explanation per option. The first option is the recommendation;
+// the others must say why they lost for this specific commuter rather than
+// merely repeating their duration.
+export function routeFitReason(personaId, option, recommended, isRecommended = false) {
+  const p = personaOf(personaId);
+  if (!option) return "";
+  if (isRecommended) {
+    if (p.id === "fixed") return "Best fit · protects the fixed 08:45 arrival with the quickest door-to-door plan.";
+    if (p.id === "flexible") return "Best fit · balances crowding, changes and journey time instead of chasing the fastest number.";
+    return "Best fit · step-free access and a manageable walk take priority over speed.";
+  }
+
+  if (p.id === "fixed") {
+    const extra = recommended && option.mins > recommended.mins ? option.mins - recommended.mins : 0;
+    if (extra) return `Not first · ${extra} min slower, which leaves less protection for the 08:45 deadline.`;
+    if (option.transfers > (recommended?.transfers ?? option.transfers)) return "Not first · an extra change adds risk without saving time.";
+    return "Not first · it offers no useful time advantage for a fixed arrival.";
+  }
+  if (p.id === "flexible") {
+    if ((crowdRank[option.crowdLevel] ?? 1) > (crowdRank[recommended?.crowdLevel] ?? 1)) return "Not first · busier than the comfort-first recommendation.";
+    if (option.transfers > (recommended?.transfers ?? option.transfers)) return "Not first · more changes make the journey less predictable.";
+    if ((option.walkSecs || 0) > (recommended?.walkSecs || 0) + 300) return "Not first · substantially more outdoor walking.";
+    return "Not first · it is less predictable without a meaningful comfort gain.";
+  }
+  if ((option.accessibleScore ?? 1) < 1) return "Not first · not every bus leg is confirmed wheelchair accessible.";
+  if ((option.walkSecs || 0) > (recommended?.walkSecs || 0)) return "Not first · more walking is a poor fit for a step-free journey.";
+  if (option.transfers > (recommended?.transfers ?? option.transfers)) return "Not first · another interchange increases lift and wayfinding risk.";
+  return "Not first · it does not improve step-free confidence.";
 }
 
 // The planner mode this persona wants, given what is happening. Crowding and

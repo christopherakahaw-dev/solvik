@@ -5,7 +5,7 @@
 // that a change which quietly makes all three behave alike fails here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { personaOf, personaList, modeFor, shouldInterrupt, reasonFor, PERSONAS, DEFAULT_PERSONA } from "../src/lib/persona.js";
+import { personaOf, personaList, scenarioCommute, scenarioDeparture, routeFitReason, modeFor, shouldInterrupt, reasonFor, PERSONAS, DEFAULT_PERSONA } from "../src/lib/persona.js";
 
 test("all three commuters in the brief are represented", () => {
   assert.deepEqual(personaList().map((p) => p.id), ["fixed", "flexible", "stepFree"]);
@@ -75,4 +75,32 @@ test("a step-free commute blocks even when the person is not a step-free persona
   assert.match(reasonFor("fixed", "lift", { blocking: true }), /you travel step-free/i);
   assert.match(reasonFor("stepFree", "lift", { blocking: false }), /trains still run/i);
   assert.match(reasonFor("fixed", "lift"), /trains still run/i, "no override keeps the persona's own answer");
+});
+
+test("each scenario carries a real origin, destination and schedule", () => {
+  for (const persona of personaList()) {
+    const commute = scenarioCommute(persona.id);
+    assert.ok(Array.isArray(commute.fromPlace.ll));
+    assert.ok(Array.isArray(commute.toPlace.ll));
+    assert.ok(commute.days.length > 0);
+    assert.equal(commute.source, "scenario");
+  }
+  assert.equal(scenarioCommute("fixed").mins, 460);
+  assert.equal(scenarioCommute("fixed").arriveBy, 525);
+});
+
+test("scenario departure selects the next valid journey time", () => {
+  const before = scenarioDeparture("fixed", new Date(2026, 8, 18, 7, 0));
+  assert.equal(before.time, "07:40:00");
+  assert.equal(before.label, "Fri 07:40");
+  const after = scenarioDeparture("fixed", new Date(2026, 8, 18, 9, 0));
+  assert.equal(after.label, "Mon 07:40");
+});
+
+test("route alternatives explain why they fit the selected commuter less well", () => {
+  const best = { mins: 45, transfers: 0, walkSecs: 300, crowdLevel: "light", accessibleScore: 1 };
+  assert.match(routeFitReason("fixed", best, best, true), /08:45/);
+  assert.match(routeFitReason("fixed", { ...best, mins: 57 }, best, false), /12 min slower/);
+  assert.match(routeFitReason("flexible", { ...best, crowdLevel: "busy" }, best, false), /busier/);
+  assert.match(routeFitReason("stepFree", { ...best, accessibleScore: 0.5 }, best, false), /wheelchair accessible/);
 });

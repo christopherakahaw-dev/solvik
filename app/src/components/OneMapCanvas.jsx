@@ -38,6 +38,38 @@ function savedPlaceHtml(kind) {
   return `<div class="sv-saved-place sv-saved-place-${kind}"><svg viewBox="0 0 24 24" aria-hidden="true">${SAVED_PLACE_GLYPHS[kind]}</svg></div>`;
 }
 
+function issueHtml(kind) {
+  const glyph = kind === "lift" ? "↕" : "!";
+  return `<div class="sv-map-issue sv-map-issue-${kind || "alert"}" aria-hidden="true"><span>${glyph}</span></div>`;
+}
+
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+}
+
+function issuePopupNode(issue) {
+  const card = document.createElement("article");
+  card.className = "sv-issue-popup-card";
+
+  const eyebrow = document.createElement("div");
+  eyebrow.className = "sv-issue-popup-eyebrow";
+  const dot = document.createElement("span");
+  dot.className = `sv-issue-popup-dot is-${issue.kind || "alert"}`;
+  const kind = document.createElement("span");
+  kind.textContent = issue.kind === "lift" ? "ACCESS ISSUE" : issue.kind === "road" ? "ROAD ALERT" : "SERVICE ALERT";
+  eyebrow.append(dot, kind);
+
+  const title = document.createElement("strong");
+  title.textContent = issue.title || "Issue on this route";
+  const detail = document.createElement("p");
+  detail.textContent = issue.detail || "Tap the route card for the latest journey advice.";
+  const route = document.createElement("span");
+  route.className = "sv-issue-popup-route";
+  route.textContent = "ON YOUR ROUTE";
+  card.append(eyebrow, title, detail, route);
+  return card;
+}
+
 export function OneMapCanvas({
   center,
   zoom,
@@ -53,6 +85,7 @@ export function OneMapCanvas({
   pin,
   savedPlaces,
   zones,
+  issues,
   onMapClick,
   onZoneClick,
   height = 320,
@@ -71,6 +104,7 @@ export function OneMapCanvas({
   // being shown — and which spans of the live route are disrupted.
   const safeCompare = Array.isArray(compareRoute) ? compareRoute.filter(isLL) : [];
   const safeZones = Array.isArray(zones) ? zones.filter((z) => z && isLL(z.ll)) : [];
+  const safeIssues = Array.isArray(issues) ? issues.filter((issue) => issue && isLL(issue.ll)) : [];
   const safeSavedPlaces = Array.isArray(savedPlaces)
     ? savedPlaces.filter((place) => place && SAVED_PLACE_GLYPHS[place.id] && isLL(place.ll))
     : [];
@@ -241,6 +275,7 @@ export function OneMapCanvas({
         weight: 3,
         fillColor: "#201e1d",
         fillOpacity: 1,
+        className: "sv-route-origin-marker",
       }).addTo(map);
       start.bindTooltip("Start", { direction: "top", offset: [0, -8] });
       layersRef.current.push(start);
@@ -249,6 +284,29 @@ export function OneMapCanvas({
       const d = L.circleMarker(dest, { radius: 9, color: "#fff", weight: 3, fillColor: green, fillOpacity: 1 }).addTo(map);
       layersRef.current.push(d);
     }
+    safeIssues.forEach((issue) => {
+      const issueMarker = L.marker(issue.ll, {
+        keyboard: true,
+        zIndexOffset: 900,
+        title: issue.title || "Issue on this route",
+        icon: L.divIcon({
+          className: "",
+          html: issueHtml(issue.kind),
+          iconSize: [38, 46],
+          iconAnchor: [19, 42],
+        }),
+      }).addTo(map);
+      issueMarker.bindPopup(issuePopupNode(issue), {
+        className: "sv-issue-popup",
+        closeButton: true,
+        autoPan: true,
+        autoPanPadding: [18, 18],
+        maxWidth: 292,
+        minWidth: 252,
+        offset: [0, -34],
+      });
+      layersRef.current.push(issueMarker);
+    });
     safeSavedPlaces.forEach((place) => {
       const label = { home: "Home", work: "Work", school: "School" }[place.id];
       const saved = L.marker(place.ll, {
@@ -270,6 +328,46 @@ export function OneMapCanvas({
       const tone = (lv) => cs.getPropertyValue("--crowd-" + lv).trim() || "#777974";
       safeZones.forEach((z) => {
         const c = tone(z.level);
+        if (z.busLoad) {
+          const levelWord = z.level === "busy" ? "Busy on board" : z.level === "moderate" ? "Filling up" : z.level === "light" ? "Seats likely" : "Load unavailable";
+          const bus = L.marker(z.ll, {
+            keyboard: true,
+            zIndexOffset: 720,
+            title: `${z.label || "Bus"} · ${levelWord}`,
+            icon: L.divIcon({
+              className: "",
+              html: `<div class="sv-route-bus-load" style="--bus-load-tone:${c}"><span class="sv-route-bus-load-icon">BUS</span><span><strong>${escapeHtml(z.label || "Bus")}</strong><small>${levelWord}</small></span></div>`,
+              iconSize: [0, 0],
+            }),
+          }).addTo(map);
+          bus.bindTooltip(`${z.label || "Bus"} · ${levelWord}`, { direction: "top", offset: [0, -18] });
+          layersRef.current.push(bus);
+          return;
+        }
+        if (z.routeStop) {
+          const levelWord = z.level === "busy" ? "Busy" : z.level === "moderate" ? "Filling" : z.level === "light" ? "Light" : "No live crowd data";
+          const halo = L.circleMarker(z.ll, {
+            radius: 12,
+            color: c,
+            weight: 3,
+            opacity: 0.95,
+            fillColor: c,
+            fillOpacity: 0.2,
+            className: `sv-route-crowd-station sv-route-crowd-${z.level || "unknown"}`,
+          }).addTo(map);
+          const core = L.circleMarker(z.ll, {
+            radius: 4.5,
+            color: c,
+            weight: 0,
+            fillColor: c,
+            fillOpacity: 1,
+            className: "sv-route-crowd-core",
+          }).addTo(map);
+          halo.bindTooltip(`${z.label || "Station"} · ${levelWord}`, { sticky: true, className: "sv-crowd-stop-tooltip" });
+          core.bindTooltip(`${z.label || "Station"} · ${levelWord}`, { sticky: true, className: "sv-crowd-stop-tooltip" });
+          layersRef.current.push(halo, core);
+          return;
+        }
         const sel = !!z.selected;
         const ring = L.circle(z.ll, {
           radius: z.radius || 1400,
@@ -292,7 +390,7 @@ export function OneMapCanvas({
             icon: L.divIcon({
               className: "",
               html:
-                '<div style="transform:translate(-50%,-50%);white-space:nowrap;display:flex;align-items:center;gap:5px;cursor:pointer;' +
+                '<div class="' + (z.routeStop ? "sv-route-crowd-label" : "") + '" style="transform:translate(-50%,-50%);white-space:nowrap;display:flex;align-items:center;gap:5px;cursor:pointer;' +
                 "padding:" + (sel ? "5px 10px" : "3px 8px") + ";border-radius:999px;background:" + (sel ? "#201e1d" : "rgba(255,255,255,.94)") + ";" +
                 "box-shadow:0 2px 6px rgba(32,30,29,.16);" +
                 "font:700 " + (sel ? "12px" : "11px") + '/1 Archivo,sans-serif;color:' + (sel ? "#fff" : "#3a3a36") + '">' +
@@ -307,7 +405,7 @@ export function OneMapCanvas({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(safeRoute), JSON.stringify(safeCompare), JSON.stringify(affected), JSON.stringify(marker), markerAccuracy, JSON.stringify(origin), JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeSavedPlaces), JSON.stringify(safeZones)]);
+  }, [JSON.stringify(safeRoute), JSON.stringify(safeCompare), JSON.stringify(affected), JSON.stringify(marker), markerAccuracy, JSON.stringify(origin), JSON.stringify(dest), JSON.stringify(pin), JSON.stringify(safeSavedPlaces), JSON.stringify(safeZones), JSON.stringify(safeIssues)]);
 
   const lastTokenRef = useRef(recenterToken);
   useEffect(() => {

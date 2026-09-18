@@ -11,11 +11,16 @@ export const KEYS = {
   commutes: "solvik:commutes",
   searches: "solvik:searches",
   alertsRead: "solvik:alertsRead",
-  // Learned on this device, never sent anywhere: journeys you started, the
-  // patterns inferred from them, and the ones you told Solvik to forget.
+  // Learned and stored on this device: journeys you started, the patterns
+  // inferred from them, and the ones you told Solvik to forget. If Gemini is
+  // configured, a compact journey summary is sent for analysis; raw memory is
+  // still never stored by this app on a remote database.
   journeys: "solvik:journeys",
+  aiMemory: "solvik:aiMemory",
   patternsRejected: "solvik:patternsRejected",
   alertSeen: "solvik:alertSeen",
+  reports: "solvik:reports",
+  rewardRedemptions: "solvik:rewardRedemptions",
 };
 
 export const PLACE_IDS = ["home", "work", "school"];
@@ -29,17 +34,8 @@ export const DEFAULT_PREFERENCES = {
   showSavedPlaces: true,
 };
 
-let activeScope = "";
-
-// Signed-in accounts get isolated browser storage, so switching accounts on a
-// shared device cannot reveal somebody else's saved places or commutes. Guest
-// mode deliberately keeps the original device-local keys for compatibility.
-export function setStorageScope(scope) {
-  activeScope = String(scope || "").replace(/[^a-zA-Z0-9_-]/g, "");
-}
-
 export function storageKey(key) {
-  return activeScope ? `${key}:account:${activeScope}` : key;
+  return key;
 }
 
 export function loadStored(key, fallback) {
@@ -125,9 +121,9 @@ export function loadPreferences() {
     Object.entries(DEFAULT_PREFERENCES).map(([key, fallback]) => [key, typeof raw?.[key] === "boolean" ? raw[key] : fallback])
   );
   // Persona is the one preference that is not a boolean: which of the three
-  // commuters in the brief this person is. Kept here so it syncs with the rest
-  // of the preferences to the account, rather than being a fourth store.
+  // commuters in the brief this person is.
   prefs.persona = typeof raw?.persona === "string" ? raw.persona : null;
+  prefs.scenario = typeof raw?.scenario === "string" ? raw.scenario : null;
   return prefs;
 }
 
