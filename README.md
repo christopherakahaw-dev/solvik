@@ -101,6 +101,21 @@ only takes effect on the next deploy.
 Every variable the app reads is listed in [`app/.env.example`](app/.env.example),
 split into required and optional.
 
+## Deploying
+
+**Set the project's Root Directory to `app`.** The repository root holds no
+`package.json` — the application lives in [`app/`](app) — so a host pointed at
+the root finds nothing to build, deploys an empty output, and answers every
+path with a 404. On Vercel that is Settings → Build and Deployment → Root
+Directory. It is a per-project setting, so a renamed or recreated project needs
+it set again; that is the one step that does not live in this repository.
+
+Everything else does. [`app/vercel.json`](app/vercel.json) sends any
+non-`/api/` path to `index.html`, so a refresh or a stale link opens the app
+instead of the host's 404 page, and `app/api/[...path].js` routes the API. The
+build command and output directory are the framework defaults (`npm run build`,
+`dist`) and need no configuration.
+
 ## What's live
 
 | | Source |
