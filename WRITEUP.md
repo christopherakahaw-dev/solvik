@@ -3,7 +3,7 @@
 **A Singapore transit companion that tells you when to leave, warns you before
 the crush, and never makes a number up.**
 
-Live: <https://app-three-eta-97.vercel.app/> · Setup: [`README.md`](README.md) ·
+Live:  · Setup: [`README.md`](README.md) ·
 Technical detail: [`app/README.md`](app/README.md)
 
 ---
