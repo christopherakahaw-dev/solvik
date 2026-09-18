@@ -1,19 +1,15 @@
 import { Icon } from "../design-system";
-import { useAuth } from "../auth/AuthContext";
 
 // Bottom nav — icon-only (no text labels under the icons), per the mobile
 // build spec. The sliding mint pill and per-tab hover/press/dot behavior are
 // otherwise unchanged from the prototype.
 export function TabBar({ v }) {
-  const { user } = useAuth();
   const activeIndex = v.isAccount ? 4 : Math.max(0, v.navTabs.findIndex((tab) => tab.id === v.tab));
   const pillStyle = {
     ...v.tabPill,
     width: "calc((100% - 14px) / 5)",
     transform: `translateX(${activeIndex * 100}%)`,
   };
-  const initial = (user.name || user.email || "G").charAt(0).toUpperCase();
-
   return (
     <div className="sv-tab-bar" role="navigation" aria-label="Main navigation" style={{ position: "absolute", left: 14, right: 14, bottom: "calc(14px + env(safe-area-inset-bottom))", zIndex: 20 }}>
         <div style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(5,1fr)", padding: 7, background: "var(--surface-card)", borderRadius: "var(--radius-pill)", boxShadow: "var(--shadow-nav)" }}>
@@ -26,8 +22,8 @@ export function TabBar({ v }) {
               </span>
             </button>
           ))}
-          <button type="button" className={`sv-tab-account${v.isAccount ? " is-active" : ""}`} aria-label="Account" aria-current={v.isAccount ? "page" : undefined} onClick={v.goAccount}>
-            <span>{initial}</span>
+          <button type="button" className={`sv-tab-account${v.isAccount ? " is-active" : ""}`} aria-label="Device data" aria-current={v.isAccount ? "page" : undefined} onClick={v.goAccount}>
+            <Icon name="shield-check" size={20} strokeWidth={2.1} />
           </button>
         </div>
       </div>

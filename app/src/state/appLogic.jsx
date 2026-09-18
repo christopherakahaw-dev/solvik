@@ -15,9 +15,10 @@ import { learnedPlaces, linesForPlaces } from "../lib/places";
 import { getPlannedWorks } from "../api/planned";
 import { getWeather } from "../api/weather";
 import { getRoadConditions } from "../api/road";
+import { analyseCommuteMemory, rankRouteOptions } from "../api/ai";
 import { worstBandOn, roadLine, incidentNear } from "../lib/roadConditions";
-import { personaOf, personaList, modeFor, reasonFor, DEFAULT_PERSONA } from "../lib/persona";
-import { forecastAt, nowcastAt, weatherLine, isWet, walkAdjustment } from "../lib/weather";
+import { personaOf, personaList, scenarioCommute, scenarioDeparture, routeFitReason, modeFor, shouldInterrupt, reasonFor, DEFAULT_PERSONA } from "../lib/persona";
+import { forecastAt, nowcastAt, weatherLine, isWet, walkAdjustment, rankRoutesForWeather, routeWeatherProfile, weatherIconName, singaporeDayPhase } from "../lib/weather";
 import { submitReport, loadReportGroups as fetchReportGroups, loadMyReports as fetchMyReports } from "../api/reports";
 import { groupsFromCounts } from "../lib/confidence";
 import { requestNotify, showNotification, scheduleLeaveAlert, notifySupported } from "../lib/notify";
@@ -26,11 +27,8 @@ import { getPosition, watchPosition, clearWatch, messageForError, getLastPositio
 import { acceptFix, alongMAtTime, coordAt, stepAtTime, timeAtAlongM, STALE_FIX_MS } from "../lib/navProgress";
 import { metresBetween } from "../lib/geometry";
 import { resolveRouteOrigin } from "../lib/routeOrigin";
+import { routeFailure, routeRecoveryModes } from "../lib/routeFailure";
 import { addressDetail, durationLabel, forecastSlots, singaporeClock } from "../lib/display";
-import {
-  applyCloudSnapshot, loadCloudSnapshot, saveCloudSnapshot,
-  snapshotForCloud, snapshotHasPersonalData,
-} from "../lib/cloudData";
 import {
   KEYS, loadStored, store, rememberSearch, recentSearches, clearSearches,
   loadReadAlerts, markAlertsRead, alertId, loadSavedPlaces, saveSavedPlaces,
@@ -78,6 +76,22 @@ const DEMO_MODE = (() => {
 export const CROWD = { light: "var(--crowd-light)", moderate: "var(--crowd-moderate)", busy: "var(--crowd-busy)" };
 export const WORD = { light: "Light", moderate: "Moderate", busy: "Busy" };
 
+function nearbyDistance(metres) {
+  if (!Number.isFinite(metres)) return "";
+  if (metres < 1000) return `${Math.max(10, Math.round(metres / 10) * 10)} m away`;
+  return `${(metres / 1000).toFixed(metres < 10000 ? 1 : 0)} km away`;
+}
+
+function confirmedPointTotal(reports) {
+  return (reports || [])
+    .filter((report) => report && report.state === "confirmed")
+    .reduce((sum, report) => sum + Math.max(0, Number(report.points) || 0), 0);
+}
+
+function redeemedPointTotal(redemptions) {
+  return (redemptions || []).reduce((sum, redemption) => sum + Math.max(0, Number(redemption?.cost) || 0), 0);
+}
+
 export class AppLogic extends Component {
   initialPreferences = (() => {
     const prefs = loadPreferences();
@@ -93,16 +107,14 @@ export class AppLogic extends Component {
     savedList: loadStored(COMMUTES_KEY, []),
     savedPlaces: loadSavedPlaces(),
     routingPreferences: this.initialPreferences,
-    cloudSyncStatus: "off", cloudConflict: null, cloudSyncError: "",
     addEdit: null, placesOpen: false,
     addOpen: false, addFrom: "home", addTo: "work", addDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
     addMode: "Comfort", addMins: 462, addWhen: "leave", fcSlot: 0, fcPin: null, fcAlerts: false, fcWatch: [], crowdOn: false,
     hoverTab: null, pressTab: null, sheetH: 430, sheetDrag: false, navRoute: null, navStart: null,
     navPage: 0, stepsDrag: false, pin: null,
-    screen: this.props.user?.isGuest
-      ? (loadStored(ONBOARDED_KEY, false) ? "map" : "intro")
-      : (this.props.user?.onboardingComplete ? "map" : "intro"),
-    rep: "pick", repType: null, sev: 1, points: 2480, toast: null, tick: 0,
+    screen: loadStored(ONBOARDED_KEY, false) ? "map" : "intro",
+    introScenario: null,
+    rep: "pick", repType: null, sev: 1, rewardRedemptions: loadStored(KEYS.rewardRedemptions, []), toast: null, tick: 0,
     planned: { works: [], roadWorks: [], busChanges: [], pending: true, error: null },
     weather: { nowcast: null, outlook: null, pending: true, error: null },
     road: { bands: [], incidents: [], pending: true, error: null },
@@ -110,7 +122,7 @@ export class AppLogic extends Component {
     myReports: [],
     photo: null, cameraOpen: false, reportBusy: false, reportResult: null,
     navPhoto: null, navCameraOpen: false,
-    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripAvoidStations: null, tripMode: this.initialPreferences.stepFree ? "step" : this.initialPreferences.avoidCrowds ? "quiet" : this.initialPreferences.lessWalking ? "walk" : "fast", tripRoute: 0, tripCollapsed: true,
+    query: "", dest: null, routeOrigin: null, searchTarget: "dest", searchOpen: false, tripAvoid: null, tripAvoidStations: null, tripDeparture: null, tripMode: "transit", tripRoute: 0, tripCollapsed: true,
     userLoc: null, userAccuracy: null, userFixAt: null, locating: false, routeLocationPending: false, recenterToken: 0,
     // Turn-by-turn progress, advanced only by fixes good enough to trust.
     navProgress: null, navFixStatus: null,
@@ -129,6 +141,9 @@ export class AppLogic extends Component {
     justAdded: null,
     // Remembered between visits: where you've been, and which alerts you read.
     recents: recentSearches(),
+    aiMemory: loadStored(KEYS.aiMemory, null),
+    aiMemoryStatus: "idle",
+    aiRoute: { key: null, pending: false, decision: null, error: null, configured: null },
     readAlerts: loadReadAlerts(),
     crowd: { stations: [], slots: [], at: null, pending: false, error: null },
     faults: { items: [], pending: false, error: null },
@@ -377,37 +392,44 @@ export class AppLogic extends Component {
   // Filing one. Everything the server needs to judge it travels with it: where
   // the device thinks it is, how sure it is of that, and when the shutter fired.
   // The photo goes too, and is discarded after the check — it is never stored.
-  submitReportNow = () => {
+  submitReportNow = async () => {
     const s = this.state;
-    const stop = s.stop && s.stop.data;
     const photo = s.photo;
-    if (!stop || !photo || s.reportBusy) return;
+    if (!photo || s.reportBusy) return;
     const kind = s.repType;
 
     this.setState({ reportBusy: true, reportResult: null });
-    submitReport({
-      kind,
-      stationCode: stop.code,
-      stationName: stop.name,
-      lat: s.userLoc ? s.userLoc[0] : stop.lat,
-      lng: s.userLoc ? s.userLoc[1] : stop.lng,
-      accuracy: s.userAccuracy,
-      fixAt: s.userFixAt,
-      capturedAt: photo.capturedAt,
-      photo: photo.dataUrl,
-    })
-      .then((result) => {
-        // The photo is dropped from state the moment it has been checked. It is
-        // not stored on the server either.
-        this.setState({ reportBusy: false, reportResult: result, photo: null, rep: "done" });
-        this.flash(result.verdict === "accepted" ? `Filed · ${result.points} points pending` : "Not filed");
-        if (result.verdict === "accepted") this.loadReportGroups();
-      })
-      .catch((err) => {
-        // Shown on the result screen, not just flashed: leaving the reporter on
-        // the form with a vanishing toast is how a failure reads as a bug.
-        this.setState({ reportBusy: false, rep: "done", reportResult: { verdict: "rejected", reason: String(err.message || err), checks: [] } });
+    try {
+      // Submission used to silently return when the stop had not already been
+      // resolved. Resolve it here from a fresh fix instead: the green button
+      // must never be an apparent no-op, and an old fix can fail the freshness
+      // gate while someone is taking the photo.
+      const fix = await getPosition({ maximumAge: 0 });
+      this.applyFix(fix);
+      const stop = await getNearestStop(fix.coords[0], fix.coords[1]);
+      this.setState({ stop: { data: stop, pending: false, error: null, requested: true } });
+
+      const result = await submitReport({
+        kind,
+        stationCode: stop.code,
+        stationName: stop.name,
+        lat: fix.coords[0],
+        lng: fix.coords[1],
+        accuracy: fix.accuracy,
+        fixAt: fix.at,
+        capturedAt: photo.capturedAt,
+        photo: photo.dataUrl,
       });
+      // The photo is dropped from state the moment it has been checked. It is
+      // not stored on the server either.
+      this.setState({ reportBusy: false, reportResult: result, photo: null, rep: "done" });
+      this.flash(result.verdict === "accepted" ? `Saved locally · ${result.points} points` : "Not saved");
+      if (result.verdict === "accepted") this.loadReportGroups();
+    } catch (err) {
+      // Shown on the result screen, not just flashed: leaving the reporter on
+      // the form with a vanishing toast is how a failure reads as a bug.
+      this.setState({ reportBusy: false, rep: "done", reportResult: { verdict: "rejected", reason: String(err.message || err), checks: [] } });
+    }
   };
 
   // Filed from the nav sheet, mid-journey. Same endpoint, same checks; the trip
@@ -429,7 +451,7 @@ export class AppLogic extends Component {
     })
       .then((result) => {
         this.setState({ reportBusy: false, navRepOpen: false, nrType: null, nrSev: null, navPhoto: null });
-        this.flash(result.verdict === "accepted" ? `Filed · ${result.points} points pending` : result.reason || "Not filed");
+        this.flash(result.verdict === "accepted" ? `Saved locally · ${result.points} points` : result.reason || "Not saved");
         if (result.verdict === "accepted") this.loadReportGroups();
       })
       .catch((err) => {
@@ -677,8 +699,130 @@ export class AppLogic extends Component {
   // The planner's mode in the vocabulary a watched commute uses.
   commuteModeLabel() {
     const mode = this.state.tripMode;
-    return mode === "step" ? "Step-free" : mode === "fast" ? "Fastest" : "Comfort";
+    return { bus: "Bus", train: "Train", transit: "Transit", walk: "Walk", cycle: "Cycle", express: "Express" }[mode] || "Transit";
   }
+
+  // The raw journey records remain in this browser. When Gemini is configured,
+  // a small deliberate-trip summary is sent for preference analysis and only
+  // the returned insight is stored locally. Deterministic pattern detection
+  // below remains the authority for creating and retiring watched commutes.
+  refreshAiMemory = () => {
+    const journeys = (this.state.journeys || []).filter((journey) => journey?.started).slice(0, 40);
+    if (journeys.length < 2) return;
+    const payload = {
+      persona: (this.state.routingPreferences || {}).persona || DEFAULT_PERSONA,
+      preferences: this.state.routingPreferences || {},
+      journeys: journeys.map((journey) => ({
+        at: journey.at,
+        fromName: journey.fromName,
+        toName: journey.toName,
+        mode: journey.mode,
+        legs: journey.legs,
+        completed: journey.completed,
+      })),
+    };
+    const key = JSON.stringify(payload);
+    if (key === this._aiMemoryKey) return;
+    this._aiMemoryKey = key;
+    this.setState({ aiMemoryStatus: "pending" });
+    analyseCommuteMemory(payload)
+      .then((result) => {
+        if (this._aiMemoryKey !== key) return;
+        if (!result?.configured) {
+          this.setState({ aiMemoryStatus: "unconfigured" });
+          return;
+        }
+        const insight = result.insight ? { ...result.insight, model: result.model || "Gemini" } : null;
+        if (insight) store(KEYS.aiMemory, insight);
+        this.setState({ aiMemory: insight, aiMemoryStatus: "ready" });
+      })
+      .catch(() => {
+        if (this._aiMemoryKey === key) this.setState({ aiMemoryStatus: "unavailable" });
+      });
+  };
+
+  routeEventsForAi(option) {
+    const events = [];
+    this.disruptingAlerts(option).forEach((item) => events.push(`${item.title}. ${item.detail || ""}`));
+    this.worksOnRoute(option).forEach((item) => events.push(`${worksLabel(item)}. ${worksDetail(item)}`));
+    const roadEvents = this.roadEventsOnRoute(option);
+    (roadEvents.roadWorks || []).forEach((item) => events.push(`${roadWorkLabel(item)}. ${roadWorkDetail(item)}`));
+    (roadEvents.busChanges || []).forEach((item) => events.push(`${busChangeLabel(item)}. ${busChangeDetail(item)}`));
+    (option?.transitLegs || [])
+      .filter((leg) => leg.mode === "BUS" && Number.isFinite(leg.fromLat) && Number.isFinite(leg.fromLng))
+      .map((leg) => incidentNear((this.state.road || {}).incidents, [leg.fromLat, leg.fromLng]))
+      .filter(Boolean)
+      .forEach((item) => events.push(`${item.type || "Road incident"}. ${item.message || ""}`));
+    return [...new Set(events)].slice(0, 6);
+  }
+
+  // Gemini ranks only the real itineraries already returned by OneMap. If it
+  // is missing, rate-limited or invalid, the weather/persona rules continue to
+  // rank the same cards exactly as before.
+  refreshAiRouteDecision = () => {
+    const s = this.state;
+    const options = s.trips?.options || [];
+    const origin = this.effectiveRouteOrigin()?.ll;
+    if (!s.dest?.ll || !origin || !options.length || s.trips?.pending || s.trips?.recorded) {
+      this._aiRouteRequestKey = null;
+      if (s.aiRoute?.key || s.aiRoute?.pending || s.aiRoute?.decision) this.setState({ aiRoute: { key: null, pending: false, decision: null, error: null, configured: s.aiRoute.configured } });
+      return;
+    }
+    const departureAt = s.tripDeparture?.at || Date.now();
+    const payload = {
+      persona: (s.routingPreferences || {}).persona || DEFAULT_PERSONA,
+      preferences: s.routingPreferences || {},
+      memory: s.aiMemory,
+      weather: { pending: !!s.weather?.pending, available: !!(s.weather?.nowcast || s.weather?.outlook) },
+      options: options.map((option) => {
+        const weather = routeWeatherProfile({
+          nowcast: s.weather?.nowcast,
+          outlook: s.weather?.outlook,
+          from: origin,
+          to: s.dest.ll,
+          departureAt,
+          option,
+        });
+        return {
+          minutes: option.mins,
+          walkMinutes: Math.round((option.walkSecs || 0) / 60),
+          transfers: option.transfers,
+          crowd: option.crowdLevel || "unknown",
+          accessibility: option.accessibleScore == null ? 1 : option.accessibleScore,
+          legs: option.legs || [],
+          weather: {
+            available: weather.available,
+            condition: weather.text || weather.condition || "unknown",
+            wet: weather.wet,
+            extraMinutes: weather.extraMins,
+          },
+          events: this.routeEventsForAi(option),
+        };
+      }),
+    };
+    const key = `${s.trips.key}|${JSON.stringify(payload)}`;
+    if (key === s.aiRoute?.key || key === this._aiRouteRequestKey) return;
+    this._aiRouteRequestKey = key;
+    this.setState({ aiRoute: { key, pending: true, decision: null, error: null, configured: s.aiRoute?.configured } });
+    rankRouteOptions(payload)
+      .then((result) => {
+        if (this._aiRouteRequestKey !== key) return;
+        this.setState({
+          aiRoute: {
+            key,
+            pending: false,
+            decision: result?.configured ? result.decision || null : null,
+            error: null,
+            configured: result?.configured === true,
+            model: result?.model || null,
+          },
+        });
+      })
+      .catch((error) => {
+        if (this._aiRouteRequestKey !== key) return;
+        this.setState({ aiRoute: { key, pending: false, decision: null, error: String(error?.message || error), configured: true } });
+      });
+  };
 
   // A pattern strong enough to act on becomes a watched commute on its own —
   // and says so, with the evidence, and an Undo. Suggesting would be safer but
@@ -687,6 +831,7 @@ export class AppLogic extends Component {
   reviewPatterns = () => {
     const s = this.state;
     const journeys = s.journeys || [];
+    this.refreshAiMemory();
     // Retire before promoting, so a routine that moved is replaced in one pass
     // rather than leaving the old commute sitting next to the new one.
     const stale = staleCommutes(s.savedList, journeys);
@@ -740,8 +885,11 @@ export class AppLogic extends Component {
   forgetEverything = () => {
     clearJourneys();
     store(KEYS.patternsRejected, []);
+    store(KEYS.aiMemory, null);
     this.setState((st) => ({
       journeys: [],
+      aiMemory: null,
+      aiMemoryStatus: "idle",
       patternsRejected: [],
       justAdded: null,
       recents: clearSearches(),
@@ -904,7 +1052,10 @@ export class AppLogic extends Component {
       planNextCrowdLevel: worst ? worst.level : "light",
       // Which of rain and crowding wins is a property of the person, not the
       // network — Rachel keeps her fast route in the rain, Mdm Lim does not.
-      startNext: () => goToCommute(modeFor(persona.id, { wet: wxWet, busy })),
+      startNext: () => {
+        const suggested = modeFor(persona.id, { wet: wxWet, busy });
+        goToCommute(suggested === "bike" ? "cycle" : suggested === "walk" ? "walk" : "transit");
+      },
       watchNext: () => this.armLeaveAlert(view, `${f.label} → ${t.label}`),
       watchNextLabel: s.leaveAlert && s.leaveAlert.key === (outlook.key || "") ? "Alert set" : "Alert me",
 
@@ -1211,6 +1362,14 @@ export class AppLogic extends Component {
           auto ? `${auto} commute${auto === 1 ? "" : "s"} learned from them` : null,
         ].filter(Boolean).join(" · ");
       })(),
+      memoryAiSummary: s.aiMemory?.summary || "",
+      memoryAiLabel: s.aiMemoryStatus === "pending"
+        ? "Gemini is updating your travel preferences…"
+        : s.aiMemory?.model
+          ? `AI-assisted · ${s.aiMemory.confidence || "low"} confidence`
+          : s.aiMemoryStatus === "unconfigured"
+            ? "Add GEMINI_API_KEY to enable AI-assisted memory"
+            : "",
       memoryLines: [...new Set((s.journeys || []).flatMap((j) => j.legs || []))].slice(0, 8),
       // The places it has noticed, with what it knows about each. Listed rather
       // than counted, because "3 places remembered" is not something you can
@@ -1228,7 +1387,7 @@ export class AppLogic extends Component {
         const since = c.at ? ` since ${new Date(c.at).toLocaleDateString(undefined, { weekday: "long" })}` : "";
         return `${c.count} new alert${c.count === 1 ? "" : "s"} on your lines${since}.`;
       })(),
-      memoryNote: "Kept only in this browser and never sent anywhere. Trips older than 90 days fall away on their own.",
+      memoryNote: "Journey records stay in this browser and expire after 90 days. When Gemini is enabled, a compact trip summary is sent to Google for preference analysis; the app stores only the returned insight. Google's free-tier data terms apply.",
       memoryPlacesLabel: "Places it has noticed",
       // Named on screen rather than inferred silently: the brief scores whether
       // a submission says who it is for.
@@ -1274,8 +1433,22 @@ export class AppLogic extends Component {
       placesInvalid: Object.values(s.placesDraftPending || {}).some(Boolean),
       savePlaces: () => {
         if (Object.values(s.placesDraftPending || {}).some(Boolean)) return;
-        this.setState({ placesOpen: false, savedPlaces: s.placesDraft || savedPlaces, placesDraft: null,
-          routingPreferences: { ...s.routingPreferences, showSavedPlaces: s.placesShowDraft } });
+        const nextPlaces = s.placesDraft || savedPlaces;
+        const savedOriginId = ["home", "work", "school"].includes(s.routeOrigin?.id) ? s.routeOrigin.id : null;
+        const nextSavedOrigin = savedOriginId && nextPlaces[savedOriginId]?.verified
+          ? { ...nextPlaces[savedOriginId], id: savedOriginId }
+          : savedOriginId ? null : s.routeOrigin;
+        this.setState({
+          placesOpen: false,
+          savedPlaces: nextPlaces,
+          placesDraft: null,
+          routeOrigin: nextSavedOrigin,
+          routeOriginReset: savedOriginId ? (s.routeOriginReset || 0) + 1 : s.routeOriginReset,
+          trips: savedOriginId && nextSavedOrigin !== s.routeOrigin
+            ? { key: null, options: [], pending: false, error: null }
+            : s.trips,
+          routingPreferences: { ...s.routingPreferences, showSavedPlaces: s.placesShowDraft },
+        });
         this.flash("Places saved");
       },
       placeRows: [
@@ -1349,7 +1522,7 @@ export class AppLogic extends Component {
       crowdError: crowd.error || null,
       crowdEmpty: !crowd.pending && !crowd.error && stations.length === 0,
       mapZones: crowdOn && !s.dest ? zones : [],
-      showCrowdBar: crowdOn && !s.dest && !s.searchOpen && !(s.query || "").trim() && !s.fcPin && !s.pin,
+      showCrowdBar: false,
       toggleCrowd: () => this.setState({ crowdOn: !crowdOn, fcPin: null }),
       crowdToggleLabel: crowdOn ? "Crowding layer on" : "Crowding layer off",
       crowdToggleStyle: "position:relative;flex:none;width:46px;height:46px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;box-shadow:0 4px 14px rgba(32,30,29,.18);" +
@@ -1471,21 +1644,11 @@ export class AppLogic extends Component {
 
     if (s.savedList !== prevState.savedList) store(COMMUTES_KEY, s.savedList);
     if (s.savedPlaces !== prevState.savedPlaces) saveSavedPlaces(s.savedPlaces);
-    if (s.routingPreferences !== prevState.routingPreferences) store(KEYS.preferences, s.routingPreferences);
-
-    const cloudWasOn = Boolean(prevProps.user && !prevProps.user.isGuest && prevProps.user.cloudSync);
-    const cloudIsOn = Boolean(this.props.user && !this.props.user.isGuest && this.props.user.cloudSync);
-    if (cloudIsOn && !cloudWasOn) this.startCloudSync();
-    if (!cloudIsOn && cloudWasOn) {
-      if (this._cloudSyncT) clearTimeout(this._cloudSyncT);
+    if (s.routingPreferences !== prevState.routingPreferences) {
+      store(KEYS.preferences, s.routingPreferences);
+      this.refreshAiMemory();
     }
-    if (
-      cloudIsOn &&
-      s.cloudSyncStatus === "ready" &&
-      (s.savedList !== prevState.savedList || s.savedPlaces !== prevState.savedPlaces || s.routingPreferences !== prevState.routingPreferences)
-    ) {
-      this.scheduleCloudSync();
-    }
+    if (s.rewardRedemptions !== prevState.rewardRedemptions) store(KEYS.rewardRedemptions, s.rewardRedemptions);
 
     // Arrivals are polled only while there are options on screen to show them.
     if (s.trips.options !== prevState.trips.options) {
@@ -1493,6 +1656,18 @@ export class AppLogic extends Component {
       else this.stopArrivalsPoll();
     }
     if (!s.dest && prevState.dest) this.stopArrivalsPoll();
+
+    if (
+      s.trips.options !== prevState.trips.options ||
+      s.weather !== prevState.weather ||
+      s.faults !== prevState.faults ||
+      s.planned !== prevState.planned ||
+      s.road !== prevState.road ||
+      s.routingPreferences !== prevState.routingPreferences ||
+      s.aiMemory !== prevState.aiMemory
+    ) {
+      this.refreshAiRouteDecision();
+    }
 
     // The Today tab's outlook depends on the commutes, the places they point at
     // and the clock; re-ask when any of those move.
@@ -1536,7 +1711,6 @@ export class AppLogic extends Component {
     // The forecast moves in 30-minute steps and the clock moves under it, so
     // the outlook is re-read a few times an hour rather than once a session.
     this.startAlertPoll();
-    if (this.props.user && !this.props.user.isGuest && this.props.user.cloudSync) this.startCloudSync();
     this.outlookIv = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       this.loadOutlook();
@@ -1551,7 +1725,6 @@ export class AppLogic extends Component {
     if (this._addSearchT) clearTimeout(this._addSearchT);
     if (this._settleT) clearTimeout(this._settleT);
     if (this._snapBackT) clearTimeout(this._snapBackT);
-    if (this._cloudSyncT) clearTimeout(this._cloudSyncT);
     if (this.outlookIv) clearInterval(this.outlookIv);
     if (this.weatherIv) clearInterval(this.weatherIv);
     this.stopAlertPoll();
@@ -1560,65 +1733,6 @@ export class AppLogic extends Component {
     this.stopArrivalsPoll();
     if (typeof document !== "undefined") document.removeEventListener("visibilitychange", this.handleVisibilityChange);
   }
-
-  startCloudSync = async () => {
-    if (!this.props.user || this.props.user.isGuest || !this.props.user.cloudSync) return;
-    this.setState({ cloudSyncStatus: "loading", cloudSyncError: "", cloudConflict: null });
-    try {
-      const remote = await loadCloudSnapshot();
-      const local = snapshotForCloud(this.state);
-      if (remote.hasPersonalData && snapshotHasPersonalData(local)) {
-        this.setState({ cloudSyncStatus: "conflict", cloudConflict: remote });
-        return;
-      }
-      if (remote.hasCloudData) {
-        this.setState({
-          ...applyCloudSnapshot(this.state, remote),
-          cloudSyncStatus: "ready",
-          cloudConflict: null,
-        });
-        return;
-      }
-      await saveCloudSnapshot(this.state);
-      this.setState({ cloudSyncStatus: "ready", cloudConflict: null });
-    } catch (error) {
-      this.setState({ cloudSyncStatus: "error", cloudSyncError: error?.message || "Cloud sync is unavailable." });
-    }
-  };
-
-  scheduleCloudSync = () => {
-    if (this._cloudSyncT) clearTimeout(this._cloudSyncT);
-    this.setState({ cloudSyncStatus: "saving", cloudSyncError: "" });
-    this._cloudSyncT = setTimeout(async () => {
-      try {
-        await saveCloudSnapshot(this.state);
-        this.setState({ cloudSyncStatus: "ready" });
-      } catch (error) {
-        this.setState({ cloudSyncStatus: "error", cloudSyncError: error?.message || "Cloud sync is unavailable." });
-      }
-    }, 900);
-  };
-
-  keepDeviceData = async () => {
-    this.setState({ cloudSyncStatus: "saving", cloudSyncError: "" });
-    try {
-      await saveCloudSnapshot(this.state);
-      this.setState({ cloudSyncStatus: "ready", cloudConflict: null });
-      this.flash("This device is now synced");
-    } catch (error) {
-      this.setState({ cloudSyncStatus: "error", cloudSyncError: error?.message || "Cloud sync is unavailable." });
-    }
-  };
-
-  useCloudData = () => {
-    if (!this.state.cloudConflict) return;
-    this.setState({
-      ...applyCloudSnapshot(this.state, this.state.cloudConflict),
-      cloudSyncStatus: "ready",
-      cloudConflict: null,
-    });
-    this.flash("Cloud data restored");
-  };
 
   // Turn-by-turn follows the real position rather than a simulated clock.
   startTracking = () => {
@@ -1697,9 +1811,15 @@ export class AppLogic extends Component {
       return;
     }
     this.setState({ searchPending: true });
+    // Keep the request tied to the pin that opened area search. Capturing the
+    // coordinates here also prevents a later map pan from silently changing
+    // what "nearby" means while the request is in flight.
+    const near = this.state.searchTarget === "area" && Array.isArray(this.state.pin?.ll)
+      ? [...this.state.pin.ll]
+      : undefined;
     this._searchT = setTimeout(async () => {
       try {
-        const items = await searchPlaces(query);
+        const items = await searchPlaces(query, { near });
         if (this.state.query !== query) return;
         this.setState({
           searchPending: false,
@@ -1711,6 +1831,7 @@ export class AppLogic extends Component {
               detail: addressDetail(r.address, r.postal),
               kind: "Address",
               ll: [r.lat, r.lng],
+              source: r.source || "OneMap",
             })),
           },
         });
@@ -1793,7 +1914,9 @@ export class AppLogic extends Component {
   };
 
   chooseDest = (dest, extra) => {
-    // Selecting a destination never requests device location implicitly.
+    const hasExplicitOrigin = !!(extra && Object.prototype.hasOwnProperty.call(extra, "routeOrigin"));
+    const shouldUseDeviceLocation = !!dest && !hasExplicitOrigin;
+    const needsLocation = shouldUseDeviceLocation && !this.state.userLoc;
     this.setState({
       dest: dest || null,
       tripRoute: 0,
@@ -1803,9 +1926,14 @@ export class AppLogic extends Component {
       searchOpen: false,
       searchTarget: "dest",
       searchPending: false,
-      routeLocationPending: false,
+      // A destination picked from the main search starts from the device by
+      // default. Saved-commute actions pass an explicit origin and therefore
+      // never trigger an unnecessary permission prompt.
+      routeOrigin: shouldUseDeviceLocation ? null : this.state.routeOrigin,
+      routeLocationPending: needsLocation,
       routeOriginDraft: false,
       tripCollapsed: true,
+      tripDeparture: null,
       trips: { key: null, options: [], pending: !!dest, error: null },
       arrivals: {},
       ...(extra || {}),
@@ -1815,6 +1943,14 @@ export class AppLogic extends Component {
     this._detailsFor = 0;
     if (dest) {
       this.rememberSearch(dest);
+      if (needsLocation) {
+        this.requestCurrentLocation(false, false)
+          .then(() => this.setState({ routeOrigin: null, routeLocationPending: false, trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions))
+          .catch((err) => {
+            this.setState({ routeLocationPending: false, trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions);
+            this.flash(messageForError(err && err.code));
+          });
+      }
     }
   };
 
@@ -1830,7 +1966,7 @@ export class AppLogic extends Component {
   // Real journey options for the picked destination and mode. No fallback:
   // a failure surfaces in the sheet rather than being papered over.
   loadTripOptions = () => {
-    const { dest, tripMode, tripAvoid, tripAvoidStations } = this.state;
+    const { dest, tripMode, tripAvoid, tripAvoidStations, tripDeparture } = this.state;
     if (!dest || !dest.ll) return;
     if (this.state.routeOriginDraft) {
       this.setState({ trips: { key: null, options: [], pending: false, error: "Select a starting place from the search results." } });
@@ -1842,7 +1978,7 @@ export class AppLogic extends Component {
       return;
     }
     const request = (origin) => {
-      const key = `${dest.name}|${tripMode}|${tripAvoid || ""}|${(tripAvoidStations || []).join("+")}|${origin.join(",")}`;
+      const key = `${dest.name}|${tripMode}|${tripAvoid || ""}|${(tripAvoidStations || []).join("+")}|${tripDeparture?.date || "now"}|${tripDeparture?.time || ""}|${origin.join(",")}`;
       if (this.state.trips.key === key && (this.state.trips.pending || this.state.trips.options.length)) {
         return Promise.resolve();
       }
@@ -1851,7 +1987,7 @@ export class AppLogic extends Component {
       // the route it replaced rather than appearing out of nowhere.
       const before = !tripAvoid && !(tripAvoidStations || []).length ? null : (this.state.trips.options || [])[0] || this.state.tripBefore || null;
       this.setState({ trips: { key, options: [], pending: true, error: null }, tripBefore: before });
-      return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid, avoidStations: tripAvoidStations })
+      return getTripOptions(origin, dest.ll, tripMode, dest.name, { avoid: tripAvoid, avoidStations: tripAvoidStations, date: tripDeparture?.date, time: tripDeparture?.time })
       .then((options) => {
         if (this.state.dest !== dest || this.state.tripMode !== tripMode || this.state.trips.key !== key) return;
         this.setState({ trips: { key, options, pending: false, error: null, recorded: !!options.recorded, avoided: options.avoided || null }, tripRoute: 0, tripCollapsed: true });
@@ -1970,40 +2106,19 @@ export class AppLogic extends Component {
 
   introVals(s, sc) {
     const step = s.introStep || 0;
-    const roles = s.introRoles || [];
-    const has = (id) => roles.indexOf(id) >= 0;
-    const ROLES = [
-      { id: "commuter", label: "Routine commute", sub: "Same trip most weekdays", icon: "train-front" },
-      { id: "student", label: "Student fares", sub: "Show concession-aware options", icon: "graduation-cap" },
-      { id: "stepFree", label: "Step-free routes", sub: "Prioritise lifts and level boarding", icon: "accessibility" },
-      { id: "pram", label: "More space for a pram", sub: "Avoid stairs and tight gantries", icon: "baby" },
-      { id: "comfort", label: "More time and comfort", sub: "Longer buffers and fewer changes", icon: "heart-handshake" },
-    ];
-    const stepFree = has("stepFree") || has("pram");
-    const wantsSchool = has("student");
+    const selectedId = s.introScenario;
+    const selected = selectedId ? personaOf(selectedId) : null;
+    const scenarioIcon = { fixed: "clock-3", flexible: "bike", stepFree: "accessibility" };
     const rolePill = (on) =>
       "display:flex;align-items:center;gap:12px;padding:14px 15px;border-radius:var(--radius-card);cursor:pointer;font:var(--font-body);transition:background .15s,border-color .15s;" +
       (on ? "background:var(--accent-soft);border:1px solid var(--accent);color:var(--text-strong);" : "background:var(--surface-card);border:1px solid var(--border-card);color:var(--text-strong);");
-    const places = [
-      { key: "introHomePlace", id: "home", label: "Home", placeholder: "Block, street or MRT stop", icon: "house", sugg: ["Yishun", "Sengkang", "Bukit Batok"] },
-      { key: "introWorkPlace", id: "work", label: wantsSchool ? "Work or internship" : "Work", placeholder: "Office, building or area", icon: "briefcase", sugg: ["Raffles Place", "Changi Business Park", "Jurong East"] },
-    ].concat(wantsSchool ? [{ key: "introSchoolPlace", id: "school", label: "School or campus", placeholder: "Campus or faculty", icon: "graduation-cap", sugg: ["NTU", "NUS Kent Ridge", "SMU"] }] : []);
-    const filled = places.filter((p) => s[p.key]?.verified).length;
     const total = 4;
-    const homeLabel = s.introHomePlace?.name;
-    const workLabel = s.introWorkPlace?.name;
-    const summary = [
-      { text: homeLabel && workLabel ? "Saved " + homeLabel + " and " + workLabel + ". Add a commute in Plan to set its schedule and reminders." : "You can add or verify Home and Work later in Plan." },
-      { text: stepFree
-        ? "Step-free preference is on. Accessibility information may be incomplete; check the route details before travelling."
-        : has("comfort")
-        ? "Less-crowded routes come first where crowding information is available."
-        : "Fastest routes come first, with crowding shown before you board." },
-      { text: wantsSchool && s.introSchoolPlace?.name
-        ? "Your campus at " + s.introSchoolPlace.name + " is saved. Set its commute days in Plan."
-        : "Service alerts are checked while the app is open; background alerts are not supported." },
-      { text: "Reports and rewards are previews. No public report is submitted and no real voucher is issued." },
-    ];
+    const summary = selected ? [
+      { text: `${selected.route.label} is saved as the journey Solvik will open first.` },
+      { text: selected.fit },
+      { text: selected.id === "fixed" ? "Solvik stays quiet for minor delays and interrupts Rachel only when the impact reaches 15 minutes." : selected.limitation },
+      { text: "Live conditions may revise the recommendation. Any issue shown is tied to this route and marked on the map." },
+    ] : [];
     return {
       isIntro: sc === "intro",
       introS0: step === 0, introS1: step === 1, introS2: step === 2, introS3: step === 3,
@@ -2012,60 +2127,86 @@ export class AppLogic extends Component {
         style: { width: idx === step ? 18 : 6, height: 6, borderRadius: 999, background: idx <= step ? "var(--accent)" : "var(--sand-300)", transition: "width 220ms cubic-bezier(.2,.7,.3,1),background-color 220ms linear" },
       })),
       introPromises: [
-        { icon: "bell", title: "Leave-by alerts", detail: "A nudge before your usual door-to-door time slips." },
-        { icon: "users", title: "Platform crowding", detail: "LTA crowd levels when available, with missing data clearly marked." },
-        { icon: "accessibility", title: "Routes that fit you", detail: "Step-free, fewest changes or least walking — your default, not an afterthought." },
+        { icon: "route", title: "A real door-to-door route", detail: "The walk at both ends is part of the journey, not hidden." },
+        { icon: "triangle-alert", title: "Issues where they happen", detail: "Relevant disruptions and lift faults appear on the route map." },
+        { icon: "message-circle", title: "A recommendation with reasons", detail: "Every alternative says why it fits you less well." },
       ],
-      introRoles: ROLES.map((r) => ({
-        ...r,
-        style: rolePill(has(r.id)),
-        iconStyle: "flex:none;width:34px;height:34px;border-radius:999px;display:flex;align-items:center;justify-content:center;" + (has(r.id) ? "background:var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);color:var(--text-accent);"),
+      introRoles: personaList().map((p) => ({
+        id: p.id,
+        label: p.id === "fixed" ? "Rachel · fixed schedule" : p.id === "flexible" ? "Arjun · flexible and multi-modal" : "Mdm Lim · step-free travel",
+        sub: p.blurb,
+        icon: scenarioIcon[p.id],
+        route: p.route.label,
+        schedule: p.route.schedule,
+        badge: p.featured ? "Full journey demo" : "Preference preview",
+        style: rolePill(selectedId === p.id),
+        iconStyle: "flex:none;width:34px;height:34px;border-radius:999px;display:flex;align-items:center;justify-content:center;" + (selectedId === p.id ? "background:var(--accent);color:var(--text-on-accent);" : "background:var(--accent-soft);color:var(--text-accent);"),
         subStyle: "display:block;font:var(--type-caption);color:var(--text-muted);margin-top:3px",
-        checkStyle: "flex:none;width:24px;height:24px;border-radius:999px;display:flex;align-items:center;justify-content:center;" + (has(r.id) ? "background:var(--accent);color:var(--text-on-accent);" : "background:transparent;color:transparent;"),
-        toggle: () => this.setState({ introRoles: has(r.id) ? roles.filter((x) => x !== r.id) : roles.concat([r.id]) }),
+        checkStyle: "flex:none;width:24px;height:24px;border-radius:999px;display:flex;align-items:center;justify-content:center;" + (selectedId === p.id ? "background:var(--accent);color:var(--text-on-accent);" : "background:transparent;color:transparent;"),
+        toggle: () => this.setState({ introScenario: p.id }),
       })),
-      introPlaces: places.map((p) => ({
-        label: p.label, placeholder: p.placeholder, icon: p.icon, value: s[p.key] || null,
-        set: (place) => this.setState({ [p.key]: place ? { ...place, id: p.id } : null }),
-        draft: (pending) => this.setState((st) => ({ introDraftPending: { ...st.introDraftPending, [p.key]: pending } })),
-        suggestions: p.sugg,
-      })),
-      introSummaryTitle: "Solvik is set up for " + (stepFree ? "step-free travel" : has("student") ? "student travel" : has("comfort") ? "a calmer commute" : has("commuter") ? "your daily commute" : "your commute"),
+      introJourney: selected ? {
+        name: selected.id === "fixed" ? "Rachel" : selected.id === "flexible" ? "Arjun" : "Mdm Lim",
+        from: selected.route.from.name,
+        to: selected.route.to.name,
+        schedule: selected.route.schedule,
+        expected: selected.route.expected,
+        fit: selected.fit,
+        limitation: selected.limitation,
+        featured: !!selected.featured,
+      } : null,
+      introSummaryTitle: selected ? `${selected.route.label} is ready` : "Choose a journey first",
       introSummary: summary,
-      introCta: s.introSaving ? "Saving setup…" : ["Set up in a minute", roles.length ? "Next · " + roles.length + " selected" : "Next", filled ? "Next · " + filled + " saved" : "Next", "Start using Solvik"][step],
+      introCta: s.introSaving ? "Preparing route…" : ["Choose a commuter", selected ? `Continue with ${selected.id === "fixed" ? "Rachel" : selected.id === "flexible" ? "Arjun" : "Mdm Lim"}` : "Choose one to continue", "Review this setup", "Show my route"][step],
       introError: s.introError || "",
-      introCanSkip: Boolean(this.props.user?.isGuest),
-      introInvalid: step === 2 && places.some((p) => s.introDraftPending?.[p.key]),
-      introDisabled: Boolean(s.introSaving) || (step === 2 && places.some((p) => s.introDraftPending?.[p.key])),
+      introCanSkip: false,
+      introInvalid: false,
+      introDisabled: Boolean(s.introSaving) || (step > 0 && !selected),
       introNext: async () => {
-        if (step === 2 && places.some((p) => s.introDraftPending?.[p.key])) return;
+        if (step > 0 && !selected) return;
         if (step < total - 1) return this.setState({ introStep: step + 1 });
+        const persona = selected || personaOf(DEFAULT_PERSONA);
+        const commute = scenarioCommute(persona.id);
+        const departure = scenarioDeparture(persona.id);
+        const asSavedPlace = (place) => ({ ...place, source: "onemap", verified: true, updatedAt: Date.now() });
         const routingPreferences = {
           ...(s.routingPreferences || {}),
-          stepFree,
-          lessWalking: stepFree || has("comfort"),
-          avoidCrowds: has("comfort"),
-          studentFare: has("student"),
-          routineCommute: has("commuter"),
+          persona: persona.id,
+          scenario: persona.id,
+          stepFree: persona.id === "stepFree",
+          lessWalking: persona.id === "stepFree",
+          avoidCrowds: persona.id === "flexible",
+          studentFare: false,
+          routineCommute: persona.id === "fixed",
         };
         const savedPlaces = {
           ...(s.savedPlaces || {}),
-          home: s.introHomePlace ? { ...s.introHomePlace, id: "home" } : s.savedPlaces?.home || null,
-          work: s.introWorkPlace ? { ...s.introWorkPlace, id: "work" } : s.savedPlaces?.work || null,
-          school: s.introSchoolPlace ? { ...s.introSchoolPlace, id: "school" } : s.savedPlaces?.school || null,
+          home: asSavedPlace(persona.route.from),
+          work: asSavedPlace(persona.route.to),
+          school: null,
         };
+        const origin = { ...savedPlaces.home };
+        const destination = { name: persona.route.to.name, detail: persona.route.to.address, ll: persona.route.to.ll, kind: "Scenario" };
         this.setState({ introSaving: true, introError: "" });
         try {
-          await this.props.onOnboardingComplete?.();
           this.setState({
             screen: "map", introStep: 0, introSaving: false,
             savedPlaces,
+            savedList: [commute, ...(s.savedList || []).filter((item) => item.source !== "scenario")],
             routingPreferences,
-            mode: stepFree ? "silver" : has("comfort") ? "comfort" : "rush",
-            tripMode: stepFree ? "step" : has("comfort") ? "quiet" : "fast",
-          });
+            mode: persona.id === "stepFree" ? "silver" : persona.id === "flexible" ? "comfort" : "rush",
+            tripMode: "transit",
+            tripDeparture: departure,
+            routeOrigin: origin,
+            dest: destination,
+            query: "",
+            searchOpen: false,
+            tripRoute: 0,
+            tripCollapsed: true,
+            trips: { key: null, options: [], pending: false, error: null },
+          }, this.loadTripOptions);
           store(ONBOARDED_KEY, 1);
-          this.flash(this.props.user?.isGuest ? "Setup saved on this device" : "Setup complete");
+          this.flash(`${persona.route.label} · planning your best fit`);
         } catch (error) {
           this.setState({ introSaving: false, introError: error?.message || "Setup could not be saved. Try again." });
         }
@@ -2084,6 +2225,27 @@ export class AppLogic extends Component {
     this.setState({ toast });
     if (this.tt) clearTimeout(this.tt);
     this.tt = setTimeout(() => this.setState({ toast: null }), 2600);
+  };
+
+  redeemReward = (reward) => {
+    let outcome = "insufficient";
+    this.setState((state) => {
+      const redemptions = Array.isArray(state.rewardRedemptions) ? state.rewardRedemptions : [];
+      if (redemptions.some((redemption) => redemption?.id === reward.id)) {
+        outcome = "already";
+        return null;
+      }
+      const available = Math.max(0, confirmedPointTotal(state.myReports) - redeemedPointTotal(redemptions));
+      if (available < reward.cost) return null;
+      outcome = "redeemed";
+      return {
+        rewardRedemptions: [...redemptions, { id: reward.id, cost: reward.cost, title: reward.title, at: Date.now() }],
+      };
+    }, () => {
+      if (outcome === "redeemed") this.flash(`Redeemed · ${reward.title}`);
+      else if (outcome === "already") this.flash("This reward has already been redeemed");
+      else this.flash("Not enough points for this reward");
+    });
   };
   lineStyle(label) {
     const L = [["NS", "#D42E12", "#fff"], ["EW", "#009645", "#fff"], ["NE", "#9900AA", "#fff"], ["CC", "#FA9E0D", "#201e1d"], ["DT", "#005EC4", "#fff"], ["TE", "#9D5B25", "#fff"]];
@@ -2237,24 +2399,30 @@ export class AppLogic extends Component {
     const mine = s.myReports || [];
     // Confirmed points are spendable; pending ones are not, because the report
     // they came from has not been corroborated yet.
-    const confirmedPoints = mine.filter((r) => r.state === "confirmed").reduce((sum, r) => sum + (r.points || 0), 0);
+    const confirmedPoints = confirmedPointTotal(mine);
     const pendingPoints = mine.filter((r) => r.state === "pending").reduce((sum, r) => sum + (r.points || 0), 0);
+    const rewardRedemptions = Array.isArray(s.rewardRedemptions) ? s.rewardRedemptions : [];
+    const redeemedPoints = redeemedPointTotal(rewardRedemptions);
+    const availablePoints = Math.max(0, confirmedPoints - redeemedPoints);
+    const redeemedRewardIds = new Set(rewardRedemptions.map((redemption) => redemption?.id).filter(Boolean));
 
     const vouchers = [
-      { title: "$1 off at Kopitiam", sub: "400 points · 6 outlets nearby", cost: 400 },
-      { title: "$5 EZ-Link top-up", sub: "1,800 points · instant", cost: 1800 },
-      { title: "$3 FairPrice voucher", sub: "1,200 points", cost: 1200 },
-      { title: "Off-peak fare rebate", sub: "3,000 points · LTA pilot", cost: 3000 },
+      { id: "kopitiam-1", title: "$1 off at Kopitiam", sub: "400 points · 6 outlets nearby", cost: 400 },
+      { id: "ezlink-5", title: "$5 EZ-Link top-up", sub: "1,800 points · instant", cost: 1800 },
+      { id: "fairprice-3", title: "$3 FairPrice voucher", sub: "1,200 points", cost: 1200 },
+      { id: "offpeak-rebate", title: "Off-peak fare rebate", sub: "3,000 points · LTA pilot", cost: 3000 },
     ].map((v, vi) => {
-      const can = s.points >= v.cost;
+      const redeemed = redeemedRewardIds.has(v.id);
+      const can = !redeemed && availablePoints >= v.cost;
+      const locked = !can && !redeemed;
       return {
-        ...v, cta: can ? "Redeem" : "Locked", variant: can ? "primary" : "secondary", disabled: !can, locked: !can,
+        ...v, cta: redeemed ? "Redeemed" : can ? "Redeem" : "Locked", variant: can ? "primary" : "secondary", disabled: !can, locked, redeemed,
         icon: ["coffee", "credit-card", "shopping-basket", "ticket"][vi] || "gift",
-        gap: (v.cost - s.points).toLocaleString(),
+        gap: Math.max(0, v.cost - availablePoints).toLocaleString(),
         cardStyle: { background: "var(--surface-card)", border: "1px solid var(--border-card)", borderRadius: "var(--radius-card)", padding: "14px 15px", opacity: can ? 1 : 0.78 },
         iconStyle: { flex: "none", width: 34, height: 34, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", background: can ? "var(--accent-soft)" : "var(--sand-100)", color: can ? "var(--text-accent)" : "var(--text-muted)" },
-        barStyle: { width: Math.round(Math.min(1, s.points / v.cost) * 100) + "%", height: "100%", background: "var(--accent)", borderRadius: 999 },
-        redeem: () => { if (can) { this.setState({ points: s.points - v.cost }); this.flash("Redeemed · " + v.title); } },
+        barStyle: { width: Math.round(Math.min(1, availablePoints / v.cost) * 100) + "%", height: "100%", background: "var(--accent)", borderRadius: 999 },
+        redeem: () => this.redeemReward(v),
       };
     });
 
@@ -2275,19 +2443,45 @@ export class AppLogic extends Component {
     const q = s.query.trim().toLowerCase();
     // Only ever live OneMap results.
     const resultSource = s.liveResults && s.liveResults.query === s.query ? s.liveResults.items : [];
-    const results = resultSource.slice(0, 6).map((p) => ({
+    const areaCenter = s.searchTarget === "area" && Array.isArray(s.pin?.ll) ? s.pin.ll : null;
+    const rankedResults = areaCenter
+      ? resultSource.map((place) => ({ ...place, areaMetres: metresBetween(areaCenter, place.ll) })).sort((a, b) => a.areaMetres - b.areaMetres)
+      : resultSource;
+    const results = rankedResults.slice(0, 6).map((p) => ({
       ...p,
+      detail: areaCenter ? `${p.detail} · ${nearbyDistance(p.areaMetres)}` : p.detail,
+      kind: areaCenter ? "Nearby" : p.kind,
       // Clearing the query here is what stops the panel reopening when the
       // user comes back via "Change".
       pick: () => s.searchTarget === "origin"
         ? this.setState({ routeOrigin: { ...p, id: p.id || "custom" }, searchTarget: "dest", query: "", searchOpen: false, liveResults: null, searchPending: false, trips: { key: null, options: [], pending: false, error: null } })
-        : this.chooseDest(p),
+        : this.chooseDest(p, s.searchTarget === "area" ? { pin: null } : undefined),
     }));
 
     const dest = s.dest;
     const trips = s.trips || { options: [], pending: false, error: null };
     // Cards come straight from OneMap itineraries, enriched with LTA crowding.
-    const tripOptions = (trips.options || []).map((o, i) => ({
+    const rawTripOptions = trips.options || [];
+    const routePersona = (s.routingPreferences || {}).persona || DEFAULT_PERSONA;
+    const weatherRankedTrips = rankRoutesForWeather(rawTripOptions, {
+      nowcast: s.weather?.nowcast,
+      outlook: s.weather?.outlook,
+      from: ORIGIN,
+      to: dest?.ll,
+      departureAt: s.tripDeparture?.at || Date.now(),
+    });
+    const aiSelectedIndex = s.aiRoute?.decision?.selectedIndex;
+    const aiSelected = Number.isInteger(aiSelectedIndex)
+      ? weatherRankedTrips.find((entry) => entry.originalIndex === aiSelectedIndex)
+      : null;
+    const rankedTrips = aiSelected
+      ? [aiSelected, ...weatherRankedTrips.filter((entry) => entry !== aiSelected)]
+      : weatherRankedTrips;
+    const recommendedTrip = rankedTrips[0]?.option || null;
+    const weatherChangedRecommendation = Boolean(
+      rankedTrips[0]?.weather?.wet && rankedTrips[0]?.originalIndex !== 0
+    );
+    const tripOptions = rankedTrips.map(({ option: o, weather, originalIndex }, i) => ({
       ...o,
       // Selecting a card opens its breakdown, so give the sheet room for it.
       pick: () => this.setState((st) => ({ tripRoute: i, tripCollapsed: st.tripRoute === i ? !st.tripCollapsed : false, sheetH: Math.max(st.sheetH || 430, this.tallSheet()) })),
@@ -2310,6 +2504,51 @@ export class AppLogic extends Component {
       recorded: !!trips.recorded || !!o.recorded,
       crowd: o.walkOnly ? "Walking route" : o.crowdLevel ? WORD[o.crowdLevel] : "Crowding unknown",
       fare: o.fare || "Fare unknown",
+      fitReason: (() => {
+        const aiAlternative = (s.aiRoute?.decision?.alternatives || []).find((item) => item.index === originalIndex);
+        const aiReason = i === 0 && aiSelected
+          ? s.aiRoute.decision.reason
+          : aiAlternative?.reason;
+        // When Gemini answers, show its returned explanation verbatim. Local
+        // rules below are a fallback only; mixing the two made model output
+        // indistinguishable from hardcoded copy.
+        if (aiReason) return aiReason;
+        const base = i === 0 && weatherChangedRecommendation
+          ? weather.cycling
+            ? `Best fit · ${weather.text} is expected, so Solvik moved cycling behind a weather-safe option.`
+            : `Best fit · ${weather.text} is expected, so this route's shorter walk wins after the rain adjustment.`
+          : routeFitReason(routePersona, o, recommendedTrip, i === 0);
+        if (i !== 0) return base;
+
+        const plannedRoadWork = this.roadEventsOnRoute(o).roadWorks[0] || null;
+        const liveIncident = (o.transitLegs || [])
+          .filter((leg) => leg.mode === "BUS" && Number.isFinite(leg.fromLat) && Number.isFinite(leg.fromLng))
+          .map((leg) => incidentNear((s.road || {}).incidents, [leg.fromLat, leg.fromLng]))
+          .find(Boolean) || null;
+        if (!plannedRoadWork && !liveIncident) return base;
+
+        const issue = plannedRoadWork
+          ? `${roadWorkLabel(plannedRoadWork)} ${plannedRoadWork.kind === "roadopening" ? "affects" : "affect"} this journey`
+          : `${liveIncident.type || "A road issue"} is reported near this journey`;
+        const next = rankedTrips[1]?.option || null;
+        const advantage = next ? Math.max(0, (next.mins || 0) - (o.mins || 0)) : 0;
+        const modeName = { bus: "bus", train: "train", transit: "combined-transit", walk: "walking", cycle: "cycling", express: "express" }[s.tripMode] || "route";
+        const why = advantage > 0
+          ? `it is still about ${advantage} min quicker than the next ${modeName} option`
+          : s.tripMode === "transit"
+            ? "it still has the best balance of changes and total journey time"
+            : `it is still the highest-ranked ${modeName} option from OneMap`;
+        return `${issue}. It remains the best choice because ${why}. The road issue can add uncertainty that is not included in the timetable, so allow extra time.`;
+      })(),
+      fitReasonSource: (i === 0 && aiSelected) || (s.aiRoute?.decision?.alternatives || []).some((item) => item.index === originalIndex)
+        ? "Gemini explanation"
+        : "Local fallback",
+      recommended: i === 0,
+      weather: s.weather?.pending
+        ? { pending: true, title: "Checking weather along this route…", detail: "The recommendation will update when the forecast arrives." }
+        : weather,
+      weatherChangedRecommendation: i === 0 && weatherChangedRecommendation,
+      originalRank: originalIndex,
       // The breakdown is built for the selected card only — the others stay
       // compact so three options still fit on a phone screen.
       expanded: s.tripRoute === i && !s.tripCollapsed,
@@ -2436,6 +2675,86 @@ export class AppLogic extends Component {
 
     const tabDefs = [{ id: "map", label: "Map" }, { id: "plan", label: "Plan" }, { id: "report", label: "Report" }, { id: "rewards", label: "Points" }];
     const chipDefs = [["intro", "Intro"], ["map", "Map"], ["plan", "Plan"], ["report", "Report"], ["rewards", "Points"]];
+    const activeRoute = dest ? tripOptions[s.tripRoute] || tripOptions[0] : null;
+    const crowdByCode = new Map(((s.crowd && s.crowd.stations) || []).map((station) => [String(station.code || "").toUpperCase(), station]));
+    const routeCrowdStations = [];
+    const seenRouteStops = new Set();
+    (activeRoute?.steps || []).forEach((step) => {
+      const mode = String(step.mode || "").toUpperCase();
+      if (mode === "WALK") return;
+      if (mode === "BUS") {
+        const leg = (activeRoute.transitLegs || []).find((item) => item.legIndex === step.legIndex) || null;
+        const span = activeRoute.legSpans?.[step.legIndex] || null;
+        const ll = span && activeRoute.geometry?.length
+          ? activeRoute.geometry[Math.round((span.from + span.to) / 2)]
+          : Number.isFinite(leg?.fromLat) && Number.isFinite(leg?.fromLng)
+            ? [leg.fromLat, leg.fromLng]
+            : step.stopPoints?.find((point) => Array.isArray(point.ll))?.ll || null;
+        if (Array.isArray(ll) && ll.every(Number.isFinite)) {
+          routeCrowdStations.push({
+            id: `route-bus-${step.legIndex}`,
+            ll,
+            level: leg?.crowdLevel || step.crowdLevel || "unknown",
+            label: leg?.label || step.label || (leg?.service ? `BUS ${leg.service}` : "Bus"),
+            busLoad: true,
+          });
+        }
+        return;
+      }
+      const points = Array.isArray(step.stopPoints) && step.stopPoints.length
+        ? step.stopPoints
+        : [step.boardStopCode, ...(step.stopCodes || []), step.alightStopCode].filter(Boolean).map((code) => ({ code }));
+      points.forEach((point) => {
+        const code = String(point.code || "").toUpperCase();
+        const live = code ? crowdByCode.get(code) : null;
+        const ll = live && Number.isFinite(Number(live.lat)) && Number.isFinite(Number(live.lng))
+          ? [Number(live.lat), Number(live.lng)]
+          : Array.isArray(point.ll) && point.ll.length >= 2 ? point.ll.map(Number) : null;
+        if (!ll || !ll.every(Number.isFinite)) return;
+        const key = code || `${ll[0].toFixed(5)},${ll[1].toFixed(5)}`;
+        if (seenRouteStops.has(key)) return;
+        seenRouteStops.add(key);
+        routeCrowdStations.push({
+          id: `route-crowd-${key}`,
+          ll,
+          radius: 220,
+          level: live?.level || "unknown",
+          label: live?.name || point.name || code || "Stop",
+          routeStop: true,
+        });
+      });
+    });
+    const routeCrowdLevels = new Set(routeCrowdStations.map((station) => station.level));
+    const routeCrowdGuide = [
+      { level: "light", label: "Light", color: "var(--crowd-light)" },
+      { level: "moderate", label: "Filling", color: "var(--crowd-moderate)" },
+      { level: "busy", label: "Busy", color: "var(--crowd-busy)" },
+      { level: "unknown", label: "No data", color: "var(--text-muted)" },
+    ];
+    const weatherState = s.weather || { nowcast: null, outlook: null, pending: false, error: null };
+    const weatherPoint = s.userLoc || dest?.ll || this._mapCenter || ORIGIN;
+    const currentNowcast = nowcastAt(weatherState.nowcast, weatherPoint);
+    const currentOutlook = forecastAt({ outlook: weatherState.outlook, ll: weatherPoint, at: Date.now() });
+    const weatherText = currentNowcast?.text || currentOutlook?.text || weatherState.outlook?.general || "";
+    const weatherArea = currentNowcast?.name || (currentOutlook?.region ? `${currentOutlook.region[0].toUpperCase()}${currentOutlook.region.slice(1)} Singapore` : "Singapore");
+    const weatherValidTo = currentNowcast?.validTo || weatherState.nowcast?.validTo || null;
+    const weatherPhase = singaporeDayPhase(s.tick || Date.now());
+    const mapWeather = {
+      pending: !!weatherState.pending,
+      error: weatherState.error || null,
+      icon: weatherState.pending ? "loader-2" : weatherState.error ? "cloud-off" : weatherIconName(weatherText, weatherPhase),
+      phase: weatherPhase,
+      title: weatherState.pending ? "Checking the weather…" : weatherState.error ? "Weather unavailable" : weatherText || "Forecast unavailable",
+      detail: weatherState.pending
+        ? "Reading Singapore’s latest NEA forecast."
+        : weatherState.error
+          ? "The live NEA forecast could not be reached. Try again in a moment."
+          : `${weatherArea} · ${currentNowcast ? "NEA 2-hour forecast" : "NEA 24-hour forecast"}`,
+      meta: weatherValidTo ? `Valid until ${singaporeClock(weatherValidTo)}` : "Live Singapore forecast from NEA",
+      wet: isWet(currentNowcast?.condition || currentOutlook?.condition),
+      ariaLabel: weatherState.pending ? "Checking Singapore weather" : weatherState.error ? "Singapore weather unavailable" : `Singapore weather: ${weatherText || "forecast unavailable"}`,
+      retry: this.loadWeather,
+    };
 
     return {
       chips: chipDefs.map(([id, label]) => ({
@@ -2447,19 +2766,32 @@ export class AppLogic extends Component {
       showStatus: ["report", "rewards", "plan", "account"].indexOf(sc) >= 0,
       showTabs: ["map", "plan", "report", "rewards", "account"].indexOf(sc) >= 0 && !(sc === "map" && !!s.dest),
       isMap: sc === "map", mapSearch: !s.dest, mapRoute: !!s.dest,
+      mapWeather,
       // The panel stays shut until there is a real query to answer — focusing
       // the field no longer surfaces the built-in place list.
       showResults: !s.dest && s.searchOpen && q.length >= 2,
       // Your own history, shown only when you open an empty search box — it
       // disappears the moment you start typing.
       showRecents: s.searchTarget === "dest" && !s.dest && !!s.searchOpen && q.length < 2 && (s.recents || []).length > 0,
+      showAreaSearch: s.searchTarget === "area" && !s.dest && !!s.searchOpen && q.length < 2 && !!s.pin,
+      areaSearchCategories: [
+        { label: "Food & drink", query: "food centre", icon: "utensils" },
+        { label: "MRT & LRT", query: "MRT station", icon: "train-front" },
+        { label: "Bus hubs", query: "bus interchange", icon: "bus" },
+        { label: "Clinics", query: "clinic", icon: "cross" },
+      ].map((category) => ({ ...category, pick: () => this.setState({ query: category.query }) })),
+      areaSearchDetail: s.pin?.detail || "Dropped pin",
       recents: (s.recents || []).map((r) => ({
         name: r.name,
         detail: r.detail || "Recent destination",
         pick: () => this.chooseDest({ name: r.name, detail: r.detail || "", ll: r.ll, kind: r.kind || "Recent" }),
       })),
       clearRecents: () => this.setState({ recents: clearSearches() }),
-      openSearch: () => { clearTimeout(this.bt); this.setState({ searchOpen: true, searchTarget: "dest" }); },
+      openSearch: () => {
+        clearTimeout(this.bt);
+        this.setState((current) => ({ searchOpen: true, searchTarget: current.searchTarget === "area" ? "area" : "dest" }));
+      },
+      hideSearch: () => { clearTimeout(this.bt); this.setState({ searchOpen: false }); },
       openOriginSearch: () => this.setState({
         searchOpen: true,
         searchTarget: "origin",
@@ -2474,11 +2806,15 @@ export class AppLogic extends Component {
       setQuery: (val) => this.setState({ query: val }),
       clearQuery: () => this.setState({ query: "", liveResults: null, searchPending: false }),
       results,
-      resultsLabel: "Results for “" + s.query.trim() + "”",
+      resultsLabel: s.searchTarget === "area" ? `Nearest matches for “${s.query.trim()}”` : "Results for “" + s.query.trim() + "”",
       searchPending: !!s.searchPending,
       searchEmpty: !s.searchPending && !s.searchError && results.length === 0,
       searchError: s.searchError || null,
-      searchFooter: "Results from OneMap · Singapore Land Authority",
+      searchFooter: s.searchTarget === "area"
+        ? (s.liveResults?.items || []).some((item) => item.source === "OpenStreetMap")
+          ? "Nearest to the pin · Place data © OpenStreetMap contributors"
+          : "Ranked by distance from the pin · Results from OneMap"
+        : "Results from OneMap · Singapore Land Authority",
       routeOriginPlace: s.routeOrigin || null,
       routeOriginReset: s.routeOriginReset || 0,
       routeOriginName: resolvedOrigin?.name || "Choose a starting place",
@@ -2494,12 +2830,13 @@ export class AppLogic extends Component {
       setRouteOrigin: (place) => this.setState({ routeOrigin: place, routeOriginDraft: false, tripCollapsed: true, trips: { key: null, options: [], pending: false, error: null } }),
       setRouteOriginDraft: (draft) => this.setState({ routeOriginDraft: draft }),
       routeOriginInput: s.searchTarget === "origin" ? s.query : (resolvedOrigin?.name || "Current location"),
-      searchPlaceholder: s.searchTarget === "origin" ? "Search starting place" : "Search address, stop or area",
+      searchPlaceholder: s.searchTarget === "origin" ? "Search starting place" : s.searchTarget === "area" ? "Search near dropped pin" : "Search address, stop or area",
       originPresets: [
         {
           id: "location",
           label: s.locating ? "Locating…" : "My location",
           icon: "locate-fixed",
+          detail: "Use this device's current position",
           active: !s.routeOrigin && !!s.userLoc,
           disabled: !!s.locating,
           pick: () => this.requestCurrentLocation(true, true)
@@ -2513,13 +2850,15 @@ export class AppLogic extends Component {
             id: place.id,
             label: { home: "Home", work: "Work", school: "School" }[place.id],
             icon: { home: "house", work: "briefcase", school: "graduation-cap" }[place.id],
+            detail: savedPlaceDetail(place),
             active: s.routeOrigin?.id === place.id || (!s.routeOrigin && !s.userLoc && place.id === "home"),
             disabled: false,
             pick: () => this.setState({ routeOrigin: place, routeOriginDraft: false, tripCollapsed: true, trips: { key: null, options: [], pending: false, error: null } }, this.loadTripOptions),
           })),
       ],
       destName: dest ? dest.name : "", destDetail: dest ? dest.detail : "",
-      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, routeOriginCoord: s.routeOrigin?.ll || null, mapCenter: this._mapCenter,
+      tripDepartureLabel: s.tripDeparture?.label || "Leave now",
+      destCoord: dest ? dest.ll : null, originCoord: ORIGIN, routeOriginCoord: dest ? s.routeOrigin?.ll || null : null, mapCenter: this._mapCenter,
       savedPlaceMarkers: s.routingPreferences?.showSavedPlaces === false
         ? []
         : ["home", "work", "school"].map((id) => s.savedPlaces?.[id]).filter((place) => place?.verified && Array.isArray(place.ll)),
@@ -2529,6 +2868,9 @@ export class AppLogic extends Component {
       // No destination, no line: the map must not keep drawing the plan you
       // just backed out of.
       routeCoords: dest ? (tripOptions[s.tripRoute] || tripOptions[0] || {}).geometry || [] : [],
+      routeCrowdStations,
+      routeCrowdGuide,
+      routeCrowdLegend: routeCrowdGuide.filter((item) => routeCrowdLevels.has(item.level)),
       // When the shown route avoids something, the route it replaced is drawn
       // faint behind it: 3.2.3 wants the trade-off visible, not asserted.
       compareRouteCoords: dest && (s.tripAvoid || (s.tripAvoidStations || []).length) ? ((s.tripBefore && s.tripBefore.geometry) || []) : [],
@@ -2543,6 +2885,52 @@ export class AppLogic extends Component {
           .map((leg) => option.legSpans[leg.legIndex])
           .filter(Boolean);
       })(),
+      // Only issues that touch the route currently drawn are mapped. LTA rail
+      // alerts carry station codes; planned lift works do too. When a line-wide
+      // alert has no station coordinate, its marker falls on the affected leg
+      // rather than somewhere unrelated on the island.
+      mapIssues: (() => {
+        const option = dest ? tripOptions[s.tripRoute] || tripOptions[0] : null;
+        if (!option) return [];
+        const stationIndex = new Map(((s.crowd && s.crowd.stations) || []).map((station) => [String(station.code || "").toUpperCase(), station]));
+        const items = [];
+        const seen = new Set();
+        const push = (issue) => {
+          if (!issue || !Array.isArray(issue.ll)) return;
+          const key = `${issue.kind}|${issue.title}|${issue.ll[0].toFixed(4)},${issue.ll[1].toFixed(4)}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          items.push(issue);
+        };
+        const midpointForLine = (line) => {
+          const leg = (option.transitLegs || []).find((entry) => sameLine(entry.label, line));
+          const span = leg && option.legSpans && option.legSpans[leg.legIndex];
+          if (!span || !option.geometry) return null;
+          return option.geometry[Math.round((span.from + span.to) / 2)] || null;
+        };
+
+        ((s.faults && s.faults.items) || [])
+          .filter((fault) => (option.transitLegs || []).some((leg) => sameLine(leg.label, fault.line)))
+          .forEach((fault) => {
+            const located = (fault.stations || []).map((code) => stationIndex.get(String(code).toUpperCase())).filter(Boolean);
+            if (located.length) {
+              located.slice(0, 3).forEach((station) => push({ kind: "alert", ll: [station.lat, station.lng], title: fault.title, detail: station.name || fault.detail }));
+            } else {
+              push({ kind: "alert", ll: midpointForLine(fault.line), title: fault.title, detail: fault.detail });
+            }
+          });
+
+        this.worksOnRoute(option).forEach((work) => {
+          const station = stationIndex.get(String(work.stationCode || "").toUpperCase());
+          if (station) push({ kind: "lift", ll: [station.lat, station.lng], title: worksLabel(work), detail: worksDetail(work) });
+        });
+
+        (option.transitLegs || []).filter((leg) => leg.mode === "BUS" && Number.isFinite(leg.fromLat)).forEach((leg) => {
+          const incident = incidentNear((s.road || {}).incidents, [leg.fromLat, leg.fromLng]);
+          if (incident) push({ kind: "road", ll: incident.ll, title: incident.type || "Road issue", detail: incident.message });
+        });
+        return items.slice(0, 6);
+      })(),
       userAccuracy: s.userLoc ? s.userAccuracy : null,
       recenterToken: s.recenterToken || 0,
       locating: !!s.locating,
@@ -2550,10 +2938,11 @@ export class AppLogic extends Component {
       locateMe: this.locateMe,
       // Sits clear of whichever bottom overlay is currently showing.
       setCrowdBarRef: this.setCrowdBarRef,
-      locateBottom: dest ? `min(${(s.sheetH || 430) + 12}px, calc(100% - 64px))` : `calc(${s.fcPin ? 250 : s.pin ? 210 : (s.crowdOn !== false && !s.searchOpen && !q) ? 106 + (s.crowdBarHeight || 110) : 96}px + env(safe-area-inset-bottom))`,
+      locateBottom: dest ? `min(${(s.sheetH || 430) + 12}px, calc(100% - 64px))` : `calc(${s.fcPin ? 250 : s.pin ? 210 : 96}px + env(safe-area-inset-bottom))`,
       backToSearch: () => this.chooseDest(null),
       pinCoord: s.pin ? s.pin.ll : null,
-      hasPin: !!s.pin && !dest && !s.fcPin,
+      hasPin: !!s.pin && !dest && !s.fcPin && !(s.searchTarget === "area" && s.searchOpen),
+      showMapAttrib: !dest && !s.pin && !s.fcPin && s.crowdOn === false,
       showPinHint: !s.pin && !dest && !s.searchOpen && !q && !s.fcPin && s.crowdOn === false,
       pinName: s.pin ? s.pin.name : "",
       pinDetail: s.pin ? s.pin.detail : "",
@@ -2561,6 +2950,7 @@ export class AppLogic extends Component {
         if (this.state.dest) return;
         this.setState({
           pin: { ll, name: "Dropped pin", detail: ll[0].toFixed(5) + ", " + ll[1].toFixed(5) },
+          searchOpen: false,
         });
       },
       clearPin: () => this.setState({ pin: null }),
@@ -2572,8 +2962,7 @@ export class AppLogic extends Component {
       pinSearch: () => {
         const p = this.state.pin;
         if (!p) return;
-        this.setState({ query: "", searchOpen: true, pin: null });
-        this.flash("Showing places near the pin");
+        this.setState({ query: "", searchOpen: true, searchTarget: "area", liveResults: null, searchPending: false, searchError: null });
       },
       setSheetRef: (el) => { this.sheetEl = el; },
       sheetWrapStyle: { position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 15, display: "flex", height: (s.sheetH || 430) + "px", maxHeight: "calc(100% - 70px)", transition: s.sheetDrag ? "none" : "height var(--dur-base) var(--ease-out)" },
@@ -2581,13 +2970,12 @@ export class AppLogic extends Component {
       sheetGrabStyle: { flex: "none", padding: "10px 0 12px", cursor: s.sheetDrag ? "grabbing" : "grab", touchAction: "none", userSelect: "none" },
       sheetDragStart: (e) => this.startSheetDrag(e),
       tripModeTiles: [
-        { id: "fast", label: "Fastest" },
-        { id: "budget", label: "Cheapest" },
-        { id: "quiet", label: "Less crowded" },
-        { id: "step", label: "Step-free" },
-        { id: "few", label: "Fewest changes" },
-        { id: "walk", label: "Least walking" },
-        { id: "bike", label: "Cycling" },
+        { id: "bus", label: "Bus", icon: "bus" },
+        { id: "train", label: "Train", icon: "train-front" },
+        { id: "transit", label: "Transit", icon: "route" },
+        { id: "walk", label: "Walk", icon: "footprints" },
+        { id: "cycle", label: "Cycle", icon: "bike" },
+        { id: "express", label: "Express", icon: "zap" },
       ].map((m) => {
         const on = s.tripMode === m.id;
         return {
@@ -2597,14 +2985,46 @@ export class AppLogic extends Component {
         };
       }),
       tripMode: s.tripMode, setTripMode: (id) => this.setState({ tripMode: id, tripAvoid: null, tripAvoidStations: null, tripRoute: 0, tripCollapsed: true }),
+      routeAssistantLabel: s.aiRoute?.pending
+        ? "Gemini is comparing weather, preferences and route events…"
+        : s.aiRoute?.decision
+          ? `AI-assisted recommendation · ${s.aiRoute.model || "Gemini"}`
+          : s.aiRoute?.configured === false
+            ? "Smart local ranking active · add GEMINI_API_KEY for Gemini assistance"
+            : s.aiRoute?.error
+              ? "Gemini unavailable · using smart local ranking"
+              : "",
+      scenarioAdvice: (() => {
+        const scenario = (s.routingPreferences || {}).scenario;
+        if (!scenario || !recommendedTrip) return "";
+        const alerts = this.disruptingAlerts(recommendedTrip);
+        if (scenario === "fixed") {
+          const alternative = s.reroute && s.reroute.option;
+          const delayMins = alternative ? Math.max(0, alternative.mins - recommendedTrip.mins) : 0;
+          if (alerts.length && shouldInterrupt("fixed", { delayMins })) {
+            return `Act now · take ${(alternative.legs || []).join(" · ")}; ${alerts[0].line} puts the 08:45 arrival at risk by about ${delayMins} min.`;
+          }
+          return alerts.length
+            ? `${alerts[0].line} issue mapped · no 15-minute impact is confirmed, so Rachel is not interrupted yet.`
+            : `No action needed · ${(recommendedTrip.legs || []).join(" · ") || "the current route"} still protects the 08:45 arrival.`;
+        }
+        if (scenario === "flexible") {
+          return recommendedTrip.crowdLevel === "busy"
+            ? "Crowding is high · compare a later departure or cycling before committing."
+            : "Go-to route · the best available balance of comfort, changes and journey time.";
+        }
+        const works = this.worksOnRoute(recommendedTrip);
+        return works.length
+          ? `${worksLabel(works[0])} · review the mapped issue before starting this step-free journey.`
+          : "Go-to route · step-free access and the shortest manageable walk come first.";
+      })(),
       tripModeBlurb: {
-        fast: "Ranked by total journey time from OneMap.",
-        budget: "Ranked by the fare OneMap returns, bus-only options included.",
-        quiet: "Ranked by live platform crowding and bus loading from LTA.",
-        step: "Prefers wheelchair-accessible buses and shorter walks. Lift outages are not guaranteed to be reflected.",
-        few: "Ranked by number of transfers.",
-        walk: "Ranked by time on foot, with a shorter maximum walking distance.",
-        bike: "A cycling route end to end, from OneMap's cycling network.",
+        bus: "Bus-first journeys, including the walk to and from each stop.",
+        train: "Rail-first journeys, including every transfer and walking connection.",
+        transit: "The best combined bus, rail and walking journey available.",
+        walk: "A door-to-door walking route from OneMap.",
+        cycle: "A door-to-door route on OneMap's cycling network.",
+        express: "The quickest public-transport option, ranked by total journey time.",
       }[s.tripMode],
       tripOptions,
       // Demo mode may serve recorded answers when a live call fails. Whenever
@@ -2619,6 +3039,20 @@ export class AppLogic extends Component {
       })(),
       tripsPending: !!trips.pending,
       tripsError: trips.error || null,
+      tripRecovery: trips.error ? {
+        ...routeFailure(trips.error, s.tripMode),
+        modes: routeRecoveryModes(s.tripMode).map((mode) => ({
+          ...mode,
+          pick: () => this.setState({
+            tripMode: mode.id,
+            tripAvoid: null,
+            tripAvoidStations: null,
+            tripRoute: 0,
+            tripCollapsed: true,
+            trips: { key: null, options: [], pending: false, error: null },
+          }),
+        })),
+      } : null,
       // Only after a request has actually resolved — the initial state is not "empty".
       tripsEmpty: !!trips.key && !trips.pending && !trips.error && tripOptions.length === 0,
       // Nothing left after avoiding a disrupted line is a different answer from
@@ -2635,7 +3069,7 @@ export class AppLogic extends Component {
       // Read by the app shell. The step-free persona asks for large text, and
       // the scale is one token rather than a list of overridden sizes.
       largeText: personaOf((s.routingPreferences || {}).persona).largeText,
-      headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today", account: "Account" }[sc] || "Solvik",
+      headerTitle: { map: "Map", report: "Report", rewards: "Points", plan: "Today", account: "Your data" }[sc] || "Solvik",
       headerSub: {
         map: "OneMap · Singapore Land Authority",
         report: s.stop.data ? `${s.stop.data.name} · reports stay live 30 min` : "Reports stay live 30 min",
@@ -2645,14 +3079,8 @@ export class AppLogic extends Component {
           const today = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
           return `${today} · ${n} watched commute${n === 1 ? "" : "s"}`;
         })(),
-        account: "Profile, privacy and saved data",
+        account: "Private storage on this browser",
       }[sc] || "",
-      cloudSyncStatus: s.cloudSyncStatus,
-      cloudSyncError: s.cloudSyncError,
-      cloudSyncConflict: s.cloudSyncStatus === "conflict",
-      keepDeviceData: this.keepDeviceData,
-      useCloudData: this.useCloudData,
-      retryCloudSync: this.startCloudSync,
       toast: s.toast,
       tabItems: tabDefs, tab: sc, setTab: (id) => this.go(id),
       tabPill: {
@@ -2669,7 +3097,7 @@ export class AppLogic extends Component {
           down: () => this.setState({ pressTab: t.id }),
           up: () => this.setState({ pressTab: null }),
           icon: { map: "map", plan: "calendar-days", report: "megaphone", rewards: "award" }[t.id],
-          dot: t.id === "map" || (t.id === "rewards" && s.points > 2000),
+          dot: t.id === "map" || (t.id === "rewards" && availablePoints > 2000),
           dotStyle: { position: "absolute", top: -2, right: -4, width: 7, height: 7, borderRadius: 999, background: t.id === "map" ? "var(--crowd-busy)" : "var(--accent)", border: "1.5px solid var(--surface-card)", animation: t.id === "map" ? "sv-ping 1.8s var(--ease-standard) infinite" : "none" },
           style: {
             position: "relative", zIndex: 1, height: 54, border: "none", background: "transparent",
@@ -2725,7 +3153,7 @@ export class AppLogic extends Component {
       openNavCamera: () => this.setState({ navCameraOpen: true }),
       closeNavCamera: () => this.setState({ navCameraOpen: false }),
       onNavCapture: (photo) => this.setState({ navPhoto: photo, navCameraOpen: false }),
-      navRepCta: s.reportBusy ? "Checking…" : !s.navPhoto ? "Take a photo to file" : "File · " + (rTypes.find((t) => t.id === s.nrType) || { pts: 0 }).pts + " points pending",
+      navRepCta: s.reportBusy ? "Checking…" : !s.navPhoto ? "Take a photo to save" : "Save locally · " + (rTypes.find((t) => t.id === s.nrType) || { pts: 0 }).pts + " points",
       navRepPost: () => this.submitNavReport(),
       locEyebrow: s.stop.data ? "Live at your stop" : s.stop.requested ? (s.stop.error ? "No stop found" : "Finding your stop") : "Location is off",
       locStopName: s.stop.data ? s.stop.data.name : s.stop.error ? "Location unavailable" : s.stop.pending ? "Locating…" : "Use your location",
@@ -2748,7 +3176,7 @@ export class AppLogic extends Component {
       photoName: s.photo ? "Taken just now · checked, then discarded" : "",
       photoThumb: s.photo ? <img src={s.photo.dataUrl} alt="Report photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null,
       reportBusy: !!s.reportBusy,
-      reportCta: s.reportBusy ? "Checking…" : s.photo ? "File report · " + chosen.pts + " points pending" : "Take a photo to file",
+      reportCta: s.reportBusy ? "Checking location and photo…" : s.photo ? "Save report · " + chosen.pts + " points" : "Take a photo to save",
       clearPhoto: () => this.setState({ photo: null }),
       backToPick: () => this.setState({ rep: "pick", repType: null, sev: null, photo: null, reportResult: null, cameraOpen: false }),
       submitReport: this.submitReportNow,
@@ -2766,10 +3194,8 @@ export class AppLogic extends Component {
         detail: c.ok ? "" : c.detail,
       })),
       reportPointsLine: s.reportResult && s.reportResult.verdict === "accepted"
-        // The whole point of the rewards change, said on the screen where it
-        // matters: filing alone earns nothing until someone else agrees.
-        ? `${s.reportResult.points} points pending. They are credited when another commuter reports the same thing, or LTA's own feed confirms it.`
-        : "No points — this report wasn't filed.",
+        ? `${s.reportResult.points} points saved on this device with the report.`
+        : "No points — this report wasn't saved.",
 
       // Real reports, grouped, with the evidence that justifies each tier.
       // Nothing here is sample data any more.
@@ -2791,9 +3217,9 @@ export class AppLogic extends Component {
         ? reportsState.error
         // "No reports" is a fact worth stating; inventing three to fill the
         // space is what this list used to do.
-        : "Reports from commuters nearby, live for 30 minutes. Counted by people, not submissions.",
+        : "Reports saved by this browser remain visible here for 30 minutes.",
 
-      points: confirmedPoints.toLocaleString(), vouchers,
+      points: availablePoints.toLocaleString(), vouchers,
       pendingPoints: pendingPoints.toLocaleString(),
       hasPending: pendingPoints > 0,
       pendingLine: pendingPoints > 0
@@ -2803,13 +3229,10 @@ export class AppLogic extends Component {
       tierName: confirmedPoints >= 3100 ? "Gold tier" : confirmedPoints >= 1000 ? "Silver tier" : "Bronze tier",
       toGold: Math.max(0, 3100 - confirmedPoints).toLocaleString(),
       tierBarStyle: { width: Math.round(Math.max(0, Math.min(1, (confirmedPoints - 1000) / 2100)) * 100) + "%", height: "100%", background: "var(--crowd-light)", borderRadius: 999, transition: "width var(--dur-slow) var(--ease-out)" },
-      // Counted from this account's own reports. The old row claimed "94%
-      // verified by others", which was invented and used the one word this
-      // feature must never use.
       pointStats: [
-        { icon: "megaphone", value: String(mine.length), label: "Reports you filed" },
-        { icon: "badge-check", value: String(mine.filter((r) => r.state === "confirmed").length), label: "Confirmed by others" },
-        { icon: "hourglass", value: String(mine.filter((r) => r.state === "pending").length), label: "Awaiting confirmation" },
+        { icon: "megaphone", value: String(mine.length), label: "Reports saved" },
+        { icon: "badge-check", value: String(mine.filter((r) => r.state === "confirmed").length), label: "Checks passed" },
+        { icon: "hard-drive", value: String(mine.length), label: "Stored locally" },
       ],
       ...this.addCommuteVals(s),
     };

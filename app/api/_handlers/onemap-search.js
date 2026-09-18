@@ -1,5 +1,5 @@
 // Proxies OneMap's address/postal-code/building search so the browser never
-// talks to onemap.gov.sg directly. Search does not require an API token.
+// talks to onemap.gov.sg directly or receives the server-side API token.
 import { serveRecorded } from "../_lib/demo.js";
 import { recordedSearch } from "../_lib/recorded/index.js";
 import { oneMapSearch } from "../_lib/onemap.js";
@@ -15,8 +15,22 @@ export default async function handler(req, res) {
     return;
   }
 
+  const nearValue = req.body?.near;
+  let near;
+  if (nearValue != null) {
+    if (!Array.isArray(nearValue) || nearValue.length !== 2) {
+      res.status(400).json({ error: "near must be a [latitude, longitude] pair" });
+      return;
+    }
+    near = nearValue.map(Number);
+    if (!near.every(Number.isFinite) || Math.abs(near[0]) > 90 || Math.abs(near[1]) > 180) {
+      res.status(400).json({ error: "near contains invalid coordinates" });
+      return;
+    }
+  }
+
   try {
-    const results = await oneMapSearch(normalized);
+    const results = await oneMapSearch(normalized, { near });
     res.status(200).json({ results });
   } catch (err) {
     // Match the recorded places against what was typed, so a demo search for

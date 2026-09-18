@@ -4,7 +4,7 @@ import { Icon, SearchField } from "../design-system";
 import { searchPlaces } from "../api/onemap";
 import { addressDetail } from "../lib/display";
 
-export function PlacePicker({ value, displayValue, clearOnFocus = false, placeholder, icon = "map-pin", onChange, onDraftChange, suggestions = [], showDetails = true }) {
+export function PlacePicker({ value, displayValue, clearOnFocus = false, placeholder, icon = "map-pin", onChange, onDraftChange, suggestions = [], presets = [], showDetails = true }) {
   const [query, setQuery] = useState(displayValue || value?.name || "");
   const [results, setResults] = useState([]);
   const [pending, setPending] = useState(false);
@@ -17,6 +17,8 @@ export function PlacePicker({ value, displayValue, clearOnFocus = false, placeho
   const editing = useRef(false);
   const listId = useId();
   const expanded = open && !value && query.trim().length >= 2;
+  const presetsOpen = open && query.trim().length < 2 && presets.length > 0;
+  const popupOpen = expanded || presetsOpen;
 
   useEffect(() => {
     if (editing.current) { editing.current = false; return; }
@@ -39,7 +41,7 @@ export function PlacePicker({ value, displayValue, clearOnFocus = false, placeho
   }, [query, expanded]);
 
   useLayoutEffect(() => {
-    if (!expanded) return;
+    if (!popupOpen) return;
     const update = () => {
       const field = anchor.current?.getBoundingClientRect();
       if (!field) return;
@@ -67,7 +69,7 @@ export function PlacePicker({ value, displayValue, clearOnFocus = false, placeho
       window.visualViewport?.removeEventListener("resize", update);
       window.visualViewport?.removeEventListener("scroll", update);
     };
-  }, [expanded]);
+  }, [popupOpen]);
 
   useEffect(() => {
     const outside = (event) => {
@@ -92,6 +94,16 @@ export function PlacePicker({ value, displayValue, clearOnFocus = false, placeho
     onDraftChange?.(false);
     setQuery(place.name);
     setOpen(false);
+    anchor.current?.querySelector("input")?.blur();
+  };
+  const choosePreset = (preset) => {
+    if (preset.disabled) return;
+    editing.current = false;
+    setQuery(preset.label);
+    setOpen(false);
+    setActive(-1);
+    onDraftChange?.(false);
+    preset.pick?.();
     anchor.current?.querySelector("input")?.blur();
   };
 
@@ -123,7 +135,7 @@ export function PlacePicker({ value, displayValue, clearOnFocus = false, placeho
           }
           if (event.key === "Enter" && expanded && active >= 0 && results[active]) { event.preventDefault(); choose(results[active]); }
         }}
-        role="combobox" aria-expanded={expanded} aria-controls={expanded ? listId : undefined}
+        role="combobox" aria-expanded={popupOpen} aria-controls={popupOpen ? listId : undefined}
         aria-activedescendant={expanded && active >= 0 ? `${listId}-${active}` : undefined} aria-autocomplete="list" />
     </div>
     {value && showDetails && <div className="sv-place-detail">
@@ -134,11 +146,19 @@ export function PlacePicker({ value, displayValue, clearOnFocus = false, placeho
       {suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => updateQuery(suggestion)}>{suggestion}</button>)}
     </div>}
     {open && !value && query.trim().length === 1 && <div className="sv-place-detail">Type at least 2 characters to search.</div>}
-    {expanded && position && createPortal(<div ref={popup} id={listId} role="listbox" aria-label="Matching places" className="sv-place-results" style={position}>
-      {pending && <div role="status">Searching OneMap…</div>}
-      {!pending && error && <div role="alert">{error}</div>}
-      {!pending && !error && !results.length && <div>No matching address. Try a postal code or building name.</div>}
-      {!pending && results.map((result, index) => <button type="button" role="option" aria-selected={active === index} id={`${listId}-${index}`}
+    {popupOpen && position && createPortal(<div ref={popup} id={listId} role="listbox" aria-label={presetsOpen ? "Choose starting place" : "Matching places"} className="sv-place-results" style={position}>
+      {presetsOpen && presets.map((preset) => (
+        <button type="button" role="option" aria-selected={!!preset.active} disabled={!!preset.disabled} key={preset.id}
+          className="sv-place-preset-option" onMouseDown={(event) => event.preventDefault()} onClick={() => choosePreset(preset)}>
+          <span className="sv-place-preset-icon"><Icon name={preset.icon || "map-pin"} size={15} /></span>
+          <span className="sv-place-preset-copy"><strong>{preset.label}</strong>{preset.detail && <span>{preset.detail}</span>}</span>
+          {preset.active && <Icon name="check" size={15} />}
+        </button>
+      ))}
+      {expanded && pending && <div role="status">Searching OneMap…</div>}
+      {expanded && !pending && error && <div role="alert">{error}</div>}
+      {expanded && !pending && !error && !results.length && <div>No matching address. Try a postal code or building name.</div>}
+      {expanded && !pending && results.map((result, index) => <button type="button" role="option" aria-selected={active === index} id={`${listId}-${index}`}
         key={`${index}-${result.lat}-${result.lng}`} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(result)}>
         <strong>{result.name || result.address}</strong>
         <span>{addressDetail(result.address, result.postal)}</span>

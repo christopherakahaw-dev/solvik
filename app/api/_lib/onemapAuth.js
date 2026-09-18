@@ -15,12 +15,36 @@ function envValue(name) {
   return trimmed.replace(/^(['"])(.*)\1$/, "$2").trim();
 }
 
+// A stale JWT should never be sent just because it is still present in an
+// environment file. OneMap's manually copied tokens are short-lived; when an
+// account login is also configured, skipping an expired token lets the server
+// mint a fresh one before the route request instead of producing two noisy
+// 401 attempts first. Opaque tokens have no readable expiry, so they remain
+// valid candidates and OneMap is still the authority on whether to accept them.
+export function tokenExpiresSoon(token, now = Date.now()) {
+  const payload = String(token || "").split(".")[1];
+  if (!payload) return false;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64").toString("utf8"));
+    const expiresAt = Number(claims.exp) * 1000;
+    return Number.isFinite(expiresAt) && expiresAt <= now + 60_000;
+  } catch {
+    return false;
+  }
+}
+
+function configuredToken() {
+  const token = envValue("ONEMAP_TOKEN");
+  return token && !tokenExpiresSoon(token) ? token : "";
+}
+
 export function credentialSummary() {
   const token = envValue("ONEMAP_TOKEN");
   const email = envValue("ONEMAP_EMAIL");
   const password = envValue("ONEMAP_PASSWORD");
   return {
     hasStaticToken: !!token,
+    staticTokenExpired: !!token && tokenExpiresSoon(token),
     hasLogin: !!(email && password),
     email: email ? email.replace(/(.).*(@.*)/, "$1***$2") : null,
     cachedUntil: cached ? new Date(cached.expiresAt).toISOString() : null,
@@ -63,8 +87,8 @@ async function mintToken() {
 // token can be replaced rather than retried forever.
 export async function getOneMapToken({ force = false } = {}) {
   if (!force) {
-    const configuredToken = envValue("ONEMAP_TOKEN");
-    if (configuredToken) return configuredToken;
+    const token = configuredToken();
+    if (token) return token;
     if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
   } else {
     cached = null;
@@ -74,8 +98,8 @@ export async function getOneMapToken({ force = false } = {}) {
   if (minted) return minted;
 
   // No login to fall back on: an unusable static token is all we have.
-  const configuredToken = envValue("ONEMAP_TOKEN");
-  if (configuredToken) return configuredToken;
+  const token = configuredToken();
+  if (token) return token;
 
   throw new Error(
     "OneMap credentials are not configured. Set ONEMAP_TOKEN, or ONEMAP_EMAIL + ONEMAP_PASSWORD, as environment variables."

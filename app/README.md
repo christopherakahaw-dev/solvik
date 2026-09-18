@@ -2,7 +2,7 @@
 
 Solvik is a Singapore transit companion: a live OneMap-based map with
 live station crowding, multi-mode trip planning (Fastest / Cheapest / Less
-crowded / Step-free / Fewest changes / Least walking / Bike + rail),
+crowded / Step-free / Fewest changes / Least walking / Cycling),
 turn-by-turn navigation, fault reporting and a points wallet. This is the
 mobile build, implemented from the `Onward.dc.html` Claude Design handoff
 (Solvik design system).
@@ -12,9 +12,12 @@ mobile build, implemented from the `Onward.dc.html` Claude Design handoff
 - **React + Vite** — single-page app, no server-rendering.
 - **Leaflet + OpenStreetMap** — the map surface (`src/components/OneMapCanvas.jsx`). OSM is served through MapTiler (`VITE_MAPTILER_KEY`), because the OSM tile policy forbids applications from using `tile.openstreetmap.org`; OneMap's own tiles are the fallback. The ordering and the fallback rule are in `src/lib/mapBase.js` so they can be tested without a browser; MapTiler is only ever in the list when a key exists, because a keyless request to it is a guaranteed 403 and Leaflet asks for a tile per screenful. `VITE_MAPTILER_KEY` is compiled into the bundle at build time, so setting it on a host takes effect on the next deploy, not immediately.
 - **`lucide`** for icons, matching the design system's icon set.
-- **Supabase Auth + Postgres** — verified email/password accounts and optional,
-  row-level-secured sync for explicitly saved places, manual commutes and route
-  preferences. Live location, searches and learned journeys remain local.
+- **Browser storage** — onboarding, places, preferences, watched commutes,
+  learned journeys and checked reports remain on the current device. There is
+no account or cloud-sync dependency.
+- **Scenario-first setup** — Rachel, Arjun and Mdm Lim each seed a concrete
+  local journey and preference profile. Rachel's Tampines → Raffles Place trip
+  is the primary end-to-end demonstration.
 - **`api/`** — the server side (Vercel Node runtime), which proxies OneMap and LTA DataMall so their credentials never reach the browser and does the joining work (journey ranking, crowd density to station coordinates) there rather than in the client. `api/[...path].js` is a catch-all that dispatches on the first path segment to one handler per endpoint in `api/_handlers/`, with shared code in `api/_lib/`; both underscore directories are outside Vercel's function scan, so the fifteen endpoints deploy as one function and stay under the free tier's twelve-function cap. `npm run dev` loads the same dispatcher (see `vite.config.js`), so the app is fully functional without deploying anywhere.
 
 ## Getting started
@@ -40,13 +43,6 @@ Copy `.env.example` to `.env` and fill in:
   <https://datamall.lta.gov.sg/content/datamall/en/request-for-api.html> and
   set `LTA_ACCOUNT_KEY`. This powers station crowding, bus loading, service
   alerts and the nearest-stop lookup.
-- **Supabase** — create a project, copy its URL and publishable key into
-  `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, then apply
-  the tracked migrations with `supabase db push`. Set the server-only
-  `SUPABASE_SERVICE_ROLE_KEY` too — `/api/report` needs it to write past
-  row-level security after triage, and `/api/delete-account` to remove an
-  account.
-  Add both the local and deployed app URLs under Authentication redirect URLs.
 
 The locate button uses the browser's own geolocation, which needs no keys but
 does require a secure context — it works on `localhost` and on the deployed
@@ -156,7 +152,9 @@ camera says it cannot file a report, which is the honest cost of that rule.
 
 **The photo is never stored.** It is posted to `/api/report`, checked, and
 dropped — no bucket, no retention window, no archive of other people's faces.
-What persists is the verdict.
+When Gemini is configured, the server sends the image to Google's model for
+that one consistency check. What persists in Solvik is the verdict, not the
+image.
 
 **Two stages of checking**, in this order because the first is free:
 
@@ -164,37 +162,25 @@ What persists is the verdict.
    within 150 m of the place you are reporting, the shutter fired in the last two
    minutes, and you are under three reports this hour. A failed gate names itself
    and says what to do.
-2. Claude, asked whether the photo is **consistent** with what was reported —
+2. Gemini, asked whether the photo is **consistent** with what was reported —
    and whether it is a photograph of a screen, which is the cheapest way to fake
-   one. Without `ANTHROPIC_API_KEY` this stage is skipped and the report says so.
+   one. Without `GEMINI_API_KEY` this stage is skipped and the report says so.
 
 Nothing here is ever called **verified**. A model can say an image is consistent
 with a report; it cannot tell a broken lift from a working one with a sign taped
 to it. That distinction is the whole reason the wording is what it is.
 
-**Confidence is a count, not a score.** `src/lib/confidence.js` returns one of
-four tiers, each a fact you could check: *Confirmed by LTA* (their own feed names
-the station), *Multiple reports* (three or more distinct accounts in 30 minutes),
-*Reported*, or *Unconfirmed*. Distinct **accounts**, never submissions — one
-person reporting four times is one person. No percentage is ever shown, and a
-test asserts that.
-
-**Points are pending until someone else agrees.** Filing a report that passes the
-checks earns points marked pending; they are credited when a second commuter
-reports the same thing or LTA's feed confirms it. That is the fix to rewarding
-everyone who submits: the payout depends on something you cannot fake alone.
-
-Reports are the one part of Solvik that deliberately leaves the device — the
-station, your coordinates and your account id, readable by other signed-in
-commuters for 30 minutes. They never see who filed what: the table grants no
-access to the reporter column, because a per-person id across stations is a
-movement trace.
+**Reports are local.** The server checks location freshness, accuracy, distance,
+capture time and optionally whether the photo is consistent with the selected
+issue. The result is returned to the browser, the photo is discarded, and only
+the small report record is stored locally. It remains visible for 30 minutes and
+does not become a community feed.
 
 ### What Solvik learns, and how to stop it
 
 Start a route a few times and the commute appears on the Today tab on its own,
-with the evidence that justified it and an **Undo**. There is no model and no
-training data behind this: journeys whose two ends are both within ~400 m group
+with the evidence that justified it and an **Undo**. The deterministic memory
+rules remain in charge: journeys whose two ends are both within ~400 m group
 together, and a group becomes a commute only when it passes every one of these —
 
 - 4 or more journeys, at least 3 of them actually finished (tapping Go is not
@@ -204,6 +190,14 @@ together, and a group becomes a commute only when it passes every one of these �
 - departure times within a 45-minute spread, measured so one late night out
   can't disqualify a routine;
 - seen in the last 21 days.
+
+With `GEMINI_API_KEY` configured, the server also asks Gemini for a compact
+summary of repeated mode and completion choices. Solvik stores that returned
+insight in the browser and supplies it when Gemini compares real OneMap route
+options. Gemini can reorder those supplied options using the selected persona,
+weather, crowding, lift or rail breakdowns and road incidents; it cannot invent
+a route. If the model or quota is unavailable, the tested local rules continue
+to rank the same options.
 
 It un-learns too. A learned commute is retired once 35 days pass with none of
 its trips being made — long enough that a holiday doesn't erase your commute,

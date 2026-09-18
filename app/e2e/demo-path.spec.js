@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
-// The demo, driven the way it is actually used: a cold browser, guest mode,
-// onboarding skipped, one tap on the seed button. Every other e2e file here
+// The demo, driven the way it is actually used: a cold browser, required local
+// onboarding, one tap on the seed button. Every other e2e file here
 // pre-seeds localStorage to get straight to the feature under test, which is
 // right for those tests and hides the thing this one is for — whether the
 // features are reachable at all by someone starting from nothing.
@@ -10,20 +10,17 @@ import { test, expect } from "@playwright/test";
 // but us ever see this working?
 test("every headline feature is reachable from a cold start", async ({ page }) => {
   const missing = [];
-  // Several of these land only once a request resolves, so wait rather than
-  // sampling — a count() the instant after a click races the render and reports
-  // a present feature as absent.
   const need = async (label, locator) => {
-    try {
-      await locator.first().waitFor({ state: "visible", timeout: 6000 });
-    } catch {
-      missing.push(label);
-    }
+    if (!(await locator.count())) missing.push(label);
   };
 
   await page.goto("/");
-  // No sign-in step: a first visit lands in the app as a guest.
-  await page.getByRole("button", { name: /Skip for now/i }).click();
+  await page.getByRole("button", { name: "Choose a commuter" }).click();
+  await page.getByRole("button", { name: /^Rachel · fixed schedule/ }).click();
+  await page.getByRole("button", { name: /^Continue with Rachel/ }).click();
+  await page.getByRole("button", { name: "Review this setup" }).click();
+  await page.getByRole("button", { name: "Show my route" }).click();
+  await page.getByRole("button", { name: "Change destination", exact: true }).click();
   await page.getByRole("button", { name: "Plan", exact: true }).click();
   await page.waitForTimeout(1500);
 
@@ -37,14 +34,7 @@ test("every headline feature is reachable from a cold start", async ({ page }) =
   // Proactive: a leave-time, and a crowd level phrased at the feed's own
   // resolution rather than finer.
   await need("a leave-time card", page.getByText(/LEAVE IN|LEAVING NOW|NEXT UP/i));
-  // A level when the feed covers the trip, and a reason when it does not. LTA
-  // publishes crowding for the current day only, so a demo run in the last
-  // half-hour before midnight genuinely has nothing to read — and saying so is
-  // the correct behaviour, not a failure. What must never happen is silence.
-  await need(
-    "a crowd level, or why there isn't one",
-    page.getByText(/(Busy|Filling|Moderate|Light) at |crowd forecast for the current day only/),
-  );
+  await need("a crowd level at a station on the way", page.getByText(/(Busy|Filling|Moderate|Light) at /));
 
   // The memory system, and the evidence it shows for its own inference.
   await need("a learned commute with its evidence", page.getByText(/Learned · Seen/));

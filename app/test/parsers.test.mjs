@@ -35,6 +35,7 @@ test("turn-by-turn steps carry the real stop sequence", () => {
   assert.equal(steps[1].icon, "train-front");
   assert.match(steps[1].title, /Board NSL toward Marina South Pier/);
   assert.deepEqual(steps[1].stops, ["Khatib", "Yio Chu Kang", "Ang Mo Kio", "Bishan"]);
+  assert.deepEqual(steps[1].stopPoints.map((stop) => stop.code), ["NS13", "NS14", "NS15", "NS16", "NS17"]);
   assert.equal(steps[1].alight, "Bishan");
   assert.equal(steps[2].service, "410");
   assert.equal(steps[2].boardStopCode, "53061");

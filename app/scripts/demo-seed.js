@@ -57,7 +57,6 @@
   }
 
   const set = (key, value) => localStorage.setItem(key, JSON.stringify(value));
-  localStorage.setItem("sv-auth:guest-session", "1");
   localStorage.setItem("solvik:onboarded", "1");
   set("solvik:places", { version: 2, places: { home: place("home", YISHUN), work: place("work", RAFFLES) } });
   set("solvik:journeys", journeys);

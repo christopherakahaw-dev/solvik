@@ -4,34 +4,52 @@ import { OneMapCanvas } from "../components/OneMapCanvas";
 import { PlacePicker } from "../components/PlacePicker";
 import { AppMenu } from "../components/AppMenu";
 import { SolvikBrand } from "../components/SolvikBrand";
+import { AnimatedWeatherIcon } from "../components/AnimatedWeatherIcon";
 import { styleText } from "../lib/styleText";
 
 export function MapScreen({ v }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [weatherOpen, setWeatherOpen] = useState(false);
   const [openRouteFor, setOpenRouteFor] = useState(null);
   const [dismissedRouteFor, setDismissedRouteFor] = useState(null);
-  const [moreModesOpen, setMoreModesOpen] = useState(false);
   const routeSummary = v.tripOptions?.[0];
   const routeReady = Boolean(v.destName && !v.tripsPending && routeSummary);
   const routePanelOpen = Boolean(v.destName && (openRouteFor === v.destName || (routeReady && dismissedRouteFor !== v.destName)));
-  const primaryModes = v.tripModeTiles.filter((mode) => ["fast", "quiet", "step"].includes(mode.id));
-  const secondaryModes = v.tripModeTiles.filter((mode) => !["fast", "quiet", "step"].includes(mode.id));
-  const secondaryActive = secondaryModes.find((mode) => mode.id === v.tripMode);
 
   useEffect(() => {
-    if (!menuOpen && !routePanelOpen) return undefined;
+    if (!menuOpen && !routePanelOpen && !weatherOpen) return undefined;
     const closeOnEscape = (event) => {
       if (event.key !== "Escape") return;
       setMenuOpen(false);
+      setWeatherOpen(false);
       setOpenRouteFor(null);
       setDismissedRouteFor(v.destName);
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [menuOpen, routePanelOpen, v.destName]);
+  }, [menuOpen, routePanelOpen, weatherOpen, v.destName]);
+
+  useEffect(() => {
+    if (!v.showRecents && !v.showResults && !v.showAreaSearch) return undefined;
+    const closeSearchOnOutsidePress = (event) => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest(".sv-map-search-wrap, .sv-map-results")) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest(".sv-map-search-wrap")) active.blur();
+      v.hideSearch();
+    };
+    document.addEventListener("pointerdown", closeSearchOnOutsidePress, true);
+    return () => document.removeEventListener("pointerdown", closeSearchOnOutsidePress, true);
+  }, [v.showRecents, v.showResults, v.showAreaSearch, v.hideSearch]);
+
+  useEffect(() => {
+    if (v.searchTarget !== "area" || !v.mapSearch) return undefined;
+    const frame = requestAnimationFrame(() => document.querySelector(".sv-map-search-wrap input")?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [v.searchTarget, v.mapSearch]);
 
   return (
-    <div className={`sv-map-screen${v.mapRoute ? " has-route" : ""}${v.showCrowdBar ? " has-crowd" : ""}`} style={{ position: "absolute", inset: 0 }}>
+    <div className={`sv-map-screen${v.mapRoute ? " has-route" : ""}`} style={{ position: "absolute", inset: 0 }}>
       <OneMapCanvas
         center={v.mapCenter}
         zoom={12}
@@ -44,8 +62,8 @@ export function MapScreen({ v }) {
         dest={v.destCoord}
         pin={v.pinCoord}
         savedPlaces={v.savedPlaceMarkers}
-        zones={v.mapZones}
-        onZoneClick={v.fcPickZone}
+        zones={v.routeCrowdStations}
+        issues={v.mapIssues}
         onMapClick={v.dropPin}
         zoomControls={false}
         recenterToken={v.recenterToken}
@@ -61,7 +79,7 @@ export function MapScreen({ v }) {
               aria-label="Open menu"
               title="Open Solvik menu"
               aria-expanded={menuOpen}
-              onClick={() => setMenuOpen(true)}
+              onClick={() => { setWeatherOpen(false); setMenuOpen(true); }}
             >
               <Icon name="route" size={20} strokeWidth={2.35} />
               <span className="sv-logo-menu-cue" aria-hidden="true"><Icon name="menu" size={13} strokeWidth={2.8} /></span>
@@ -89,41 +107,83 @@ export function MapScreen({ v }) {
           )}
 
           <div className="sv-map-top-actions">
-              <button className="sv-map-action sv-map-action-alert" onClick={v.fcToggleAlerts} aria-label="Alerts" title="Alerts" style={styleText(v.fcBellStyle)}>
+              <button className="sv-map-action sv-map-action-alert" onClick={() => { setWeatherOpen(false); v.fcToggleAlerts(); }} aria-label="Alerts" title="Alerts" style={styleText(v.fcBellStyle)}>
                 <Icon name="bell" size={20} strokeWidth={2.1} />
                 {v.fcHasFaults && <span style={styleText(v.fcBellDotStyle)}>{v.fcFaultN}</span>}
               </button>
-              <button className={`sv-map-action sv-map-action-crowd${v.showCrowdBar ? " is-active" : ""}`} onClick={v.toggleCrowd} aria-label={v.crowdToggleLabel} title={v.crowdToggleLabel} style={styleText(v.crowdToggleStyle)}>
-                <Icon name="layers" size={19} strokeWidth={2.1} />
+              <button
+                type="button"
+                className={`sv-map-action sv-map-action-weather is-${v.mapWeather.phase}${v.mapWeather.wet ? " is-wet" : ""}${weatherOpen ? " is-open" : ""}`}
+                aria-label={v.mapWeather.ariaLabel}
+                aria-expanded={weatherOpen}
+                title={v.mapWeather.title}
+                onClick={() => setWeatherOpen((open) => !open)}
+              >
+                <AnimatedWeatherIcon name={v.mapWeather.icon} size={34} style={v.mapWeather.pending ? { animation: "sv-spin 900ms linear infinite" } : undefined} />
               </button>
+              {weatherOpen && (
+                <section className="sv-map-weather-popover" aria-label="Singapore weather" aria-live="polite">
+                  <span className={`sv-map-weather-hero is-${v.mapWeather.phase}${v.mapWeather.wet ? " is-wet" : ""}`} aria-hidden="true">
+                    <AnimatedWeatherIcon name={v.mapWeather.icon} size={40} style={v.mapWeather.pending ? { animation: "sv-spin 900ms linear infinite" } : undefined} />
+                  </span>
+                  <div className="sv-map-weather-copy">
+                    <span>Singapore weather</span>
+                    <strong>{v.mapWeather.title}</strong>
+                    <p>{v.mapWeather.detail}</p>
+                  </div>
+                  <div className="sv-map-weather-meta">{v.mapWeather.meta}</div>
+                  {v.mapWeather.error && (
+                    <Button variant="secondary" size="sm" onClick={v.mapWeather.retry} iconLeft="refresh-cw">Refresh</Button>
+                  )}
+                </section>
+              )}
           </div>
         </div>
 
         {v.showRecents && (
-          <div className="sv-map-results">
-            <Card tone="plain">
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ font: "var(--weight-bold) var(--size-caption)/1.2 var(--font-body)", letterSpacing: "var(--tracking-label)", textTransform: "uppercase", color: "var(--text-muted)" }}>Recent</div>
-                <div style={{ marginLeft: "auto" }}>
-                  <Button variant="ghost" size="sm" onClick={v.clearRecents}>Clear</Button>
-                </div>
+          <div className="sv-map-results" aria-label="Recent searches">
+            <Card className="sv-recent-card" tone="plain" style={{ padding: "var(--recent-card-padding, 14px 16px)" }}>
+              <div className="sv-recent-head">
+                <div className="sv-recent-title">Recent</div>
+                <Button className="sv-recent-clear" variant="ghost" size="sm" onClick={v.clearRecents}>Clear</Button>
               </div>
               {v.recents.map((p, i) => (
                 <button
                   key={i}
+                  className="sv-recent-row"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={p.pick}
-                  style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid var(--border-card)", padding: "13px 0", cursor: "pointer" }}
                 >
-                  <span style={{ flex: "none", width: 30, height: 30, borderRadius: 999, background: "var(--accent-soft)", color: "var(--text-accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Icon name="history" size={15} />
+                  <span className="sv-recent-icon">
+                    <Icon name="history" size={14} />
                   </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", font: "var(--type-body-strong)", color: "var(--text-strong)", textWrap: "pretty" }}>{p.name}</span>
-                    <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{p.detail}</span>
+                  <span className="sv-recent-copy">
+                    <span className="sv-recent-name">{p.name}</span>
+                    <span className="sv-recent-detail">{p.detail}</span>
                   </span>
                 </button>
               ))}
+            </Card>
+          </div>
+        )}
+
+        {v.showAreaSearch && (
+          <div className="sv-map-results">
+            <Card className="sv-area-search-card" tone="plain" style={{ padding: "16px" }}>
+              <div className="sv-area-search-head">
+                <span className="sv-area-search-icon"><Icon name="scan-search" size={17} /></span>
+                <span><strong>Search this area</strong><small>{v.areaSearchDetail}</small></span>
+              </div>
+              <p>Type what you need or start with a nearby category.</p>
+              <div className="sv-area-search-categories" role="group" aria-label="Nearby categories">
+                {v.areaSearchCategories.map((category) => (
+                  <button type="button" key={category.label} onMouseDown={(event) => event.preventDefault()} onClick={category.pick}>
+                    <Icon name={category.icon} size={15} />
+                    {category.label}
+                  </button>
+                ))}
+              </div>
+              <div className="sv-area-search-note"><Icon name="map-pin" size={13} /> Results will be ranked from this pin.</div>
             </Card>
           </div>
         )}
@@ -163,6 +223,20 @@ export function MapScreen({ v }) {
         )}
       </div>
 
+      {v.mapRoute && v.routeCrowdStations.length > 0 && (
+        <aside className="sv-map-crowd-key" aria-label="Crowding color guide">
+          <strong>Crowding</strong>
+          <div>
+            {v.routeCrowdGuide.map((item) => (
+              <span key={item.level}>
+                <i style={{ "--crowd-key-tone": item.color }} aria-hidden="true" />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </aside>
+      )}
+
       {menuOpen && <AppMenu v={v} onClose={() => setMenuOpen(false)} />}
 
       {v.mapRoute && !routePanelOpen && (
@@ -182,62 +256,66 @@ export function MapScreen({ v }) {
       {v.mapRoute && (
         <div ref={v.setSheetRef} className={`sv-route-sheet-wrap${routePanelOpen ? " is-open" : ""}`} style={v.sheetWrapStyle}>
           <section className="sv-route-sheet" style={v.sheetStyle} aria-label="Route options">
-            <button type="button" className="sv-route-panel-close" aria-label="Collapse route options" onClick={() => { setOpenRouteFor(null); setDismissedRouteFor(v.destName); }}>
-              <Icon name="x" size={18} />
-            </button>
-            <div onPointerDown={v.sheetDragStart} style={v.sheetGrabStyle}>
+            <div className="sv-route-sheet-toolbar" onPointerDown={v.sheetDragStart} style={v.sheetGrabStyle}>
               <div style={{ width: 42, height: 4, borderRadius: 999, background: "var(--border-strong)", margin: "0 auto" }} />
+              <button type="button" className="sv-route-panel-close" aria-label="Collapse route options" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setOpenRouteFor(null); setDismissedRouteFor(v.destName); }}>
+                <Icon name="x" size={18} />
+              </button>
             </div>
             <div className="sv-scroll-stack" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 12, paddingBottom: 10 }}>
               <div className="sv-route-location-block">
                 <div className="sv-origin-picker">
-                  <PlacePicker key={v.routeOriginReset} value={v.routeOriginPlace} displayValue={v.routeOriginDisplay} clearOnFocus placeholder="Search starting place" icon="circle-dot" onChange={v.setRouteOrigin} onDraftChange={v.setRouteOriginDraft} showDetails={false} />
-                  <div className="sv-origin-shortcuts">
-                    {v.originPresets.map((preset) => <button key={preset.id} type="button" disabled={preset.disabled} aria-pressed={preset.active} onClick={preset.pick}>
-                      <Icon name={preset.icon} size={14} />{preset.label}
-                    </button>)}
-                  </div>
+                  <PlacePicker key={v.routeOriginReset} value={v.routeOriginPlace} displayValue={v.routeOriginDisplay} clearOnFocus placeholder="Search starting place" icon="circle-dot" onChange={v.setRouteOrigin} onDraftChange={v.setRouteOriginDraft} presets={v.originPresets} showDetails={false} />
                 </div>
                 <div className="sv-route-destination-head">
-                  <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="sv-route-destination-copy">
                     <div style={{ font: "var(--type-heading)", letterSpacing: "var(--tracking-heading)", color: "var(--text-strong)", textWrap: "pretty" }}>{v.destName}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
                       <Icon name="map-pin" size={14} />
                       <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{v.destDetail}</span>
                     </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, font: "var(--weight-semibold) 11.5px/1.25 var(--font-body)", color: "var(--text-accent)" }}>
+                      <Icon name="clock-3" size={14} />
+                      <span>{v.tripDepartureLabel}</span>
+                    </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={v.backToSearch}>
-                    Change
-                  </Button>
                 </div>
               </div>
+              {v.scenarioAdvice && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 11px", borderRadius: 14, background: "var(--surface-dark)", color: "var(--text-on-dark)", font: "var(--weight-semibold) 12px/1.35 var(--font-body)", textWrap: "pretty" }}>
+                  <Icon name="sparkles" size={15} style={{ flex: "none", marginTop: 1 }} />
+                  <span>{v.scenarioAdvice}</span>
+                </div>
+              )}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ font: "var(--weight-heavy) 11px/1 var(--font-body)", letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text-muted)" }}>Prioritise</div>
+                <div style={{ font: "var(--weight-heavy) 11px/1 var(--font-body)", letterSpacing: ".09em", textTransform: "uppercase", color: "var(--text-muted)" }}>Travel by</div>
                 <div style={{ flex: 1, height: 1, background: "var(--border-card)" }} />
               </div>
-              <div className="sv-route-mode-primary">
-                {primaryModes.map((m) => (
+              <div className="sv-route-mode-primary" role="group" aria-label="Travel mode">
+                {v.tripModeTiles.map((m) => (
                   <button key={m.id} aria-pressed={v.tripMode === m.id} onClick={m.pick} style={styleText(m.tileStyle)}>
-                    {m.label}
+                    <Icon name={m.icon} size={16} />
+                    <span>{m.label}</span>
                   </button>
                 ))}
-                <button type="button" className={`sv-route-mode-more${secondaryActive ? " is-active" : ""}`} aria-expanded={moreModesOpen} onClick={() => setMoreModesOpen((open) => !open)}>
-                  <Icon name="sliders-horizontal" size={15} />
-                  <span>{secondaryActive ? secondaryActive.label : "More options"}</span>
-                  <Icon name={moreModesOpen ? "chevron-up" : "chevron-down"} size={14} />
-                </button>
               </div>
-              {moreModesOpen && (
-                <div className="sv-route-mode-secondary" aria-label="More route preferences">
-                  {secondaryModes.map((m) => (
-                    <button key={m.id} aria-pressed={v.tripMode === m.id} onClick={() => { m.pick(); setMoreModesOpen(false); }}>
-                      <span>{m.label}</span>
-                      {v.tripMode === m.id && <Icon name="check" size={15} />}
-                    </button>
+              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>{v.tripModeBlurb}</div>
+              {v.routeAssistantLabel && (
+                <div aria-live="polite" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-accent)", font: "var(--weight-bold) 10.5px/1.3 var(--font-body)", letterSpacing: ".025em", textWrap: "pretty" }}>
+                  <Icon name={v.tripsPending || /comparing/i.test(v.routeAssistantLabel) ? "loader-2" : "sparkles"} size={13} style={/comparing/i.test(v.routeAssistantLabel) ? { animation: "sv-spin 900ms linear infinite" } : undefined} />
+                  {v.routeAssistantLabel}
+                </div>
+              )}
+              {v.routeCrowdLegend.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "9px 10px", borderRadius: 14, background: "var(--sand-100)" }}>
+                  <span style={{ font: "var(--weight-bold) 10.5px/1 var(--font-body)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>Crowding along route</span>
+                  {v.routeCrowdLegend.map((item) => (
+                    <span key={item.level} style={{ display: "inline-flex", alignItems: "center", gap: 5, font: "var(--type-caption)", color: "var(--text-body)" }}>
+                      <i style={{ width: 8, height: 8, borderRadius: 999, background: item.color }} />{item.label}
+                    </span>
                   ))}
                 </div>
               )}
-              <div style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>{v.tripModeBlurb}</div>
               {v.recordedNotice && (
                 <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 11px", borderRadius: 999, background: "var(--sand-100,rgba(32,30,29,.05))", font: "var(--weight-semibold) 11.5px/1.2 var(--font-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
                   <Icon name="circle-dot-dashed" size={14} />
@@ -251,10 +329,31 @@ export function MapScreen({ v }) {
                 </div>
               )}
               {!v.tripsPending && v.tripsError && (
-                <div style={{ padding: "18px 0", display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ font: "var(--type-body)", color: "var(--status-fault)", textWrap: "pretty" }}>{v.tripsError}</div>
-                  <div><Button variant="secondary" size="sm" onClick={v.retryTrips}>Try again</Button></div>
-                </div>
+                <section className="sv-route-recovery" aria-live="polite">
+                  <span className="sv-route-recovery-icon" aria-hidden="true"><Icon name="route-off" size={19} /></span>
+                  <div className="sv-route-recovery-copy">
+                    <strong>{v.tripRecovery.title}</strong>
+                    <p>{v.tripRecovery.detail}</p>
+                  </div>
+                  {v.tripRecovery.alternatives && (
+                    <div className="sv-route-recovery-modes" role="group" aria-label="Try another travel mode">
+                      {v.tripRecovery.modes.map((mode, index) => (
+                        <Button key={mode.id} variant={index === 0 ? "primary" : "secondary"} size="sm" onClick={mode.pick}>
+                          {mode.label}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                  {v.tripRecovery.retry && (
+                    <Button className="sv-route-recovery-retry" variant="ghost" size="sm" onClick={v.retryTrips}>
+                      <Icon name="refresh-cw" size={14} /> Try again
+                    </Button>
+                  )}
+                  <details className="sv-route-recovery-details">
+                    <summary>Technical details</summary>
+                    <p>{v.tripRecovery.technical}</p>
+                  </details>
+                </section>
               )}
               {!v.tripsPending && !v.tripsError && v.tripsEmpty && (
                 <div style={{ padding: "18px 0", font: "var(--type-body)", color: "var(--text-muted)", textWrap: "pretty" }}>
@@ -300,6 +399,17 @@ export function MapScreen({ v }) {
                       <Icon name={o.expanded ? "chevron-up" : "chevron-down"} size={13} />
                     </button>
                   </div>
+
+                  {o.recommended && o.weather && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 9, marginTop: 10, padding: "10px 11px", borderRadius: 14, background: o.weather.wet ? "var(--accent-soft)" : "var(--sand-100)", color: "var(--text-body)" }}>
+                      <Icon name={o.weather.pending ? "loader-2" : o.weather.wet ? "cloud-rain" : o.weather.available ? "sun" : "cloud-off"} size={16} style={{ flex: "none", marginTop: 1, ...(o.weather.pending ? { animation: "sv-spin 900ms linear infinite" } : {}) }} />
+                      <span style={{ minWidth: 0 }}>
+                        <strong style={{ display: "block", font: "var(--weight-bold) 12px/1.35 var(--font-body)", color: o.weather.wet ? "var(--text-accent)" : "var(--text-strong)", textWrap: "pretty" }}>{o.weather.title}</strong>
+                        <span style={{ display: "block", font: "var(--type-caption)", color: "var(--text-muted)", marginTop: 3, textWrap: "pretty" }}>{o.weather.detail}</span>
+                        {o.weatherChangedRecommendation && <span style={{ display: "block", font: "var(--weight-bold) 10.5px/1.3 var(--font-body)", color: "var(--text-accent)", marginTop: 5, textTransform: "uppercase", letterSpacing: ".04em" }}>Recommendation changed for weather</span>}
+                      </span>
+                    </div>
+                  )}
 
                   {o.expanded && o.details.length > 0 && (
                     <div ref={o.detailsRef} style={{ marginTop: 12, paddingLeft: 3, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -358,6 +468,15 @@ export function MapScreen({ v }) {
                       <span style={{ font: "var(--weight-bold) var(--size-body-sm)/1 var(--font-body)", color: "var(--text-strong)" }}>{o.crowd}</span>
                     </div>
                   </div>
+                  {o.fitReason && (
+                    <div style={{ display: "grid", gridTemplateColumns: "14px minmax(0,1fr)", alignItems: "start", gap: "5px 7px", marginTop: 10, padding: "9px 10px", borderRadius: 12, background: o.recommended ? "var(--accent-soft)" : "var(--sand-100)", color: o.recommended ? "var(--text-accent)" : "var(--text-muted)", font: "var(--type-caption)", textWrap: "pretty" }}>
+                      <Icon name={o.recommended ? "sparkles" : "info"} size={14} style={{ flex: "none", marginTop: 1 }} />
+                      <span style={{ minWidth: 0 }}>
+                        <strong style={{ display: "block", marginBottom: 3, font: "var(--weight-heavy) 9px/1.2 var(--font-body)", letterSpacing: ".055em", textTransform: "uppercase" }}>{o.fitReasonSource}</strong>
+                        <span>{o.fitReason}</span>
+                      </span>
+                    </div>
+                  )}
                   <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginTop: 8 }}>
                     <div style={{ flex: 1, minWidth: 0, font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>{o.note}</div>
                     <div style={{ flex: "none" }}>
@@ -495,30 +614,6 @@ export function MapScreen({ v }) {
             <Button variant="secondary" size="md" fullWidth onClick={v.pinSearch}>
               Search area
             </Button>
-          </div>
-        </div>
-      )}
-
-      {v.showCrowdBar && (
-        <div ref={v.setCrowdBarRef} className={`sv-crowd-bar${v.fcSlots.length <= 2 ? " is-sparse" : ""}`} style={{ position: "absolute", left: 14, right: 14, bottom: "calc(94px + env(safe-area-inset-bottom))", zIndex: 14, padding: "11px 12px 12px", borderRadius: 20, background: "var(--surface-card)", boxShadow: "var(--shadow-sheet)" }}>
-          <div className="sv-crowd-summary" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {v.fcLegend.map((g, i) => (
-              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <span style={styleText(g.swatch)} />
-                <span style={{ font: "var(--weight-semibold) 10.5px/1 var(--font-body)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{g.short}</span>
-              </span>
-            ))}
-            <span className="sv-crowd-help" style={{ flexBasis: "100%", font: "var(--weight-semibold) 10.5px/1.3 var(--font-body)", color: v.crowdError ? "var(--status-fault)" : "var(--text-muted)" }}>
-              {v.crowdError ? "Crowding unavailable" : v.crowdPending ? "Loading crowding…" : v.crowdEmpty ? "No crowding data" : "Tap a station for its level"}
-            </span>
-          </div>
-          <div className="sv-crowd-slots" style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginTop: 10, paddingBottom: 2 }}>
-            {v.fcSlots.map((h, i) => (
-              <button key={i} onClick={h.pick} aria-pressed={h.active} style={styleText(h.style)}>
-                <span style={styleText(h.timeStyle)}>{h.label}</span>
-                <span style={styleText(h.barStyle)} />
-              </button>
-            ))}
           </div>
         </div>
       )}

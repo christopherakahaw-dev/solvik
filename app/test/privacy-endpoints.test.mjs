@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import searchHandler from "../api/_handlers/onemap-search.js";
 import stopHandler from "../api/_handlers/nearest-stop.js";
-import deleteAccountHandler from "../api/_handlers/delete-account.js";
 
 function responseRecorder() {
   return {
@@ -23,18 +22,16 @@ test("private search rejects invalid input without putting it in the URL or cach
   assert.equal(res.headers["referrer-policy"], "no-referrer");
 });
 
+test("private search rejects malformed nearby coordinates", async () => {
+  const res = responseRecorder();
+  await searchHandler({ url: "/api/onemap-search", body: { query: "clinic", near: [1.3] }, query: {} }, res);
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.error, /latitude, longitude/);
+});
+
 test("nearest-stop coordinates are accepted from a private POST body", async () => {
   const res = responseRecorder();
   await stopHandler({ url: "/api/nearest-stop", body: { lat: "not-a-number", lng: 103.8 }, query: {} }, res);
   assert.equal(res.statusCode, 400);
   assert.equal(res.headers["cache-control"], "private, no-store");
-});
-
-test("the account deletion endpoint is private and rejects other methods", async () => {
-  const res = responseRecorder();
-  await deleteAccountHandler({ method: "GET", headers: {} }, res);
-  assert.equal(res.statusCode, 405);
-  assert.equal(res.headers.allow, "DELETE");
-  assert.equal(res.headers["cache-control"], "private, no-store");
-  assert.equal(res.headers["referrer-policy"], "no-referrer");
 });

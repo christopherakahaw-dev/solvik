@@ -18,9 +18,7 @@ const option = { mins: 154, eta: "03:22", fare: "$0.00", walk: "154 min", walkOn
 async function setup(page, places = { home, school }, options = {}) {
   await page.addInitScript(({ places }) => {
     if (!localStorage.getItem("qa:seeded")) {
-      localStorage.setItem("sv-auth:guest-session", "1");
-      localStorage.setItem("sv-auth:guest-session", "1");
-    localStorage.setItem("solvik:onboarded", "1");
+      localStorage.setItem("solvik:onboarded", "1");
       localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places }));
       localStorage.setItem("solvik:searches", JSON.stringify([{ name: "CLARKE QUAY MRT STATION", detail: "10 EU TONG SEN STREET", ll: [1.288, 103.846] }]));
       localStorage.setItem("qa:seeded", "1");
@@ -34,8 +32,19 @@ async function setup(page, places = { home, school }, options = {}) {
     const path = new URL(route.request().url()).pathname;
     const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
     let response = {};
-    if (path.endsWith("onemap-search")) response = { results: /bugis/i.test(body.query) ? [bugis] : /nanyang|^nt/i.test(body.query) ? [{ ...school, lat: school.ll[0], lng: school.ll[1] }] : Array.from({ length: 8 }, (_, i) => ({ ...destination, name: i ? `CLEMENTI PLACE ${i}` : destination.name })) };
-    else if (path.endsWith("trip-options")) response = { options: [option] };
+    if (path.endsWith("onemap-search")) {
+      options.onSearch?.(body);
+      response = /clinic/i.test(body.query) && Array.isArray(body.near)
+        ? { results: [
+            { name: "FAR CLINIC", address: "Across Singapore", postal: "999999", lat: body.near[0] + 0.1, lng: body.near[1] + 0.1 },
+            { name: "PIN-SIDE CLINIC", address: "Beside the dropped pin", postal: "111111", lat: body.near[0] + 0.0001, lng: body.near[1] + 0.0001 },
+          ] }
+        : { results: /bugis/i.test(body.query) ? [bugis] : /nanyang|^nt/i.test(body.query) ? [{ ...school, lat: school.ll[0], lng: school.ll[1] }] : Array.from({ length: 8 }, (_, i) => ({ ...destination, name: i ? `CLEMENTI PLACE ${i}` : destination.name })) };
+    }
+    else if (path.endsWith("trip-options")) response = { options: options.tripOptions || [option] };
+    else if (path.endsWith("ai")) response = options.aiDecision
+      ? { configured: true, model: "gemini-3.5-flash-lite", decision: options.aiDecision }
+      : { configured: false };
     else if (path.endsWith("crowding")) response = { stations: [{ code: "EW24", name: "Jurong East", lat: 1.333, lng: 103.742, level: "moderate" }], slots: (options.crowdOffsets || [-1800000, 1800000, 3600000]).map((offset) => new Date(Date.now() + offset).toISOString()) };
     else if (path.endsWith("forecast")) response = { slots: [], series: {} };
     await route.fulfill({ json: response });
@@ -54,54 +63,20 @@ async function noOverflow(page) {
   expect(await page.locator("body").evaluate(el => el.scrollWidth <= window.innerWidth + 1)).toBe(true);
 }
 
-test("a first visit reaches the app without being asked to sign in", async ({ page }) => {
-  // A credential form as the first paint, on a hosting subdomain with no
-  // reputation, is what Safe Browsing's phishing classifier matches on — and it
-  // flagged this app for exactly that. Signing in is optional here, so the way
-  // in is the app itself.
+test("a new device opens mandatory local setup without an account gate", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Set up in a minute" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toHaveCount(0);
-  await expect(page.locator('input[type="password"]')).toHaveCount(0);
-  await noOverflow(page);
-});
-
-test("the account screen is reachable from inside the app, and usable unconfigured", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Skip for now" }).click();
-  // At phone width the account lives in the tab bar; the menu is for wider
-  // viewports.
-  await page.getByRole("button", { name: "Account", exact: true }).click();
-  // Not exact: the row's accessible name carries its subtitle too.
-  await page.getByRole("button", { name: /^Sign in/ }).click();
-
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
-  expect(await page.locator(".sv-auth-screen").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "Auth screen has no horizontal scroll").toBe(true);
-  await noOverflow(page);
-  await expect(page.getByText("Account setup is not connected yet.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign in", exact: true }).last()).toBeDisabled();
-  await page.getByRole("tab", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
-
-  // Somewhere you go, so there has to be a way back out without signing in.
-  await page.getByRole("button", { name: "Back to Solvik" }).click();
-  await expect(page.getByRole("navigation")).toBeVisible();
+  await expect(page.getByText("Your commute, minus the guesswork")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose a commuter" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /sign in|create account/i })).toHaveCount(0);
   await noOverflow(page);
 });
 
 test("map overlays remain separated and search is anchored to the field", async ({ page }, info) => {
   await setup(page);
-  const bar = page.locator(".sv-crowd-bar");
-  await expect(bar).toBeHidden();
-  await page.getByRole("button", { name: "Crowding layer off" }).click();
-  await expect(bar).toBeVisible();
-  await expect.poll(async () => {
-    const a = await bar.boundingBox(), b = await page.getByRole("button", { name: "Show my location" }).boundingBox();
-    return b.y + b.height <= a.y - 6;
-  }).toBe(true);
+  await expect(page.getByRole("button", { name: /Crowding layer/ })).toHaveCount(0);
+  await expect(page.locator(".sv-crowd-bar")).toHaveCount(0);
   const nav = await page.getByRole("navigation").boundingBox();
-  const crowd = await bar.boundingBox();
-  expect(crowd.y + crowd.height).toBeLessThan(nav.y);
   const search = page.getByRole("textbox", { name: "Search address, stop or area", exact: true });
   await search.focus();
   const panel = page.locator(".sv-map-results");
@@ -114,6 +89,51 @@ test("map overlays remain separated and search is anchored to the field", async 
   expect(box.y + box.height).toBeLessThan(nav.y);
   await noOverflow(page);
   await page.screenshot({ path: info.outputPath("search.png") });
+});
+
+test("recent searches stay compact and close when search focus ends", async ({ page }) => {
+  await setup(page);
+  const search = page.getByRole("textbox", { name: "Search address, stop or area", exact: true });
+  const panel = page.locator(".sv-map-results");
+
+  for (const viewport of [{ width: 393, height: 700 }, { width: 1280, height: 800 }]) {
+    await page.setViewportSize(viewport);
+    await search.focus();
+    await expect(panel).toBeVisible();
+    const sizes = await panel.locator(".sv-recent-row").first().evaluate((row) => ({
+      name: parseFloat(getComputedStyle(row.querySelector(".sv-recent-name")).fontSize),
+      detail: parseFloat(getComputedStyle(row.querySelector(".sv-recent-detail")).fontSize),
+    }));
+    expect(sizes.name).toBeLessThanOrEqual(14);
+    expect(sizes.detail).toBeLessThanOrEqual(12);
+
+    await page.mouse.click(5, Math.round(viewport.height / 2));
+    await expect(panel).toBeHidden();
+    await expect(search).not.toBeFocused();
+  }
+});
+
+test("a dropped pin searches nearby places and ranks the results", async ({ page }) => {
+  const searchRequests = [];
+  await setup(page, { home, school }, { onSearch: (body) => searchRequests.push(body) });
+  await page.mouse.click(200, 300);
+  await expect(page.getByRole("button", { name: "Search area", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Search area", exact: true }).click();
+
+  const nearbySearch = page.getByRole("textbox", { name: "Search near dropped pin", exact: true });
+  await expect(nearbySearch).toBeFocused();
+  await expect(page.getByText("Search this area", { exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Nearby categories" })).toBeVisible();
+  await page.getByRole("button", { name: "Clinics", exact: true }).click();
+
+  await expect(page.getByRole("button", { name: /^PIN-SIDE CLINIC/ })).toBeVisible();
+  const resultNames = await page.locator(".sv-map-results button").allTextContents();
+  expect(resultNames.findIndex((name) => name.includes("PIN-SIDE CLINIC"))).toBeLessThan(resultNames.findIndex((name) => name.includes("FAR CLINIC")));
+  expect(searchRequests.at(-1).near).toHaveLength(2);
+  expect(searchRequests.at(-1).near.every(Number.isFinite)).toBe(true);
+  await expect(page.getByText(/(?:m|km) away/).first()).toBeVisible();
+  await expect(page.getByText("Nearby", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Ranked by distance from the pin · Results from OneMap", { exact: true })).toBeVisible();
 });
 
 test("tablet and laptop keep the map full-screen and reveal panels on demand", async ({ page }, info) => {
@@ -132,10 +152,11 @@ test("tablet and laptop keep the map full-screen and reveal panels on demand", a
     expect(searchBox.x).toBeGreaterThanOrEqual(117);
     expect(searchBox.x).toBeLessThanOrEqual(120);
     const actionButtons = await page.locator(".sv-map-top-actions > button").all();
-    const firstAction = await actionButtons[0].boundingBox(), secondAction = await actionButtons[1].boundingBox();
-    expect(Math.abs(firstAction.x - secondAction.x)).toBeLessThanOrEqual(1);
-    expect(secondAction.y).toBeGreaterThan(firstAction.y + firstAction.height);
-    expect(viewport.width - firstAction.x - firstAction.width).toBeLessThanOrEqual(17);
+    expect(actionButtons).toHaveLength(2);
+    for (const actionButton of actionButtons) {
+      const actionBox = await actionButton.boundingBox();
+      expect(viewport.width - actionBox.x - actionBox.width).toBeLessThanOrEqual(17);
+    }
     await noOverflow(page);
   }
 
@@ -149,24 +170,18 @@ test("tablet and laptop keep the map full-screen and reveal panels on demand", a
   const menuBox = await menu.boundingBox(), accountBox = await accountTrigger.boundingBox();
   expect(menuBox.y + menuBox.height - accountBox.y - accountBox.height).toBeLessThanOrEqual(34);
   await accountTrigger.click();
-  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your data", exact: true })).toBeVisible();
   await expect(page.locator(".sv-account-page")).toBeVisible();
   await page.screenshot({ path: info.outputPath("account-page.png") });
   await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("dialog", { name: "Solvik menu" }).getByRole("button", { name: "Map", exact: true }).click();
 
-  const crowdToggle = page.getByRole("button", { name: "Crowding layer off" });
-  await expect(crowdToggle).toBeVisible();
+  await expect(page.getByRole("button", { name: /Crowding layer/ })).toHaveCount(0);
   const pinHint = page.getByText("Tap anywhere to drop a pin");
   await expect(pinHint).toBeVisible();
   const hintBox = await pinHint.boundingBox();
   expect(page.viewportSize().height - hintBox.y - hintBox.height).toBeLessThanOrEqual(36);
   await page.screenshot({ path: info.outputPath("pin-hint.png") });
-  await crowdToggle.click();
-  await expect(page.getByRole("button", { name: "Crowding layer on" })).toBeVisible();
-  await expect(page.locator(".sv-crowd-bar")).toBeVisible();
-  await page.getByRole("button", { name: "Crowding layer on" }).click();
-
   const search = page.getByRole("textbox", { name: "Search address, stop or area", exact: true });
   const topbarBefore = await page.locator(".sv-map-topbar").boundingBox();
   await search.fill("clem");
@@ -178,6 +193,9 @@ test("tablet and laptop keep the map full-screen and reveal panels on demand", a
   const routeSheet = page.locator(".sv-route-sheet-wrap");
   await expect(routeSheet).toBeVisible();
   expect((await routeSheet.boundingBox()).width).toBeLessThanOrEqual(421);
+  const panelCloseBox = await routeSheet.getByRole("button", { name: "Collapse route options" }).boundingBox();
+  const originFieldBox = await routeSheet.getByRole("combobox", { name: "Search starting place" }).boundingBox();
+  expect(panelCloseBox.y + panelCloseBox.height).toBeLessThanOrEqual(originFieldBox.y - 3);
   const topbarAfter = await page.locator(".sv-map-topbar").boundingBox();
   expect(Math.abs(topbarAfter.x - topbarBefore.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(topbarAfter.width - topbarBefore.width)).toBeLessThanOrEqual(1);
@@ -194,10 +212,10 @@ test("tablet and laptop keep the map full-screen and reveal panels on demand", a
   await page.screenshot({ path: info.outputPath("route-options-simplified.png") });
   await routeSheet.getByRole("button", { name: "Show steps" }).click();
   await expect(routeSheet.getByRole("button", { name: "Hide steps" })).toBeVisible();
-  await expect(routeSheet.locator(".sv-route-mode-primary > button")).toHaveCount(4);
-  await expect(routeSheet.getByRole("button", { name: "Cheapest", exact: true })).toHaveCount(0);
-  await routeSheet.getByRole("button", { name: "More options", exact: true }).click();
-  await expect(routeSheet.getByRole("button", { name: "Cheapest", exact: true })).toBeVisible();
+  await expect(routeSheet.locator(".sv-route-mode-primary > button")).toHaveCount(6);
+  for (const mode of ["Bus", "Train", "Transit", "Walk", "Cycle", "Express"]) {
+    await expect(routeSheet.getByRole("button", { name: mode, exact: true })).toBeVisible();
+  }
   await page.getByRole("button", { name: "Collapse route options" }).last().click();
   const summary = page.locator(".sv-route-summary");
   await expect(summary).toBeVisible();
@@ -205,16 +223,16 @@ test("tablet and laptop keep the map full-screen and reveal panels on demand", a
   await page.screenshot({ path: info.outputPath("responsive-map.png") });
 });
 
-test("a sparse crowd forecast stays compact on wide screens", async ({ page }, info) => {
-  await setup(page, { home, school }, { crowdOffsets: [0] });
+test("travel choices use one horizontal swipe rail", async ({ page }, info) => {
+  await setup(page);
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.getByRole("button", { name: "Crowding layer off" }).click();
-  const crowd = page.locator(".sv-crowd-bar.is-sparse");
-  await expect(crowd).toBeVisible();
-  const bounds = await crowd.boundingBox();
-  expect(bounds.width).toBeLessThan(430);
-  expect(bounds.height).toBeLessThan(105);
-  await page.screenshot({ path: info.outputPath("compact-crowd-bar.png") });
+  await pickDestination(page);
+  const modes = page.getByRole("group", { name: "Travel mode" });
+  await expect(modes).toBeVisible();
+  await expect(modes.locator("button")).toHaveCount(6);
+  expect(await modes.evaluate((el) => getComputedStyle(el).display)).toBe("flex");
+  expect(await modes.evaluate((el) => ["auto", "scroll"].includes(getComputedStyle(el).overflowX))).toBe(true);
+  await page.screenshot({ path: info.outputPath("travel-mode-swipe-rail.png") });
 });
 
 test("desktop content and active navigation use compact responsive layouts", async ({ page }, info) => {
@@ -229,6 +247,13 @@ test("desktop content and active navigation use compact responsive layouts", asy
   const planBox = await plan.boundingBox();
   expect(planBox.width).toBeGreaterThan(700);
   expect(planBox.width).toBeLessThanOrEqual(1041);
+  expect((await plan.evaluate(el => getComputedStyle(el).gridTemplateColumns.split(" ").length))).toBe(12);
+  const placesBox = await page.locator(".sv-plan-places").boundingBox();
+  expect(Math.abs(placesBox.width - planBox.width)).toBeLessThanOrEqual(2);
+  const savedRows = await page.locator(".sv-saved-grid > button").all();
+  expect(savedRows).toHaveLength(3);
+  const savedTops = await Promise.all(savedRows.map(async row => (await row.boundingBox()).y));
+  expect(Math.max(...savedTops) - Math.min(...savedTops)).toBeLessThanOrEqual(2);
   await expect(page.locator(".sv-tab-bar")).toBeHidden();
   await expect(page.getByRole("button", { name: "Open menu" })).toBeVisible();
   await expect(page.locator(".sv-page-brand")).toBeHidden();
@@ -259,9 +284,10 @@ test("places fit small screens, cancel discards edits, and incomplete text canno
   await expect(page.getByRole("button", { name: "Open menu" })).toBeHidden();
   await expect(page.locator(".sv-page-brand .sv-brand-mark")).toBeHidden();
   await page.screenshot({ path: info.outputPath("mobile-plan-navigation.png") });
-  await page.getByRole("button", { name: "Account", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Device data", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your data", exact: true })).toBeVisible();
   await expect(page.locator(".sv-account-page")).toBeVisible();
+  await expect(page.locator(".sv-tab-account.is-active")).toHaveCSS("color", "rgb(34, 63, 46)");
   await page.getByRole("button", { name: "Plan", exact: true }).click();
   await noOverflow(page);
   for (const card of await page.locator(".sv-saved-grid > button").all()) expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
@@ -297,6 +323,30 @@ test("places fit small screens, cancel discards edits, and incomplete text canno
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:places")).places.school.name)).toBe("BUGIS+");
 });
 
+test("deleting Home clears it as the active route origin", async ({ page }) => {
+  await setup(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await pickDestination(page);
+
+  const origin = page.locator(".sv-route-sheet-wrap").getByRole("combobox", { name: "Search starting place" });
+  await origin.click();
+  await page.getByRole("option").filter({ hasText: /^Home/ }).click();
+  await expect(page.locator(".sv-route-origin-marker")).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("dialog", { name: "Solvik menu" }).getByRole("button", { name: "Plan", exact: true }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const places = page.getByRole("dialog", { name: "Your places" });
+  const homeField = places.getByRole("combobox", { name: "Block, street or MRT stop" });
+  await homeField.locator("..").getByRole("button", { name: "Clear" }).click();
+  await places.getByRole("button", { name: "Save addresses" }).click();
+
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("dialog", { name: "Solvik menu" }).getByRole("button", { name: "Map", exact: true }).click();
+  await expect(page.locator(".sv-route-origin-marker")).toHaveCount(0);
+  await expect(page.locator(".leaflet-marker-pane [title='Home']")).toHaveCount(0);
+});
+
 test("manual commutes keep both endpoints after reload", async ({ page }) => {
   await setup(page, { home });
   await page.getByRole("button", { name: "Plan", exact: true }).click();
@@ -316,25 +366,26 @@ test("manual commutes keep both endpoints after reload", async ({ page }) => {
   await noOverflow(page);
 });
 
-test("origin search never queries Current location and route selection is private", async ({ page }, info) => {
-  await setup(page, {});
+test("destination defaults to device location and origin choices stay inside search", async ({ page }, info) => {
+  await setup(page);
   const queries = [], requests = [];
   page.on("request", request => {
     if (request.url().includes("/api/onemap-search")) queries.push(request.postDataJSON().query);
     if (request.url().includes("/api/trip-options")) requests.push(request.postDataJSON());
   });
   await pickDestination(page);
-  await expect(page.getByText("Choose a starting place or use your location.")).toBeVisible();
-  expect(await page.evaluate(() => window.qaLocationCalls)).toBe(0);
-  await page.getByRole("button", { name: "My location", exact: true }).click();
   const origin = page.getByRole("combobox", { name: "Search starting place" });
   await expect(origin).toHaveValue("My location");
-  await origin.fill("unselected");
-  await page.getByRole("button", { name: "My location", exact: true }).click();
-  await expect(origin).toHaveValue("My location");
+  expect(await page.evaluate(() => window.qaLocationCalls)).toBe(1);
+  await expect(page.getByRole("button", { name: "My location", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
   await origin.focus();
   await expect(origin).toHaveValue("");
+  const choices = page.getByRole("listbox", { name: "Choose starting place" });
+  await expect(choices.getByRole("option", { name: /My location/ })).toBeVisible();
+  await expect(choices.getByRole("option", { name: /Home/ })).toBeVisible();
+  await expect(choices.getByRole("option", { name: /School/ })).toBeVisible();
+  await expect(choices.getByRole("option", { name: /Work/ })).toHaveCount(0);
   expect(queries).not.toContain("Current location");
   await origin.fill("bugis");
   await page.getByRole("option").first().click();
@@ -347,6 +398,35 @@ test("origin search never queries Current location and route selection is privat
   await page.screenshot({ path: info.outputPath("navigation.png") });
   await page.getByRole("button", { name: "End trip", exact: true }).last().click();
   await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
+});
+
+test("Gemini can rank supplied routes without inventing a journey", async ({ page }) => {
+  const comfortOption = {
+    ...option,
+    mins: 161,
+    eta: "03:29",
+    transfers: 0,
+    crowdLevel: "light",
+    legs: ["BUS 7"],
+    note: "Direct and lightly crowded",
+  };
+  await setup(page, { home, school }, {
+    tripOptions: [option, comfortOption],
+    aiDecision: {
+      selectedIndex: 1,
+      reason: "Light crowding and no changes fit your comfort preference despite the longer journey.",
+      alternatives: [{ index: 0, reason: "Faster, but it does not match the comfort preference as well." }],
+    },
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await pickDestination(page);
+
+  await expect(page.getByText(/AI-assisted recommendation · gemini-3.5-flash-lite/i)).toBeVisible();
+  const cards = page.locator(".sv-route-option-card");
+  await expect(cards.first()).toContainText("161");
+  await expect(cards.first()).toContainText("Gemini explanation");
+  await expect(cards.first()).toContainText("Light crowding and no changes");
+  await expect(cards).toHaveCount(2);
 });
 
 test("recorded itineraries cannot start navigation", async ({ page }) => {
@@ -367,7 +447,9 @@ test("search errors recover and routing failures can be retried", async ({ page 
   await page.route("**/api/trip-options", route => route.fulfill({ status: 502, json: { error: "Routing temporarily unavailable" } }));
   await search.fill("clementi");
   await page.getByRole("button", { name: /^CLEMENTI ARCADE/ }).click();
-  await expect(page.getByText("Routing temporarily unavailable")).toBeVisible();
+  await expect(page.getByText("Routes are temporarily unavailable")).toBeVisible();
+  await expect(page.getByText(/Your places are still here/)).toBeVisible();
+  await expect(page.getByRole("group", { name: "Try another travel mode" }).getByRole("button", { name: "Bus", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Go", exact: true })).toHaveCount(0);
   await page.unroute("**/api/trip-options");
   await page.getByRole("button", { name: /Try again|Retry/ }).click();
@@ -383,7 +465,6 @@ test("denied location still allows a manual origin and unfinished text disables 
   await setup(page, {});
   await page.evaluate(() => { navigator.geolocation.getCurrentPosition = (_, fail) => fail({ code: 1 }); });
   await pickDestination(page);
-  await page.getByRole("button", { name: "My location", exact: true }).click();
   await expect(page.getByText(/Location permission denied/)).toBeVisible();
   const origin = page.getByRole("combobox", { name: "Search starting place" });
   await origin.fill("bugis");
@@ -394,50 +475,54 @@ test("denied location still allows a manual origin and unfinished text disables 
   await expect(page.getByText("Select a starting place from the search results.")).toBeVisible();
 });
 
-test("forecast Now uses live data, not the first forecast interval", async ({ page }) => {
-  await setup(page);
+test("crowding is fetched as a current route snapshot without a global scrubber", async ({ page }) => {
   const requests = [];
   page.on("request", request => { if (new URL(request.url()).pathname === "/api/crowding") requests.push(new URL(request.url())); });
-  await page.getByRole("button", { name: "Crowding layer off" }).click();
-  const slots = page.locator(".sv-crowd-bar button");
-  await expect(slots.first()).toHaveText("Now");
-  await slots.nth(1).click();
-  await expect.poll(() => requests.at(-1)?.searchParams.has("at")).toBe(true);
-  await slots.first().click();
-  await expect.poll(() => requests.at(-1)?.searchParams.has("at")).toBe(false);
+  await setup(page);
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  expect(requests.every((url) => !url.searchParams.has("at"))).toBe(true);
+  await expect(page.locator(".sv-crowd-bar")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Crowding layer/ })).toHaveCount(0);
 });
 
-test("onboarding saves selected places and does not silently accept unfinished addresses", async ({ page }) => {
+test("onboarding saves Rachel's scenario and opens its scheduled route", async ({ page }) => {
   await setup(page, {});
+  let routeRequest = null;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("trip-options") && request.method() === "POST") routeRequest = request.postDataJSON();
+  });
   await page.evaluate(() => localStorage.removeItem("solvik:onboarded"));
   await page.reload();
-  await page.getByRole("button", { name: "Set up in a minute" }).click();
-  await page.getByRole("button", { name: /^Student fares/ }).click();
-  await page.getByRole("button", { name: /^Next/ }).click();
-  const field = page.getByRole("combobox", { name: "Campus or faculty" });
-  await field.scrollIntoViewIfNeeded();
-  await field.fill("n");
-  await expect(page.getByRole("button", { name: /^Next/ })).toBeDisabled();
-  await field.fill("nanyang");
-  await page.getByRole("option").first().click();
-  await page.getByRole("button", { name: /^Next/ }).click();
-  await page.getByRole("button", { name: "Start using Solvik" }).click();
+  await page.getByRole("button", { name: "Choose a commuter" }).click();
+  await page.getByRole("button", { name: /^Rachel · fixed schedule/ }).click();
+  await page.getByRole("button", { name: /^Continue with Rachel/ }).click();
+  await expect(page.getByText("Tampines", { exact: true })).toBeVisible();
+  await expect(page.getByText("Raffles Place", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Review this setup" }).click();
+  await page.getByRole("button", { name: "Show my route" }).click();
+  await expect(page.getByText(/[A-Z][a-z]{2} 07:40/)).toBeVisible();
+  await expect.poll(() => routeRequest?.time).toBe("07:40:00");
   await page.reload();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:places")).places.school.name)).toBe(school.name);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:places")).places.home.name)).toBe("Tampines");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:places")).places.work.name)).toBe("Raffles Place");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:preferences")).scenario)).toBe("fixed");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:commutes"))[0].signature)).toBe("scenario:fixed");
   expect(await page.evaluate(() => window.qaLocationCalls)).toBe(0);
 });
 
-test("storage denial does not prevent skipping onboarding or browsing tabs", async ({ page }) => {
+test("storage denial does not prevent completing onboarding or browsing tabs", async ({ page }) => {
   await setup(page);
   await page.addInitScript(() => {
     Storage.prototype.getItem = () => { throw new DOMException("Blocked", "SecurityError"); };
     Storage.prototype.setItem = () => { throw new DOMException("Blocked", "SecurityError"); };
   });
   await page.reload();
-  // With storage blocked the guest flag cannot be persisted, so the fallback
-  // has to hold the session in memory for the tab rather than bouncing back to
-  // a sign-in wall on every render.
-  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.getByRole("button", { name: "Choose a commuter" }).click();
+  await page.getByRole("button", { name: /^Rachel · fixed schedule/ }).click();
+  await page.getByRole("button", { name: /^Continue with Rachel/ }).click();
+  await page.getByRole("button", { name: "Review this setup" }).click();
+  await page.getByRole("button", { name: "Show my route" }).click();
+  await page.getByRole("button", { name: "Change destination", exact: true }).click();
   for (const name of ["Plan", "Report", "Points", "Map"]) {
     await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();
     await noOverflow(page);
@@ -450,7 +535,7 @@ test("erase all data removes saved places and local history", async ({ page }) =
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "Erase all data from this device" }).click();
-  await expect(page.getByRole("button", { name: "Set up in a minute" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose a commuter" })).toBeVisible();
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith("solvik:")))).toEqual([]);
 });
 
@@ -509,8 +594,6 @@ const busOption = { mins: 52, eta: "09:24", fare: "$2.10", fareValue: 2.1, walk:
 async function disruptedCommute(page, { rerouteBody } = {}) {
   await page.addInitScript(({ home, school }) => {
     if (localStorage.getItem("qa:disrupt")) return;
-    localStorage.setItem("sv-auth:guest-session", "1");
-    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
       home: { id: "home", name: "Home", address: "Home", ll: home, source: "onemap", verified: true },
@@ -584,8 +667,6 @@ test("an alert on a line you never ride offers no reroute", async ({ page }) => 
 test("two trips to a place is enough to be warned about its line", async ({ page }) => {
   await page.addInitScript(({ office }) => {
     if (localStorage.getItem("qa:places")) return;
-    localStorage.setItem("sv-auth:guest-session", "1");
-    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
     // Two visits on two days, well under the commute bar of four journeys.
@@ -641,7 +722,6 @@ const bishanRoute = { mins: 38, eta: "08:38", fare: "$2.20", fareValue: 2.2, wal
 async function plannedWorks(page, { mode = "Comfort" } = {}) {
   await page.addInitScript(({ mode }) => {
     if (localStorage.getItem("qa:pw")) return;
-    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
       home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },
@@ -696,7 +776,6 @@ test("the same lift is a blocked journey when the commute is step-free", async (
 
 test("a lift out somewhere you never go is not mentioned", async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
       home: { id: "home", name: "Yishun", address: "Yishun", ll: [1.4294, 103.835], source: "onemap", verified: true },
@@ -724,11 +803,10 @@ test("a lift out somewhere you never go is not mentioned", async ({ page }) => {
   await expect(page.getByText("Planned work")).toHaveCount(0);
 });
 
-// Reports: camera-only capture, triage before anything is filed, and points that
-// wait on somebody else agreeing.
+// Reports: camera-only capture, triage before anything is saved, and no remote
+// account or report database.
 async function reportFlow(page, { verdict = "accepted" } = {}) {
   await page.addInitScript(() => {
-    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {} }));
     // A camera that exists, so getUserMedia resolves the way it would on a phone.
@@ -756,7 +834,7 @@ async function reportFlow(page, { verdict = "accepted" } = {}) {
     if (path.endsWith("/api/report")) {
       posted.push(route.request().postDataJSON());
       response = verdict === "accepted"
-        ? { verdict: "accepted", reason: "Checks passed. It needs another commuter or LTA to confirm it.", points: 25, pointsState: "pending", checks: [{ id: "fresh-fix", ok: true }, { id: "at-the-place", ok: true }], vision: { reason: "The photo shows a lift with a notice." } }
+        ? { verdict: "accepted", reason: "Checks passed. Saved on this device.", points: 25, pointsState: "confirmed", stationCode: "53061", createdAt: Date.now(), checks: [{ id: "fresh-fix", ok: true }, { id: "at-the-place", ok: true }], vision: { reason: "The photo shows a lift with a notice." } }
         : { verdict: "rejected", reason: "You appear to be 420 m away. Reports have to be made where the problem is.", points: 0, pointsState: "none", checks: [{ id: "fresh-fix", ok: true }, { id: "at-the-place", ok: false, detail: "You appear to be 420 m away. Reports have to be made where the problem is." }] };
     } else if (path.endsWith("nearest-stop")) response = { code: "53061", name: "Bishan Stn Exit C", road: "Bishan Rd", lat: 1.3507, lng: 103.8485, distanceM: 30 };
     else if (path.endsWith("crowding")) response = { stations: [], slots: [] };
@@ -770,7 +848,7 @@ async function reportFlow(page, { verdict = "accepted" } = {}) {
   return posted;
 }
 
-test("a report cannot be filed from a file, only from the camera", async ({ page }) => {
+test("a report cannot be saved from a file, only from the camera", async ({ page }) => {
   await reportFlow(page);
   await page.getByRole("button", { name: /Use location|Recheck/ }).click();
   await page.getByText("Escalator or lift down").click();
@@ -783,17 +861,17 @@ test("a report cannot be filed from a file, only from the camera", async ({ page
   await noOverflow(page);
 });
 
-test("a filed report earns points that are pending, not credited", async ({ page }) => {
+test("a checked report and its points stay on this device", async ({ page }) => {
   const posted = await reportFlow(page);
   await page.getByRole("button", { name: /Use location|Recheck/ }).click();
   await page.getByText("Escalator or lift down").click();
   await page.getByRole("button", { name: /Open the camera/ }).click();
   await page.getByRole("button", { name: "Take photo" }).click();
-  await page.getByRole("button", { name: /File report/ }).click();
+  await page.getByRole("button", { name: /Save report/ }).click();
 
-  await expect(page.getByText("Filed", { exact: true })).toBeVisible();
-  await expect(page.getByText(/points pending/).first()).toBeVisible();
-  await expect(page.getByText(/credited when another commuter reports the same thing, or LTA/)).toBeVisible();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(page.getByText(/points saved on this device/).first()).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("solvik:reports")))).toHaveLength(1);
   // Never the word the model cannot support.
   await expect(page.getByText(/verified/i)).toHaveCount(0);
 
@@ -804,16 +882,29 @@ test("a filed report earns points that are pending, not credited", async ({ page
   expect(posted[0].accuracy).toBe(10);
 });
 
-test("a rejected report earns nothing and says which check failed", async ({ page }) => {
+test("saving a report resolves a fresh location when Use location was skipped", async ({ page }) => {
+  const posted = await reportFlow(page);
+  await page.getByText("Escalator or lift down").click();
+  await page.getByRole("button", { name: /Open the camera/ }).click();
+  await page.getByRole("button", { name: "Take photo" }).click();
+  await page.getByRole("button", { name: /Save report/ }).click();
+
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  expect(posted).toHaveLength(1);
+  expect(posted[0].stationCode).toBe("53061");
+  expect(posted[0].fixAt).toBeGreaterThan(0);
+});
+
+test("a rejected report is not saved and says which check failed", async ({ page }) => {
   await reportFlow(page, { verdict: "rejected" });
   await page.getByRole("button", { name: /Use location|Recheck/ }).click();
   await page.getByText("Escalator or lift down").click();
   await page.getByRole("button", { name: /Open the camera/ }).click();
   await page.getByRole("button", { name: "Take photo" }).click();
-  await page.getByRole("button", { name: /File report/ }).click();
+  await page.getByRole("button", { name: /Save report/ }).click();
 
-  await expect(page.getByText("Not filed").first()).toBeVisible();
+  await expect(page.getByText("Not saved").first()).toBeVisible();
   await expect(page.getByText(/420 m away/).first()).toBeVisible();
-  await expect(page.getByText(/No points — this report wasn't filed/)).toBeVisible();
+  await expect(page.getByText(/No points — this report wasn't saved/)).toBeVisible();
   await noOverflow(page);
 });

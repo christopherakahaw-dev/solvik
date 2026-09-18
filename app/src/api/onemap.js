@@ -3,11 +3,13 @@
 // callers can fall back to illustrative data when live keys aren't wired up
 // yet — see src/lib/withFallback.js.
 
-export async function searchPlaces(query, { signal } = {}) {
+export async function searchPlaces(query, { signal, near } = {}) {
+  const body = { query };
+  if (Array.isArray(near) && near.length === 2) body.near = near;
   const res = await fetch("/api/onemap-search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify(body),
     signal,
   });
   const data = await res.json();

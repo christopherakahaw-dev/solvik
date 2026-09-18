@@ -4,7 +4,6 @@ import { test, expect } from "@playwright/test";
 // actually grow the type — and the layout has to survive it on a phone.
 async function open(page, persona) {
   await page.addInitScript((persona) => {
-    localStorage.setItem("sv-auth:guest-session", "1");
     localStorage.setItem("solvik:onboarded", "1");
     localStorage.setItem("solvik:places", JSON.stringify({ version: 2, places: {
       home: { id: "home", name: "Bedok", address: "Bedok", ll: [1.324, 103.93], source: "onemap", verified: true },

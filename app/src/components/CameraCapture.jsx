@@ -104,9 +104,9 @@ export function CameraCapture({ onCapture, onCancel }) {
         <Icon name="shield" size={15} />
         <span>Photograph the problem, not people. The photo is checked and then discarded — it is never stored or shown to anyone.</span>
       </div>
-      <div style={{ display: "flex", gap: 10 }}>
-        <Button size="lg" fullWidth iconLeft="camera" disabled={!ready} onClick={take}>Take photo</Button>
-        <Button variant="ghost" size="lg" onClick={onCancel}>Cancel</Button>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8, alignItems: "center" }}>
+        <Button size="lg" fullWidth iconLeft="camera" disabled={!ready} onClick={take} style={{ minWidth: 0, paddingInline: 16 }}>Take photo</Button>
+        <Button variant="secondary" size="lg" onClick={onCancel} style={{ minWidth: 88, paddingInline: 16, whiteSpace: "nowrap" }}>Cancel</Button>
       </div>
     </div>
   );

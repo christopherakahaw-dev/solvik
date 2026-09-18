@@ -48,7 +48,7 @@ export function RewardsScreen({ v }) {
         <span style={{ font: "var(--type-caption)", color: "var(--text-muted)", textWrap: "pretty" }}>
           {/* Points are counted from your own filed reports now, so the label
               narrows to what is still illustrative: the catalogue. */}
-          The vouchers below are illustrative — nothing here issues a real one. Your points are counted from reports you actually filed.
+          The vouchers below are illustrative — nothing here issues a real one. Your points are counted from reports saved on this device.
         </span>
       </div>
 

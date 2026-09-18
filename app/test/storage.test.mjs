@@ -8,7 +8,6 @@ import {
   loadStored,
   normalizeSavedPlace,
   saveSavedPlaces,
-  setStorageScope,
   storageKey,
 } from "../src/lib/storage.js";
 
@@ -97,11 +96,8 @@ test("clear all removes every Solvik-owned storage key", () => {
   }
 });
 
-test("signed-in accounts use isolated browser keys", () => {
-  setStorageScope("user-a");
-  assert.equal(storageKey(KEYS.places), `${KEYS.places}:account:user-a`);
-  setStorageScope("user-b");
-  assert.equal(storageKey(KEYS.places), `${KEYS.places}:account:user-b`);
-  setStorageScope("");
+test("device-local data uses stable browser keys", () => {
   assert.equal(storageKey(KEYS.places), KEYS.places);
+  assert.equal(storageKey(KEYS.journeys), KEYS.journeys);
+  assert.equal(storageKey(KEYS.reports), KEYS.reports);
 });
